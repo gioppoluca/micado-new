@@ -4,11 +4,24 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/',
     component: () => import('layouts/MainLayout.vue'),
-    children: [{ path: '', component: () => import('pages/IndexPage.vue') }],
+    children: [
+      // public home
+      { path: '', component: () => import('pages/IndexPage.vue') },
+
+      // protected example
+      { path: 'profile', component: () => import('pages/ProfilePage.vue'), meta: { requiresAuth: true } },
+
+      // public settings bootstrap example
+      { path: 'settings', component: () => import('pages/SettingsPage.vue') },
+    ],
   },
 
-  // Always leave this as last one,
-  // but you can also remove it
+  // login route (optional; protected pages auto-redirect to Keycloak)
+  {
+    path: '/login',
+    component: () => import('pages/LoginPage.vue'),
+  },
+
   {
     path: '/:catchAll(.*)*',
     component: () => import('pages/ErrorNotFound.vue'),
