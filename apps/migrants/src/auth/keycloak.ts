@@ -16,13 +16,15 @@ export async function initKeycloak(): Promise<boolean> {
   });
 
   try {
+    // Use 'check-sso' with responseMode 'query' so keycloak-js detects
+    // the ?code=...&state=... params after redirect and exchanges them.
+    // No silentCheckSsoRedirectUri or checkLoginIframe — both use cross-origin
+    // iframes that browsers block when app and auth are on different subdomains.
     const authenticated = await keycloak.init({
       onLoad: 'check-sso',
       pkceMethod: 'S256',
       checkLoginIframe: false,
-      // silentCheckSsoRedirectUri intentionally omitted:
-      // it loads auth.localhost in an iframe from migrants.localhost,
-      // browsers block the cross-origin postMessage and keycloak-js times out
+      responseMode: 'query',
     });
 
     logger.info('[keycloak] initialized', { authenticated });
