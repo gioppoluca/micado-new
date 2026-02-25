@@ -1,0 +1,93 @@
+services:
+  traefik:
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --entrypoints.web.address=:80
+      - --api.dashboard=true
+      - --api.insecure=true
+      - --log.level=INFO
+    ports:
+      - "8088:8080"
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.traefik.rule=Host(`traefik.${BASE_DOMAIN}`)
+      - traefik.http.routers.traefik.entrypoints=web
+      - traefik.http.routers.traefik.service=api@internal
+
+  db:
+    ports:
+      - "5432:5432"
+
+  keycloak:
+    command: ["start-dev", "--import-realm", "--proxy-headers", "xforwarded", "--http-enabled", "true"]
+
+  backend:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile.dev
+    environment:
+      CHOKIDAR_USEPOLLING: "1"
+      CHOKIDAR_INTERVAL: "1000"
+    volumes:
+      - ./apps/backend:/app
+    labels:
+      - traefik.http.services.backend.loadbalancer.server.port=${BACKEND_PORT}
+
+  migrants:
+    build:
+      context: ./apps/migrants
+      dockerfile: Dockerfile.dev
+    environment:
+      VITE_API_BASE_URL: http://api.${BASE_DOMAIN}
+      VITE_KEYCLOAK_URL: http://auth.${BASE_DOMAIN}
+      VITE_KEYCLOAK_REALM: migrants
+      VITE_KEYCLOAK_CLIENT_ID: migrants
+      VITE_USE_MOCKS: "true"
+    volumes:
+      - ./apps/migrants:/app
+    labels:
+      - traefik.http.services.migrants.loadbalancer.server.port=5173
+
+  pa_frontoffice:
+    build:
+      context: ./apps/pa_frontoffice
+      dockerfile: Dockerfile.dev
+    environment:
+      VITE_API_BASE_URL: http://api.${BASE_DOMAIN}
+      VITE_KEYCLOAK_URL: http://auth.${BASE_DOMAIN}
+      VITE_KEYCLOAK_REALM: pa_frontoffice
+      VITE_KEYCLOAK_CLIENT_ID: pa_frontoffice
+      VITE_USE_MOCKS: "true"
+    volumes:
+      - ./apps/pa_frontoffice:/app
+    labels:
+      - traefik.http.services.pa.loadbalancer.server.port=5173
+
+  ngo_frontoffice:
+    build:
+      context: ./apps/ngo_frontoffice
+      dockerfile: Dockerfile.dev
+    environment:
+      VITE_API_BASE_URL: http://api.${BASE_DOMAIN}
+      VITE_KEYCLOAK_URL: http://auth.${BASE_DOMAIN}
+      VITE_KEYCLOAK_REALM: ngo_frontoffice
+      VITE_KEYCLOAK_CLIENT_ID: ngo_frontoffice
+      VITE_USE_MOCKS: "true"
+    volumes:
+      - ./apps/ngo_frontoffice:/app
+    labels:
+      - traefik.http.services.ngo.loadbalancer.server.port=5173
+
+  gitea:
+    labels:
+      - traefik.http.routers.gitea.tls=false
+
+  gitea-init:
+    labels:
+      - traefik.enable=false
+
+  weblate:
+    labels:
+      - traefik.http.routers.weblate.tls=false

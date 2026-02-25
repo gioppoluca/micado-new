@@ -1,0 +1,4 @@
+FROM node:24-bookworm
+WORKDIR /app
+ENV PATH="/app/node_modules/.bin:$PATH"
+CMD ["sh", "-c", "npm install && lb-tsc && nodemon --watch dist --ext js --delay 1 -r source-map-support/register dist/index.js & lb-tsc --watch"]

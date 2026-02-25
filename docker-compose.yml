@@ -1,0 +1,208 @@
+services:
+  traefik:
+    image: traefik:v3.6.8
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --entrypoints.web.address=:80
+    ports:
+      - "80:80"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./infrastructure/traefik/dynamic:/etc/traefik/dynamic:ro
+
+  db:
+    image: groonga/pgroonga:4.0.5-debian-16
+    environment:
+      POSTGRES_USER: ${POSTGRES_SUPERUSER}
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERPASS}
+      KEYCLOAK_DB: ${KEYCLOAK_DB}
+      KEYCLOAK_DB_USER: ${KEYCLOAK_DB_USER}
+      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      APP_DB: ${APP_DB}
+      APP_DB_USER: ${APP_DB_USER}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+      WEBLATE_DB: ${WEBLATE_DB}
+      WEBLATE_DB_USER: ${WEBLATE_DB_USER}
+      WEBLATE_DB_PASSWORD: ${WEBLATE_DB_PASSWORD}
+      GITEA_DB: ${GITEA_DB}
+      GITEA_DB_USER: ${GITEA_DB_USER}
+      GITEA_DB_PASSWORD: ${GITEA_DB_PASSWORD}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d:ro
+    labels:
+      - traefik.enable=false
+
+  cache:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - cache_data:/data
+    labels:
+      - traefik.enable=false
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.5.3
+    depends_on: [db]
+    command: ["start", "--import-realm", "--proxy-headers", "xforwarded", "--http-enabled", "true"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://db:5432/${KEYCLOAK_DB}
+      KC_DB_USERNAME: ${KEYCLOAK_DB_USER}
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      KC_HOSTNAME: auth.${BASE_DOMAIN}
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+    volumes:
+      - keycloak_data:/opt/keycloak/data
+      - ./infrastructure/keycloak/realms:/opt/keycloak/data/import:ro
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.keycloak.rule=Host(`auth.${BASE_DOMAIN}`)
+      - traefik.http.routers.keycloak.entrypoints=web
+      - traefik.http.services.keycloak.loadbalancer.server.port=8080
+
+  backend:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+    depends_on: [db, keycloak]
+    environment:
+      PORT: ${BACKEND_PORT}
+      CORS_ORIGIN: ${CORS_ORIGIN}
+      KEYCLOAK_ISSUER_BASE: ${BACKEND_KEYCLOAK_ISSUER_BASE}
+      KEYCLOAK_INTERNAL_BASE: ${BACKEND_KEYCLOAK_INTERNAL_BASE}
+      KEYCLOAK_ALLOWED_REALMS: ${BACKEND_KEYCLOAK_ALLOWED_REALMS}
+      KEYCLOAK_EXPECTED_AUDIENCE: ${BACKEND_KEYCLOAK_EXPECTED_AUDIENCE}
+      DATABASE_URL: postgres://${APP_DB_USER}:${APP_DB_PASSWORD}@db:5432/${APP_DB}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      FRONTEND_LOG_LEVEL: ${FRONTEND_LOG_LEVEL:-info}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.backend.rule=Host(`api.${BASE_DOMAIN}`)
+      - traefik.http.routers.backend.entrypoints=web
+      - traefik.http.routers.backend.middlewares=sec-headers@file
+      - traefik.http.services.backend.loadbalancer.server.port=${BACKEND_PORT}
+
+  migrants:
+    build:
+      context: ./apps/migrants
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: https://api.${BASE_DOMAIN}
+        VITE_KEYCLOAK_URL: https://auth.${BASE_DOMAIN}
+        VITE_KEYCLOAK_REALM: migrants
+        VITE_KEYCLOAK_CLIENT_ID: migrants
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.migrants.rule=Host(`migrants.${BASE_DOMAIN}`)
+      - traefik.http.routers.migrants.entrypoints=web
+      - traefik.http.routers.migrants.middlewares=sec-headers@file
+      - traefik.http.services.migrants.loadbalancer.server.port=80
+
+  pa_frontoffice:
+    build:
+      context: ./apps/pa_frontoffice
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: https://api.${BASE_DOMAIN}
+        VITE_KEYCLOAK_URL: https://auth.${BASE_DOMAIN}
+        VITE_KEYCLOAK_REALM: pa_frontoffice
+        VITE_KEYCLOAK_CLIENT_ID: pa_frontoffice
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.pa.rule=Host(`pa.${BASE_DOMAIN}`)
+      - traefik.http.routers.pa.entrypoints=web
+      - traefik.http.routers.pa.middlewares=sec-headers@file
+      - traefik.http.services.pa.loadbalancer.server.port=80
+
+  ngo_frontoffice:
+    build:
+      context: ./apps/ngo_frontoffice
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: https://api.${BASE_DOMAIN}
+        VITE_KEYCLOAK_URL: https://auth.${BASE_DOMAIN}
+        VITE_KEYCLOAK_REALM: ngo_frontoffice
+        VITE_KEYCLOAK_CLIENT_ID: ngo_frontoffice
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.ngo.rule=Host(`ngo.${BASE_DOMAIN}`)
+      - traefik.http.routers.ngo.entrypoints=web
+      - traefik.http.routers.ngo.middlewares=sec-headers@file
+      - traefik.http.services.ngo.loadbalancer.server.port=80
+
+  gitea:
+    image: gitea/gitea:1.25.0
+    depends_on: [db]
+    environment:
+      GITEA__database__DB_TYPE: postgres
+      GITEA__database__HOST: db:5432
+      GITEA__database__NAME: ${GITEA_DB}
+      GITEA__database__USER: ${GITEA_DB_USER}
+      GITEA__database__PASSWD: ${GITEA_DB_PASSWORD}
+      GITEA__server__DOMAIN: git.${BASE_DOMAIN}
+      GITEA__server__ROOT_URL: http://git.${BASE_DOMAIN}/
+      GITEA__server__HTTP_PORT: 3000
+      GITEA__security__INSTALL_LOCK: "true"
+      GITEA__service__DISABLE_REGISTRATION: "true"
+    volumes:
+      - gitea_data:/data
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.gitea.rule=Host(`git.${BASE_DOMAIN}`)
+      - traefik.http.routers.gitea.entrypoints=web
+      - traefik.http.routers.gitea.middlewares=sec-headers@file
+      - traefik.http.services.gitea.loadbalancer.server.port=3000
+
+  gitea-init:
+    image: gitea/gitea:1.25.0
+    depends_on: [gitea]
+    environment:
+      GITEA__database__DB_TYPE: postgres
+      GITEA__database__HOST: db:5432
+      GITEA__database__NAME: ${GITEA_DB}
+      GITEA__database__USER: ${GITEA_DB_USER}
+      GITEA__database__PASSWD: ${GITEA_DB_PASSWORD}
+      GITEA__server__DOMAIN: git.${BASE_DOMAIN}
+      GITEA__server__ROOT_URL: http://git.${BASE_DOMAIN}/
+      GITEA__server__HTTP_PORT: 3000
+      GITEA__security__INSTALL_LOCK: "true"
+    volumes:
+      - gitea_data:/data
+      - ./infrastructure/gitea/init:/init:ro
+    entrypoint: ["bash", "/init/gitea-init.sh"]
+    restart: "no"
+    labels:
+      - traefik.enable=false
+
+  weblate:
+    image: weblate/weblate:5.16.0.0
+    depends_on: [db, cache, gitea-init]
+    environment:
+      WEBLATE_SITE_DOMAIN: weblate.${BASE_DOMAIN}
+      WEBLATE_ADMIN_PASSWORD: ${WEBLATE_ADMIN_PASSWORD:-weblate-admin}
+      WEBLATE_ADMIN_EMAIL: ${WEBLATE_ADMIN_EMAIL:-weblate@example.com}
+      POSTGRES_HOST: db
+      POSTGRES_DATABASE: ${WEBLATE_DB}
+      POSTGRES_USER: ${WEBLATE_DB_USER}
+      POSTGRES_PASSWORD: ${WEBLATE_DB_PASSWORD}
+      REDIS_HOST: cache
+    volumes:
+      - weblate_data:/app/data
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.weblate.rule=Host(`weblate.${BASE_DOMAIN}`)
+      - traefik.http.routers.weblate.entrypoints=web
+      - traefik.http.services.weblate.loadbalancer.server.port=8080
+
+volumes:
+  db_data:
+  cache_data:
+  keycloak_data:
+  gitea_data:
+  weblate_data:
