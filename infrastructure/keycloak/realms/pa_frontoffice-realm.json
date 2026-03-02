@@ -1,0 +1,77 @@
+{
+  "realm": "pa_frontoffice",
+  "enabled": true,
+  "displayName": "PA Frontoffice",
+  "sslRequired": "external",
+  "roles": {
+    "realm": [
+      {
+        "name": "pa_admin"
+      },
+      {
+        "name": "pa_operator"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "pa_frontoffice",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://pa.localhost/*",
+        "https://pa.example.com/*"
+      ],
+      "webOrigins": [
+        "http://pa.localhost",
+        "https://pa.example.com"
+      ],
+      "protocolMappers": [
+        {
+          "name": "aud-micado-backend",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "micado-backend",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "pa-admin",
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "pa-admin",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "pa_admin"
+      ]
+    },
+    {
+      "username": "pa-operator",
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "pa-operator",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "pa_operator"
+      ]
+    }
+  ]
+}

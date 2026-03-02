@@ -8,7 +8,10 @@ const routes: RouteRecordRaw[] = [
       // public home
       { path: '', component: () => import('pages/IndexPage.vue') },
 
-      // protected example
+      // landing page: post-login language selection (auth required)
+      { path: 'languages', component: () => import('pages/LandingPage.vue'), meta: { requiresAuth: true } },
+
+      // protected profile
       { path: 'profile', component: () => import('pages/ProfilePage.vue'), meta: { requiresAuth: true } },
 
       // public settings bootstrap example

@@ -31,6 +31,13 @@ async function doLogout() {
           <q-item-section>Settings</q-item-section>
         </q-item>
 
+        <q-item v-if="isAuth" clickable v-ripple to="/languages">
+          <q-item-section avatar>
+            <q-icon name="translate" />
+          </q-item-section>
+          <q-item-section>Languages</q-item-section>
+        </q-item>
+
         <q-separator />
 
         <!-- Not authenticated -->

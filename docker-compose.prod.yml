@@ -33,7 +33,6 @@ traefik:
       KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
       APP_DB: ${APP_DB}
       APP_DB_USER: ${APP_DB_USER}
-      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
       WEBLATE_DB: ${WEBLATE_DB}
       WEBLATE_DB_USER: ${WEBLATE_DB_USER}
       WEBLATE_DB_PASSWORD: ${WEBLATE_DB_PASSWORD}
@@ -91,7 +90,6 @@ traefik:
       KEYCLOAK_INTERNAL_BASE: ${BACKEND_KEYCLOAK_INTERNAL_BASE}
       KEYCLOAK_ALLOWED_REALMS: ${BACKEND_KEYCLOAK_ALLOWED_REALMS}
       KEYCLOAK_EXPECTED_AUDIENCE: ${BACKEND_KEYCLOAK_EXPECTED_AUDIENCE}
-      DATABASE_URL: postgres://${APP_DB_USER}:${APP_DB_PASSWORD}@db:5432/${APP_DB}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       FRONTEND_LOG_LEVEL: ${FRONTEND_LOG_LEVEL:-info}
     labels:
@@ -158,50 +156,50 @@ traefik:
       - traefik.http.services.ngo.loadbalancer.server.port=80
 
   gitea:
-  image: gitea/gitea:1.25.0
-  depends_on: [db]
-  environment:
-    GITEA__database__DB_TYPE: postgres
-    GITEA__database__HOST: db:5432
-    GITEA__database__NAME: ${GITEA_DB}
-    GITEA__database__USER: ${GITEA_DB_USER}
-    GITEA__database__PASSWD: ${GITEA_DB_PASSWORD}
-    GITEA__server__DOMAIN: git.${BASE_DOMAIN}
-    GITEA__server__ROOT_URL: https://git.${BASE_DOMAIN}/
-    GITEA__server__HTTP_PORT: 3000
-    GITEA__security__INSTALL_LOCK: "true"
-    GITEA__service__DISABLE_REGISTRATION: "true"
-  volumes:
-    - gitea_data:/data
-  labels:
-    - traefik.enable=true
-    - traefik.http.routers.gitea.rule=Host(`git.${BASE_DOMAIN}`)
-    - traefik.http.routers.gitea.entrypoints=websecure
-      - traefik.http.routers.gitea.tls=true
-      - traefik.http.routers.gitea.tls.certresolver=le
-    - traefik.http.routers.gitea.middlewares=sec-headers@file
-    - traefik.http.services.gitea.loadbalancer.server.port=3000
+    image: gitea/gitea:1.25.0
+    depends_on: [db]
+    environment:
+      GITEA__database__DB_TYPE: postgres
+      GITEA__database__HOST: db:5432
+      GITEA__database__NAME: ${GITEA_DB}
+      GITEA__database__USER: ${GITEA_DB_USER}
+      GITEA__database__PASSWD: ${GITEA_DB_PASSWORD}
+      GITEA__server__DOMAIN: git.${BASE_DOMAIN}
+      GITEA__server__ROOT_URL: https://git.${BASE_DOMAIN}/
+      GITEA__server__HTTP_PORT: 3000
+      GITEA__security__INSTALL_LOCK: "true"
+      GITEA__service__DISABLE_REGISTRATION: "true"
+    volumes:
+      - gitea_data:/data
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.gitea.rule=Host(`git.${BASE_DOMAIN}`)
+      - traefik.http.routers.gitea.entrypoints=websecure
+        - traefik.http.routers.gitea.tls=true
+        - traefik.http.routers.gitea.tls.certresolver=le
+      - traefik.http.routers.gitea.middlewares=sec-headers@file
+      - traefik.http.services.gitea.loadbalancer.server.port=3000
 
   gitea-init:
-  image: gitea/gitea:1.25.0
-  depends_on: [gitea]
-  environment:
-    GITEA__database__DB_TYPE: postgres
-    GITEA__database__HOST: db:5432
-    GITEA__database__NAME: ${GITEA_DB}
-    GITEA__database__USER: ${GITEA_DB_USER}
-    GITEA__database__PASSWD: ${GITEA_DB_PASSWORD}
-    GITEA__server__DOMAIN: git.${BASE_DOMAIN}
-    GITEA__server__ROOT_URL: https://git.${BASE_DOMAIN}/
-    GITEA__server__HTTP_PORT: 3000
-    GITEA__security__INSTALL_LOCK: "true"
-  volumes:
-    - gitea_data:/data
-    - ./infrastructure/gitea/init:/init:ro
-  entrypoint: ["bash", "/init/gitea-init.sh"]
-  restart: "no"
-  labels:
-    - traefik.enable=false
+    image: gitea/gitea:1.25.0
+    depends_on: [gitea]
+    environment:
+      GITEA__database__DB_TYPE: postgres
+      GITEA__database__HOST: db:5432
+      GITEA__database__NAME: ${GITEA_DB}
+      GITEA__database__USER: ${GITEA_DB_USER}
+      GITEA__database__PASSWD: ${GITEA_DB_PASSWORD}
+      GITEA__server__DOMAIN: git.${BASE_DOMAIN}
+      GITEA__server__ROOT_URL: https://git.${BASE_DOMAIN}/
+      GITEA__server__HTTP_PORT: 3000
+      GITEA__security__INSTALL_LOCK: "true"
+    volumes:
+      - gitea_data:/data
+      - ./infrastructure/gitea/init:/init:ro
+    entrypoint: ["bash", "/init/gitea-init.sh"]
+    restart: "no"
+    labels:
+      - traefik.enable=false
 
   weblate:
     image: weblate/weblate:5.16.1

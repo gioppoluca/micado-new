@@ -1,0 +1,77 @@
+{
+  "realm": "ngo_frontoffice",
+  "enabled": true,
+  "displayName": "NGO Frontoffice",
+  "sslRequired": "external",
+  "roles": {
+    "realm": [
+      {
+        "name": "ngo_admin"
+      },
+      {
+        "name": "ngo_operator"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "ngo_frontoffice",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://ngo.localhost/*",
+        "https://ngo.example.com/*"
+      ],
+      "webOrigins": [
+        "http://ngo.localhost",
+        "https://ngo.example.com"
+      ],
+      "protocolMappers": [
+        {
+          "name": "aud-micado-backend",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "micado-backend",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "ngo-admin",
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "ngo-admin",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "ngo_admin"
+      ]
+    },
+    {
+      "username": "ngo-operator",
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "ngo-operator",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "ngo_operator"
+      ]
+    }
+  ]
+}

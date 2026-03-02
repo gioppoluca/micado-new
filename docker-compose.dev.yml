@@ -30,6 +30,16 @@ services:
     environment:
       CHOKIDAR_USEPOLLING: "1"
       CHOKIDAR_INTERVAL: "1000"
+      KEYCLOAK_BASE_URL: http://auth.${BASE_DOMAIN}
+      KEYCLOAK_REALM: migrants
+      KEYCLOAK_CLIENT_ID: migrants-backend
+      KEYCLOAK_AUDIENCE: migrants-backend
+      KEYCLOAK_ISSUER_BASE: http://auth.${BASE_DOMAIN}
+      KEYCLOAK_INTERNAL_BASE: http://keycloak:8080
+      KEYCLOAK_ALLOWED_REALMS: ${BACKEND_KEYCLOAK_ALLOWED_REALMS:-migrants,pa_frontoffice,ngo_frontoffice}
+      KEYCLOAK_EXPECTED_AUDIENCE: ${BACKEND_KEYCLOAK_EXPECTED_AUDIENCE:-micado-backend}
+      CORS_ORIGIN: http://migrants.${BASE_DOMAIN},http://pa.${BASE_DOMAIN},http://ngo.${BASE_DOMAIN}
+      LOG_LEVEL: debug
     volumes:
       - ./apps/backend:/app
     labels:
@@ -40,11 +50,17 @@ services:
       context: ./apps/migrants
       dockerfile: Dockerfile.dev
     environment:
+      CHOKIDAR_USEPOLLING: "1"
+      CHOKIDAR_INTERVAL: "1000"
       VITE_API_BASE_URL: http://api.${BASE_DOMAIN}
       VITE_KEYCLOAK_URL: http://auth.${BASE_DOMAIN}
       VITE_KEYCLOAK_REALM: migrants
       VITE_KEYCLOAK_CLIENT_ID: migrants
-      VITE_USE_MOCKS: "true"
+      VITE_USE_MOCKS: "false"
+      API_BASE_URL: http://api.${BASE_DOMAIN}
+      KEYCLOAK_URL: http://auth.${BASE_DOMAIN}
+      KEYCLOAK_REALM: migrants
+      KEYCLOAK_CLIENT_ID: migrants-frontend
     volumes:
       - ./apps/migrants:/app
     labels:

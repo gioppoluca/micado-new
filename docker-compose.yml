@@ -22,13 +22,14 @@ services:
       KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
       APP_DB: ${APP_DB}
       APP_DB_USER: ${APP_DB_USER}
-      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
       WEBLATE_DB: ${WEBLATE_DB}
       WEBLATE_DB_USER: ${WEBLATE_DB_USER}
       WEBLATE_DB_PASSWORD: ${WEBLATE_DB_PASSWORD}
       GITEA_DB: ${GITEA_DB}
       GITEA_DB_USER: ${GITEA_DB_USER}
       GITEA_DB_PASSWORD: ${GITEA_DB_PASSWORD}
+      MICADO_APP_PASSWORD: ${MICADO_APP_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - db_data:/var/lib/postgresql/data
       - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d:ro
@@ -51,9 +52,10 @@ services:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD}
       KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://db:5432/${KEYCLOAK_DB}
+      KC_DB_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
       KC_DB_USERNAME: ${KEYCLOAK_DB_USER}
       KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      KC_DB_SCHEMA: keycloak
       KC_HOSTNAME: auth.${BASE_DOMAIN}
       KC_HOSTNAME_STRICT: "false"
       KC_HOSTNAME_STRICT_HTTPS: "false"
@@ -78,7 +80,9 @@ services:
       KEYCLOAK_INTERNAL_BASE: ${BACKEND_KEYCLOAK_INTERNAL_BASE}
       KEYCLOAK_ALLOWED_REALMS: ${BACKEND_KEYCLOAK_ALLOWED_REALMS}
       KEYCLOAK_EXPECTED_AUDIENCE: ${BACKEND_KEYCLOAK_EXPECTED_AUDIENCE}
-      DATABASE_URL: postgres://${APP_DB_USER}:${APP_DB_PASSWORD}@db:5432/${APP_DB}
+      POSTGRES_DB: ${POSTGRES_DB}
+      MICADO_APP_PASSWORD: ${MICADO_APP_PASSWORD}
+      DATABASE_URL: postgres://${APP_DB_USER}:${MICADO_APP_PASSWORD}@db:5432/${POSTGRES_DB}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       FRONTEND_LOG_LEVEL: ${FRONTEND_LOG_LEVEL:-info}
     labels:
@@ -142,11 +146,12 @@ services:
     environment:
       GITEA__database__DB_TYPE: postgres
       GITEA__database__HOST: db:5432
-      GITEA__database__NAME: ${GITEA_DB}
+      GITEA__database__NAME: ${POSTGRES_DB}
       GITEA__database__USER: ${GITEA_DB_USER}
       GITEA__database__PASSWD: ${GITEA_DB_PASSWORD}
       GITEA__server__DOMAIN: git.${BASE_DOMAIN}
       GITEA__server__ROOT_URL: http://git.${BASE_DOMAIN}/
+      GITEA__database__SCHEMA: gitea
       GITEA__server__HTTP_PORT: 3000
       GITEA__security__INSTALL_LOCK: "true"
       GITEA__service__DISABLE_REGISTRATION: "true"
@@ -165,9 +170,10 @@ services:
     environment:
       GITEA__database__DB_TYPE: postgres
       GITEA__database__HOST: db:5432
-      GITEA__database__NAME: ${GITEA_DB}
+      GITEA__database__NAME: ${POSTGRES_DB}
       GITEA__database__USER: ${GITEA_DB_USER}
       GITEA__database__PASSWD: ${GITEA_DB_PASSWORD}
+      GITEA__database__SCHEMA: gitea
       GITEA__server__DOMAIN: git.${BASE_DOMAIN}
       GITEA__server__ROOT_URL: http://git.${BASE_DOMAIN}/
       GITEA__server__HTTP_PORT: 3000
@@ -188,7 +194,7 @@ services:
       WEBLATE_ADMIN_PASSWORD: ${WEBLATE_ADMIN_PASSWORD:-weblate-admin}
       WEBLATE_ADMIN_EMAIL: ${WEBLATE_ADMIN_EMAIL:-weblate@example.com}
       POSTGRES_HOST: db
-      POSTGRES_DATABASE: ${WEBLATE_DB}
+      POSTGRES_DATABASE: ${POSTGRES_DB}
       POSTGRES_USER: ${WEBLATE_DB_USER}
       POSTGRES_PASSWORD: ${WEBLATE_DB_PASSWORD}
       REDIS_HOST: cache

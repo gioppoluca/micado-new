@@ -1,0 +1,80 @@
+{
+  "realm": "migrants",
+  "enabled": true,
+  "displayName": "Migrants",
+  "sslRequired": "external",
+  "roles": {
+    "realm": [
+      {
+        "name": "migrant_user"
+      },
+      {
+        "name": "migrant_support"
+      },
+      {
+        "name": "migrants_admin"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "migrants",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://migrants.localhost/*",
+        "https://migrants.example.com/*"
+      ],
+      "webOrigins": [
+        "http://migrants.localhost",
+        "https://migrants.example.com"
+      ],
+      "protocolMappers": [
+        {
+          "name": "aud-micado-backend",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "micado-backend",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "migrants-user",
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "migrants-user",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "migrant_user"
+      ]
+    },
+    {
+      "username": "migrants-admin",
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "migrants-admin",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "migrants_admin"
+      ]
+    }
+  ]
+}
