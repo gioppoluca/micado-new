@@ -25,15 +25,9 @@ mask_secret() {
 log_var() {
   local name="$1" value="$2" sensitivity="${3:-plain}"
   case "$sensitivity" in
-    secret)
-      info "ENV $name=$(mask_secret "$value")"
-      ;;
-    plain)
-      info "ENV $name=$value"
-      ;;
-    *)
-      info "ENV $name=<unknown sensitivity>"
-      ;;
+    secret) info "ENV $name=$(mask_secret "$value")" ;;
+    plain)  info "ENV $name=$value" ;;
+    *)      info "ENV $name=<unknown sensitivity>" ;;
   esac
 }
 
@@ -48,6 +42,8 @@ log_var() {
 : "${GITEA_TRANSLATIONS_REPO_PRIVATE:=true}"
 : "${GITEA_WEBLATE_TOKEN_NAME:=weblate-bootstrap}"
 : "${GITEA_WEBLATE_TOKEN_SCOPES:=read:repository,write:repository,read:user}"
+: "${GITEA_RUN_UID:=1000}"
+: "${GITEA_RUN_GID:=1000}"
 
 export GITEA_WORK_DIR=/data/gitea
 GITEA_CONFIG_FILE="${GITEA_CONFIG_FILE:-/data/gitea/conf/app.ini}"
@@ -77,12 +73,15 @@ log_environment() {
   log_var GITEA_TRANSLATIONS_REPO_PRIVATE "$GITEA_TRANSLATIONS_REPO_PRIVATE"
   log_var GITEA_WEBLATE_TOKEN_NAME "$GITEA_WEBLATE_TOKEN_NAME"
   log_var GITEA_WEBLATE_TOKEN_SCOPES "$GITEA_WEBLATE_TOKEN_SCOPES"
+  log_var GITEA_RUN_UID "$GITEA_RUN_UID"
+  log_var GITEA_RUN_GID "$GITEA_RUN_GID"
   log_var GITEA_CONFIG_FILE "$GITEA_CONFIG_FILE"
   log_var GITEA_WORK_DIR "$GITEA_WORK_DIR"
   log_var BOOTSTRAP_DIR "$BOOTSTRAP_DIR"
   log_var TOKEN_FILE "$TOKEN_FILE"
   log_var API_BASE "$API_BASE"
   log_var SEED_PATH "$SEED_PATH"
+  info "Runtime identity uid=$(id -u) gid=$(id -g) user=$(id -un 2>/dev/null || echo unknown)"
   info "Seed payload base64 length=${#SEED_CONTENT_B64}"
 }
 
@@ -132,10 +131,19 @@ wait_for_file() {
   info "$name is available ($path)"
 }
 
-user_exists_api() {
-  local admin_user="$1" admin_pass="$2" username="$3"
-  debug "Checking via API whether user '$username' exists"
-  curl -fsS -u "$admin_user:$admin_pass" "${API_BASE}/users/${username}" >/dev/null
+ensure_not_root() {
+  if [[ "$(id -u)" == "0" ]]; then
+    error "This helper is running as root inside the container. Gitea CLI refuses that. Configure gitea-init to run as ${GITEA_RUN_UID}:${GITEA_RUN_GID}."
+    return 1
+  fi
+  info "Container user is non-root as required by Gitea CLI"
+}
+
+user_exists_cli() {
+  local username="$1"
+  local output
+  output="$(gitea --config "$GITEA_CONFIG_FILE" admin user list 2>/dev/null || true)"
+  grep -Eq "(^|[[:space:]])${username}([[:space:]]|$)" <<<"$output"
 }
 
 ensure_user_cli() {
@@ -144,8 +152,8 @@ ensure_user_cli() {
   [[ "$admin_flag" == "true" ]] && args+=(--admin)
 
   info "Ensuring user '$username' exists (admin=$admin_flag, email=$email)"
-  if user_exists_api "$GITEA_ADMIN_USER" "$GITEA_ADMIN_PASSWORD" "$username"; then
-    info "User '$username' already exists according to API"
+  if user_exists_cli "$username"; then
+    info "User '$username' already exists according to Gitea CLI list"
     return 0
   fi
 
@@ -157,11 +165,7 @@ ensure_user_cli() {
   set -e
 
   if (( rc == 0 )); then
-    if [[ -n "$output" ]]; then
-      info "User '$username' created. CLI output: $output"
-    else
-      info "User '$username' created"
-    fi
+    [[ -n "$output" ]] && info "User '$username' created. CLI output: $output" || info "User '$username' created"
     return 0
   fi
 
@@ -176,7 +180,6 @@ ensure_user_cli() {
 
 repo_exists_api() {
   local username="$1" repo="$2"
-  debug "Checking via API whether repository '${username}/${repo}' exists"
   curl -fsS -u "$GITEA_WEBLATE_USER:$GITEA_WEBLATE_PASSWORD" "${API_BASE}/repos/${username}/${repo}" >/dev/null
 }
 
@@ -188,13 +191,11 @@ ensure_repo_api() {
   fi
 
   local private_json="true"
-  if [[ "${GITEA_TRANSLATIONS_REPO_PRIVATE,,}" == "false" ]]; then
-    private_json="false"
-  fi
+  [[ "${GITEA_TRANSLATIONS_REPO_PRIVATE,,}" == "false" ]] && private_json="false"
   info "Creating repository '${GITEA_WEBLATE_USER}/${GITEA_TRANSLATIONS_REPO}' with branch '${GITEA_TRANSLATIONS_BRANCH}' private=${private_json}"
 
   curl -fsS -u "$GITEA_WEBLATE_USER:$GITEA_WEBLATE_PASSWORD" \
-    -H "Content-Type: application/json" \
+    -H 'Content-Type: application/json' \
     -X POST "${API_BASE}/user/repos" \
     -d @- >/dev/null <<JSON
 {
@@ -208,7 +209,6 @@ JSON
 }
 
 file_exists_api() {
-  debug "Checking via API whether seed file '${SEED_PATH}' exists in '${GITEA_WEBLATE_USER}/${GITEA_TRANSLATIONS_REPO}'"
   curl -fsS -u "$GITEA_WEBLATE_USER:$GITEA_WEBLATE_PASSWORD" \
     "${API_BASE}/repos/${GITEA_WEBLATE_USER}/${GITEA_TRANSLATIONS_REPO}/contents/${SEED_PATH}?ref=${GITEA_TRANSLATIONS_BRANCH}" >/dev/null
 }
@@ -222,7 +222,7 @@ ensure_seed_file_api() {
 
   info "Creating seed file '${SEED_PATH}' on branch '${GITEA_TRANSLATIONS_BRANCH}'"
   curl -fsS -u "$GITEA_WEBLATE_USER:$GITEA_WEBLATE_PASSWORD" \
-    -H "Content-Type: application/json" \
+    -H 'Content-Type: application/json' \
     -X POST "${API_BASE}/repos/${GITEA_WEBLATE_USER}/${GITEA_TRANSLATIONS_REPO}/contents/${SEED_PATH}" \
     -d @- >/dev/null <<JSON
 {
@@ -234,7 +234,20 @@ JSON
   info "Seed file '${SEED_PATH}' created"
 }
 
+token_exists_for_user() {
+  local output
+  output="$(gitea --config "$GITEA_CONFIG_FILE" admin user list 2>/dev/null || true)"
+  [[ -n "$output" ]] >/dev/null
+  [[ -s "$TOKEN_FILE" ]]
+}
+
 ensure_token_file() {
+  info "Checking bootstrap directory writability: $BOOTSTRAP_DIR"
+  if [ ! -w "$BOOTSTRAP_DIR" ]; then
+    error "Bootstrap directory '$BOOTSTRAP_DIR' is not writable by uid=$(id -u) gid=$(id -g)"
+    ls -ld "$BOOTSTRAP_DIR" >&2 || true
+    exit 1
+  fi
   info "Ensuring PAT file exists at '$TOKEN_FILE'"
   mkdir -p "$BOOTSTRAP_DIR"
   if [[ -s "$TOKEN_FILE" ]]; then
@@ -261,20 +274,21 @@ ensure_token_file() {
 main() {
   info "Starting unattended Gitea bootstrap"
   log_environment
+  ensure_not_root
   wait_for_file "$GITEA_CONFIG_FILE" "Gitea config" 60
-  wait_for_url "http://gitea:3000/api/healthz" "Gitea API" 60
-  wait_for_url "${API_BASE}/version" "Gitea API version endpoint" 30
+  wait_for_url 'http://gitea:3000/api/healthz' 'Gitea API' 60
+  wait_for_url "${API_BASE}/version" 'Gitea API version endpoint' 30
 
-  info "About to ensure admin and Weblate users"
+  info 'About to ensure admin and Weblate users'
   ensure_user_cli "$GITEA_ADMIN_USER" "$GITEA_ADMIN_PASSWORD" "$GITEA_ADMIN_EMAIL" true
   ensure_user_cli "$GITEA_WEBLATE_USER" "$GITEA_WEBLATE_PASSWORD" "$GITEA_WEBLATE_EMAIL" false
 
-  info "About to ensure repository, seed file, and PAT"
+  info 'About to ensure repository, seed file, and PAT'
   ensure_repo_api
   ensure_seed_file_api
   ensure_token_file
 
-  info "Gitea bootstrap completed successfully"
+  info 'Gitea bootstrap completed successfully'
 }
 
 main "$@"
