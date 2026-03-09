@@ -276,6 +276,30 @@ ensure_project() {
 }
 
 # ---------------------------------------------------------------------------
+# Pre-flight: verify the Gitea repo URL is reachable via HTTP from this container
+# ---------------------------------------------------------------------------
+check_repo_reachable() {
+  info "Pre-flight: checking Gitea repo URL is reachable"
+  info "  URL: ${WEBLATE_GIT_REPO}"
+
+  http_code=$(curl -o /dev/null -sS -w '%{http_code}' \
+    --max-time 10 \
+    "${WEBLATE_GIT_REPO}/info/refs?service=git-upload-pack" 2>/dev/null || echo "CURL_FAILED")
+
+  if [ "$http_code" = "CURL_FAILED" ]; then
+    warn "  curl failed entirely — network or DNS issue reaching ${WEBLATE_GIT_REPO}"
+  elif [ "$http_code" = "200" ] || [ "$http_code" = "401" ]; then
+    info "  Gitea repo responded HTTP ${http_code} — reachable OK"
+  else
+    warn "  Gitea repo responded HTTP ${http_code} — may not be accessible"
+  fi
+
+  info "Pre-flight: checking weblate container can resolve 'gitea' hostname"
+  gitea_ip=$(getent hosts gitea 2>/dev/null | awk '{print $1}' || echo "UNRESOLVED")
+  info "  gitea resolves to: ${gitea_ip}"
+}
+
+# ---------------------------------------------------------------------------
 # Component
 #   $1 comp_name   human label
 #   $2 comp_slug   unique slug within project
@@ -291,9 +315,7 @@ ensure_component() {
     return 0
   fi
 
-  result=$(api_post_json \
-    "/api/projects/${WEBLATE_PROJECT_SLUG}/components/" \
-    "{
+  payload="{
       \"name\": \"${comp_name}\",
       \"slug\": \"${comp_slug}\",
       \"vcs\": \"${WEBLATE_VCS}\",
@@ -305,7 +327,21 @@ ensure_component() {
       \"push_on_commit\": false,
       \"manage_units\": false,
       \"new_lang\": \"none\"
-    }")
+    }"
+
+  info "POST /api/projects/${WEBLATE_PROJECT_SLUG}/components/ payload:"
+  info "  name=${comp_name}"
+  info "  slug=${comp_slug}"
+  info "  vcs=${WEBLATE_VCS}"
+  info "  repo=${WEBLATE_GIT_REPO}"
+  info "  branch=${WEBLATE_GIT_BRANCH}"
+  info "  filemask=${filemask}"
+  info "  template=${template}"
+  info "  file_format=${WEBLATE_FILE_FORMAT}"
+
+  result=$(api_post_json \
+    "/api/projects/${WEBLATE_PROJECT_SLUG}/components/" \
+    "$payload")
 
   returned_slug=$(printf '%s' "$result" | tr ',' '\n' | grep '"slug"' | head -1 \
     | sed 's/.*"slug"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
@@ -366,6 +402,12 @@ main() {
     return 1
   }
   info "API token verified OK"
+
+  check_repo_reachable
+
+  info "Probing git config inside weblate via API (expect protocol.http.allow=always):"
+  weblate_git_env=$(api_get "/api/" 2>/dev/null | tr ',' '\n' | grep -i git | head -5 || true)
+  info "  Weblate API git-related fields: ${weblate_git_env:-none visible in root}"
 
   ensure_project
 
