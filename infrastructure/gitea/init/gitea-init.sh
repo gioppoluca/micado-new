@@ -45,6 +45,10 @@ log_var() {
 : "${GITEA_RUN_UID:=1000}"
 : "${GITEA_RUN_GID:=1000}"
 
+# New Micado bootstrap vars
+: "${MICADO_SOURCE_LANG:=en}"
+: "${MICADO_CATEGORIES:=}"
+
 export GITEA_WORK_DIR=/data/gitea
 GITEA_CONFIG_FILE="${GITEA_CONFIG_FILE:-/data/gitea/conf/app.ini}"
 BOOTSTRAP_DIR=/bootstrap
@@ -81,6 +85,8 @@ log_environment() {
   log_var TOKEN_FILE "$TOKEN_FILE"
   log_var API_BASE "$API_BASE"
   log_var SEED_PATH "$SEED_PATH"
+  log_var MICADO_SOURCE_LANG "$MICADO_SOURCE_LANG"
+  log_var MICADO_CATEGORIES "$MICADO_CATEGORIES"
   info "Runtime identity uid=$(id -u) gid=$(id -g) user=$(id -un 2>/dev/null || echo unknown)"
   info "Seed payload base64 length=${#SEED_CONTENT_B64}"
 }
@@ -234,6 +240,94 @@ JSON
   info "Seed file '${SEED_PATH}' created"
 }
 
+# --- New helpers for Micado category bootstrap ---
+
+normalize_csv_items() {
+  printf '%s' "$1" \
+    | tr ',' '\n' \
+    | sed 's/^[[:space:]]*//' \
+    | sed 's/[[:space:]]*$//' \
+    | sed '/^$/d'
+}
+
+slugify_category() {
+  local input="$1"
+  local output
+  output="$(printf '%s' "$input" \
+    | tr '[:upper:]' '[:lower:]' \
+    | sed 's/[^a-z0-9._-]/-/g' \
+    | sed 's/--*/-/g' \
+    | sed 's/^-//' \
+    | sed 's/-$//')"
+
+  if [[ -z "$output" ]]; then
+    error "Category '$input' becomes empty after normalization"
+    return 1
+  fi
+
+  printf '%s' "$output"
+}
+
+json_b64_for_category() {
+  local category="$1" lang="$2"
+  printf '{\n  "_schema": "micado",\n  "_category": "%s",\n  "_source_lang": "%s"\n}\n' \
+    "$category" "$lang" \
+    | base64 | tr -d '\n'
+}
+
+repo_file_exists_api() {
+  local file_path="$1"
+  curl -fsS -u "$GITEA_WEBLATE_USER:$GITEA_WEBLATE_PASSWORD" \
+    "${API_BASE}/repos/${GITEA_WEBLATE_USER}/${GITEA_TRANSLATIONS_REPO}/contents/${file_path}?ref=${GITEA_TRANSLATIONS_BRANCH}" >/dev/null
+}
+
+ensure_repo_file_api() {
+  local file_path="$1" content_b64="$2" commit_message="$3"
+
+  info "Ensuring repository file '${file_path}' exists"
+  if repo_file_exists_api "$file_path"; then
+    info "Repository file '${file_path}' already exists"
+    return 0
+  fi
+
+  info "Creating repository file '${file_path}' on branch '${GITEA_TRANSLATIONS_BRANCH}'"
+  curl -fsS -u "$GITEA_WEBLATE_USER:$GITEA_WEBLATE_PASSWORD" \
+    -H 'Content-Type: application/json' \
+    -X POST "${API_BASE}/repos/${GITEA_WEBLATE_USER}/${GITEA_TRANSLATIONS_REPO}/contents/${file_path}" \
+    -d @- >/dev/null <<JSON
+{
+  "content": "${content_b64}",
+  "message": "${commit_message}",
+  "branch": "${GITEA_TRANSLATIONS_BRANCH}"
+}
+JSON
+  info "Repository file '${file_path}' created"
+}
+
+ensure_category_source_files_api() {
+  if [[ -z "${MICADO_CATEGORIES// }" ]]; then
+    warn "MICADO_CATEGORIES is empty, skipping category source file bootstrap"
+    return 0
+  fi
+
+  info "Ensuring Micado category source files exist for source language '${MICADO_SOURCE_LANG}'"
+  while IFS= read -r category; do
+    [[ -z "$category" ]] && continue
+
+    local normalized path content_b64
+    normalized="$(slugify_category "$category")"
+    path="backend/${normalized}/${MICADO_SOURCE_LANG}.json"
+    content_b64="$(json_b64_for_category "$normalized" "$MICADO_SOURCE_LANG")"
+
+    ensure_repo_file_api \
+      "$path" \
+      "$content_b64" \
+      "init ${normalized} source translations"
+  done < <(normalize_csv_items "$MICADO_CATEGORIES")
+
+  info "Micado category source file bootstrap completed"
+}
+
 token_exists_for_user() {
   local output
   output="$(gitea --config "$GITEA_CONFIG_FILE" admin user list 2>/dev/null || true)"
@@ -283,10 +377,11 @@ main() {
   ensure_user_cli "$GITEA_ADMIN_USER" "$GITEA_ADMIN_PASSWORD" "$GITEA_ADMIN_EMAIL" true
   ensure_user_cli "$GITEA_WEBLATE_USER" "$GITEA_WEBLATE_PASSWORD" "$GITEA_WEBLATE_EMAIL" false
 
-  info 'About to ensure repository, seed file, and PAT'
+  info 'About to ensure repository, seed file, PAT, and Micado category source files'
   ensure_repo_api
   ensure_seed_file_api
   ensure_token_file
+  ensure_category_source_files_api
 
   info 'Gitea bootstrap completed successfully'
 }
