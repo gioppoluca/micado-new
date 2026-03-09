@@ -35,7 +35,13 @@ services:
       - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d:ro
     labels:
       - traefik.enable=false
-
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_SUPERUSER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+  
   cache:
     image: redis:7.4-alpine
     command: ["redis-server", "--appendonly", "yes"]
@@ -43,6 +49,11 @@ services:
       - cache_data:/data
     labels:
       - traefik.enable=false
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.5.3
@@ -142,7 +153,9 @@ services:
 
   gitea:
     image: gitea/gitea:1.25.0
-    depends_on: [db]
+    depends_on:
+      db:
+        condition: service_healthy
     environment:
       GITEA__database__DB_TYPE: postgres
       GITEA__database__HOST: db:5432
@@ -163,11 +176,43 @@ services:
       - traefik.http.routers.gitea.entrypoints=web
       - traefik.http.routers.gitea.middlewares=sec-headers@file
       - traefik.http.services.gitea.loadbalancer.server.port=3000
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/healthz >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 20s
+
+  bootstrap-perms:
+    image: busybox:1.36
+    user: "0:0"
+    volumes:
+      - bootstrap_data:/bootstrap
+    entrypoint:
+      - sh
+      - -c
+      - |
+        set -eu
+        mkdir -p /bootstrap
+        chown -R 1000:1000 /bootstrap
+        chmod 0770 /bootstrap
+    restart: "no"
 
   gitea-init:
     image: gitea/gitea:1.25.0
-    depends_on: [gitea]
+    user: "1000:1000"
+    depends_on:
+      db:
+        condition: service_healthy
+      gitea:
+        condition: service_healthy
+      bootstrap-perms:
+        condition: service_completed_successfully
     environment:
+      USER_UID: "1000"
+      USER_GID: "1000"
+      GITEA_RUN_UID: "1000"
+      GITEA_RUN_GID: "1000"
       GITEA__database__DB_TYPE: postgres
       GITEA__database__HOST: db:5432
       GITEA__database__NAME: ${POSTGRES_DB}
@@ -178,9 +223,12 @@ services:
       GITEA__server__ROOT_URL: http://git.${BASE_DOMAIN}/
       GITEA__server__HTTP_PORT: 3000
       GITEA__security__INSTALL_LOCK: "true"
+      MICADO_SOURCE_LANG: ${MICADO_SOURCE_LANG:-it}
+      MICADO_CATEGORIES: ${MICADO_CATEGORIES:-news,events,categories}
     volumes:
       - gitea_data:/data
       - ./infrastructure/gitea/init:/init:ro
+      - bootstrap_data:/bootstrap
     entrypoint: ["bash", "/init/gitea-init.sh"]
     restart: "no"
     labels:
@@ -188,9 +236,24 @@ services:
 
   weblate:
     image: weblate/weblate:5.16.0.0
-    depends_on: [db, cache, gitea-init]
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+      gitea-init:
+        condition: service_completed_successfully
+      bootstrap-perms:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/api/ >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
     environment:
       WEBLATE_SITE_DOMAIN: weblate.${BASE_DOMAIN}
+      WEBLATE_ADMIN_NAME: ${WEBLATE_ADMIN_NAME:-Micado Weblate Admin}
       WEBLATE_ADMIN_PASSWORD: ${WEBLATE_ADMIN_PASSWORD:-weblate-admin}
       WEBLATE_ADMIN_EMAIL: ${WEBLATE_ADMIN_EMAIL:-weblate@example.com}
       POSTGRES_HOST: db
@@ -198,13 +261,66 @@ services:
       POSTGRES_USER: ${WEBLATE_DB_USER}
       POSTGRES_PASSWORD: ${WEBLATE_DB_PASSWORD}
       REDIS_HOST: cache
+      GIT_ALLOW_PROTOCOL: http:https
+      GIT_CONFIG_COUNT: "1"
+      GIT_CONFIG_KEY_0: protocol.http.allow
+      GIT_CONFIG_VALUE_0: always
     volumes:
       - weblate_data:/app/data
+      - bootstrap_data:/bootstrap:ro
+      - ./infrastructure/weblate/config/settings-override.py:/app/data/settings-override.py:ro
     labels:
       - traefik.enable=true
       - traefik.http.routers.weblate.rule=Host(`weblate.${BASE_DOMAIN}`)
       - traefik.http.routers.weblate.entrypoints=web
       - traefik.http.services.weblate.loadbalancer.server.port=8080
+
+  weblate-init:
+    image: weblate/weblate:5.16.0.0
+    user: "1000:1000"
+    depends_on:
+      bootstrap-perms:
+        condition: service_completed_successfully
+      gitea-init:
+        condition: service_completed_successfully
+      weblate:
+        condition: service_healthy
+    environment:
+      WEBLATE_SITE_DOMAIN: weblate.${BASE_DOMAIN}
+      WEBLATE_ADMIN_NAME: ${WEBLATE_ADMIN_NAME:-Micado Weblate Admin}
+      WEBLATE_ADMIN_PASSWORD: ${WEBLATE_ADMIN_PASSWORD:-weblate-admin}
+      WEBLATE_ADMIN_EMAIL: ${WEBLATE_ADMIN_EMAIL:-weblate@example.com}
+      POSTGRES_HOST: db
+      POSTGRES_DATABASE: ${POSTGRES_DB}
+      POSTGRES_USER: ${WEBLATE_DB_USER}
+      POSTGRES_PASSWORD: ${WEBLATE_DB_PASSWORD}
+      REDIS_HOST: cache
+      GIT_ALLOW_PROTOCOL: http:https
+      GIT_CONFIG_COUNT: "1"
+      GIT_CONFIG_KEY_0: protocol.http.allow
+      GIT_CONFIG_VALUE_0: always
+
+      WEBLATE_URL: http://weblate:8080
+      WEBLATE_PROJECT_NAME: micado
+      WEBLATE_PROJECT_SLUG: micado
+      WEBLATE_PROJECT_WEB: http://weblate.local
+      WEBLATE_PROJECT_INSTRUCTIONS: Micado translation project bootstrap managed by Docker Compose.
+      WEBLATE_IMPORT_COMPONENTS: "true"
+      WEBLATE_GIT_REPO: http://gitea:3000/weblate-bot/translations.git
+      WEBLATE_GIT_BRANCH: main
+      WEBLATE_FILEMASK: backend/*.json
+      WEBLATE_BASE_FILE_TEMPLATE: backend/en.json
+      WEBLATE_FILE_FORMAT: json
+      WEBLATE_NAME_TEMPLATE: Backend
+      BOOTSTRAP_DIR: /bootstrap
+      TOKEN_FILE: /bootstrap/gitea-weblate.token
+    volumes:
+      - weblate_data:/app/data
+      - bootstrap_data:/bootstrap:ro
+      - ./infrastructure/weblate/config/settings-override.py:/app/data/settings-override.py:ro
+      - ./infrastructure/weblate/init:/init:ro
+    entrypoint: ["sh", "/init/weblate-init.sh"]
+    restart: "no"
 
 volumes:
   db_data:
@@ -212,3 +328,4 @@ volumes:
   keycloak_data:
   gitea_data:
   weblate_data:
+  bootstrap_data:  
