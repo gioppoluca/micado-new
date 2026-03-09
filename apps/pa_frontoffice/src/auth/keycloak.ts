@@ -16,16 +16,35 @@ export async function initKeycloak(): Promise<boolean> {
   });
 
   try {
-    // Use 'check-sso' with responseMode 'query' so keycloak-js detects
-    // the ?code=...&state=... params after redirect and exchanges them.
-    // No silentCheckSsoRedirectUri or checkLoginIframe — both use cross-origin
-    // iframes that browsers block when app and auth are on different subdomains.
+    const params = new URLSearchParams(window.location.search);
+
+    // If Keycloak returned an error on the redirect, clear the URL and
+    // return unauthenticated — do NOT re-init, that causes the loop.
+    if (params.has('error')) {
+      logger.warn('[keycloak] error in redirect, clearing URL:', params.get('error'));
+      window.history.replaceState({}, document.title, window.location.pathname);
+      return false;
+    }
+
     const authenticated = await keycloak.init({
-      onLoad: 'check-sso',
+      // Do NOT use onLoad: 'check-sso' — on cross-origin setups without
+      // iframe support it falls back to a full redirect on every page load,
+      // creating an infinite loop with error=login_required.
+      //
+      // Instead: init with no onLoad (returns false if no session),
+      // and let the router guard / login button trigger login explicitly.
       pkceMethod: 'S256',
       checkLoginIframe: false,
       responseMode: 'query',
     });
+
+    // Clean callback params from URL after successful exchange
+    if (authenticated) {
+      const url = new URL(window.location.href);
+      ['code', 'state', 'session_state', 'iss'].forEach(p => url.searchParams.delete(p));
+      const clean = url.pathname + (url.searchParams.toString() ? '?' + url.searchParams.toString() : '');
+      window.history.replaceState({}, document.title, clean);
+    }
 
     logger.info('[keycloak] initialized', { authenticated });
     return authenticated;

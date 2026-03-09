@@ -1,1 +1,16 @@
-// app global css in SCSS form
+/* app global css */
+
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700&family=Nunito+Sans:wght@300;400;600;700&display=swap');
+
+body {
+  font-family: 'Nunito', sans-serif;
+}
+
+iframe {
+  height: 500px;
+  width: 800px;
+}
+
+.ProseMirror {
+  min-height: 120px;
+}
