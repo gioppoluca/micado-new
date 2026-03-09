@@ -168,6 +168,7 @@ services:
       GITEA__server__HTTP_PORT: 3000
       GITEA__security__INSTALL_LOCK: "true"
       GITEA__service__DISABLE_REGISTRATION: "true"
+      
     volumes:
       - gitea_data:/data
     labels:
@@ -225,6 +226,7 @@ services:
       GITEA__security__INSTALL_LOCK: "true"
       MICADO_SOURCE_LANG: ${MICADO_SOURCE_LANG:-it}
       MICADO_CATEGORIES: ${MICADO_CATEGORIES:-news,events,categories}
+      GITEA_TRANSLATIONS_REPO_PRIVATE: "false"
     volumes:
       - gitea_data:/data
       - ./infrastructure/gitea/init:/init:ro
@@ -261,14 +263,17 @@ services:
       POSTGRES_USER: ${WEBLATE_DB_USER}
       POSTGRES_PASSWORD: ${WEBLATE_DB_PASSWORD}
       REDIS_HOST: cache
-      GIT_ALLOW_PROTOCOL: http:https
-      GIT_CONFIG_COUNT: "1"
-      GIT_CONFIG_KEY_0: protocol.http.allow
-      GIT_CONFIG_VALUE_0: always
+      WEBLATE_GIT_REPO: http://weblate-bot:${GITEA_WEBLATE_PASSWORD}@gitea:3000/weblate-bot/translations.git
+      GIT_CONFIG_GLOBAL: /home/weblate/.gitconfig
+#      GIT_ALLOW_PROTOCOL: http:https
+#      GIT_CONFIG_COUNT: "1"
+#      GIT_CONFIG_KEY_0: protocol.http.allow
+#      GIT_CONFIG_VALUE_0: always
     volumes:
       - weblate_data:/app/data
       - bootstrap_data:/bootstrap:ro
       - ./infrastructure/weblate/config/settings-override.py:/app/data/settings-override.py:ro
+#      - ./infrastructure/weblate/config/gitconfig:/app/data/home/.gitconfig:ro
     labels:
       - traefik.enable=true
       - traefik.http.routers.weblate.rule=Host(`weblate.${BASE_DOMAIN}`)
@@ -295,10 +300,14 @@ services:
       POSTGRES_USER: ${WEBLATE_DB_USER}
       POSTGRES_PASSWORD: ${WEBLATE_DB_PASSWORD}
       REDIS_HOST: cache
-      GIT_ALLOW_PROTOCOL: http:https
-      GIT_CONFIG_COUNT: "1"
-      GIT_CONFIG_KEY_0: protocol.http.allow
-      GIT_CONFIG_VALUE_0: always
+      WEBLATE_GIT_REPO: http://weblate-bot:${GITEA_WEBLATE_PASSWORD}@gitea:3000/weblate-bot/translations.git
+      GIT_CONFIG_GLOBAL: /home/weblate/.gitconfig
+      MICADO_SOURCE_LANG: ${MICADO_SOURCE_LANG:-it}
+      MICADO_CATEGORIES: ${MICADO_CATEGORIES:-news,events,categories}
+#      GIT_ALLOW_PROTOCOL: http:https
+#      GIT_CONFIG_COUNT: "1"
+#      GIT_CONFIG_KEY_0: protocol.http.allow
+#      GIT_CONFIG_VALUE_0: always   
 
       WEBLATE_URL: http://weblate:8080
       WEBLATE_PROJECT_NAME: micado
@@ -306,7 +315,7 @@ services:
       WEBLATE_PROJECT_WEB: http://weblate.local
       WEBLATE_PROJECT_INSTRUCTIONS: Micado translation project bootstrap managed by Docker Compose.
       WEBLATE_IMPORT_COMPONENTS: "true"
-      WEBLATE_GIT_REPO: http://gitea:3000/weblate-bot/translations.git
+#      WEBLATE_GIT_REPO: http://gitea:3000/weblate-bot/translations.git
       WEBLATE_GIT_BRANCH: main
       WEBLATE_FILEMASK: backend/*.json
       WEBLATE_BASE_FILE_TEMPLATE: backend/en.json
@@ -319,6 +328,7 @@ services:
       - bootstrap_data:/bootstrap:ro
       - ./infrastructure/weblate/config/settings-override.py:/app/data/settings-override.py:ro
       - ./infrastructure/weblate/init:/init:ro
+#      - ./infrastructure/weblate/config/gitconfig:/app/data/home/.gitconfig:ro
     entrypoint: ["sh", "/init/weblate-init.sh"]
     restart: "no"
 
