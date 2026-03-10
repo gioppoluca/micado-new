@@ -96,12 +96,19 @@ services:
       DATABASE_URL: postgres://${APP_DB_USER}:${MICADO_APP_PASSWORD}@db:5432/${POSTGRES_DB}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       FRONTEND_LOG_LEVEL: ${FRONTEND_LOG_LEVEL:-info}
+      GITEA_BASE_URL: http://gitea:3000
+      GITEA_TRANSLATIONS_OWNER: weblate-bot
+      GITEA_TRANSLATIONS_REPO: translations
+      GITEA_TRANSLATIONS_BRANCH: main
+      GITEA_TOKEN_FILE: /bootstrap/gitea-weblate.token
     labels:
       - traefik.enable=true
       - traefik.http.routers.backend.rule=Host(`api.${BASE_DOMAIN}`)
       - traefik.http.routers.backend.entrypoints=web
       - traefik.http.routers.backend.middlewares=sec-headers@file
       - traefik.http.services.backend.loadbalancer.server.port=${BACKEND_PORT}
+    volumes:
+      - bootstrap_data:/bootstrap
 
   migrants:
     build:
