@@ -355,11 +355,15 @@ ensure_token_file() {
     --username "$GITEA_WEBLATE_USER" \
     --token-name "$GITEA_WEBLATE_TOKEN_NAME" \
     --scopes "$GITEA_WEBLATE_TOKEN_SCOPES" 2>&1)"
-  token="$(printf '%s\n' "$output" | tail -n 1 | tr -d '\r')"
+  # The command outputs: "Access token was successfully created: <token>"
+  # Extract the last whitespace-separated word (the actual token hex value).
+  raw_line="$(printf '%s\n' "$output" | tail -n 1 | tr -d '\r')"
+  token="$(printf '%s' "$raw_line" | awk '{print $NF}')"
   if [[ -z "$token" ]]; then
     error "PAT generation returned empty output: $output"
     return 1
   fi
+  info "Raw output line: ${raw_line}"
   printf '%s' "$token" > "$TOKEN_FILE"
   chmod 600 "$TOKEN_FILE"
   info "Persisted token to '$TOKEN_FILE' with masked value $(mask_secret "$token")"
