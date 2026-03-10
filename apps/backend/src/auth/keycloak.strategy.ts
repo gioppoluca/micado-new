@@ -4,6 +4,7 @@ import { UserProfile, securityId } from '@loopback/security';
 import { jwtVerify, createRemoteJWKSet, decodeJwt } from 'jose';
 import { inject, injectable } from '@loopback/core';
 import { LoggingBindings, WinstonLogger } from '@loopback/logging';
+import { readDummyAuthConfig } from '../config/auth.config';
 
 // Cache JWKS instances keyed by jwksUri so the remote key set is not
 // re-fetched on every request (jose caches keys internally per instance).
@@ -25,6 +26,13 @@ export class KeycloakJwtStrategy implements AuthenticationStrategy {
   ) { }
 
   async authenticate(request: Request): Promise<UserProfile | undefined> {
+    const authConfig = readDummyAuthConfig();
+    if (authConfig.disableKeycloak) {
+      this.logger.info('Keycloak authentication is DISABLED. Dummy authentication is active.');
+    }
+    if (authConfig.disableKeycloak) {
+      return this.buildDummyUserProfile(request, authConfig);
+    }
     // ── 1. Extract token ────────────────────────────────────────────────────
     const authHeader = request.headers.authorization;
 
@@ -171,5 +179,43 @@ export class KeycloakJwtStrategy implements AuthenticationStrategy {
     });
 
     return undefined;
+  }
+
+  private buildDummyUserProfile(
+    request: Request,
+    authConfig: ReturnType<typeof readDummyAuthConfig>,
+  ): UserProfile {
+    const requestedRolesHeader = request.headers['x-test-roles'];
+    const requestedUsernameHeader = request.headers['x-test-username'];
+    const requestedSubHeader = request.headers['x-test-sub'];
+
+    const roles =
+      typeof requestedRolesHeader === 'string' && requestedRolesHeader.trim()
+        ? requestedRolesHeader
+          .split(',')
+          .map(role => role.trim())
+          .filter(Boolean)
+        : authConfig.dummyRoles;
+
+    const username =
+      typeof requestedUsernameHeader === 'string' &&
+        requestedUsernameHeader.trim()
+        ? requestedUsernameHeader.trim()
+        : authConfig.dummyUsername;
+
+    const sub =
+      typeof requestedSubHeader === 'string' && requestedSubHeader.trim()
+        ? requestedSubHeader.trim()
+        : authConfig.dummySub;
+
+    return {
+      [securityId]: sub,
+      id: sub,
+      name: username,
+      username,
+      sub,
+      roles,
+      authMode: 'dummy',
+    };
   }
 }
