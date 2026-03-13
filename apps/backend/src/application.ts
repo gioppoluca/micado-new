@@ -11,8 +11,10 @@ import path from 'path';
 import { MySequence } from './sequence';
 import { KeycloakJwtStrategy } from './auth/keycloak.strategy';
 import { format } from 'winston';
-import {RoleAuthorizerProvider} from './auth/role.authorizer';
+import { RoleAuthorizerProvider } from './auth/role.authorizer';
 
+import { DbosComponent } from './infrastructure/dbos/dbos.component';
+import { DBOS_CONFIG } from './infrastructure/dbos/dbos.config';
 
 export { ApplicationConfig };
 
@@ -91,6 +93,19 @@ export class MicadoBackend extends BootMixin(
     // REST Explorer
     this.configure(RestExplorerBindings.COMPONENT).to({ path: '/explorer' });
     this.component(RestExplorerComponent);
+    
+    // DBOS
+    this.bind(DBOS_CONFIG).to({
+      appName: process.env.DBOS_APP_NAME ?? 'micado-backend',
+      systemDatabaseUrl: process.env.DBOS_SYSTEM_DATABASE_URL ?? '',
+      sys_db_name: 'micado',
+      systemSchema: process.env.DBOS_SYSTEM_SCHEMA_NAME ?? 'dbos', // consiglio
+      executorId: process.env.DBOS_EXECUTOR_ID,
+      logLevel: process.env.DBOS_LOG_LEVEL ?? 'info',
+    });
+
+    this.component(DbosComponent);
+
 
     this.projectRoot = __dirname;
     this.bootOptions = {
