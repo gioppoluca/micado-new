@@ -58,11 +58,11 @@ export interface RuntimeConfig {
 // production by the real config.json served by nginx.
 
 const DEV_DEFAULTS: RuntimeConfig = {
-  apiUrl: 'http://localhost:3000',
-  keycloakUrl: 'http://localhost:8080',
-  keycloakRealm: 'micado',
-  keycloakClientId: 'micado-pa',
-  paUrl: 'http://localhost:9000',
+  apiUrl: 'http://api.localhost',
+  keycloakUrl: 'http://auth.localhost',
+  keycloakRealm: 'pa_frontoffice',
+  keycloakClientId: 'pa_frontoffice',
+  paUrl: 'http://pa.localhost',
   migrantDomain: 'localhost',
   titleLimit: 30,
 };
