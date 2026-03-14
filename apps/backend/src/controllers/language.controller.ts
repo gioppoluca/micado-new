@@ -1,6 +1,6 @@
 // src/controllers/language.controller.ts
 import { repository } from '@loopback/repository';
-import { get, post, put, patch, del, param, requestBody } from '@loopback/rest';
+import { get, post, put, patch, del, param, requestBody, HttpErrors } from '@loopback/rest';
 import { Language } from '../models';
 import { LanguageRepository } from '../repositories';
 import { inject } from '@loopback/core';
@@ -8,7 +8,6 @@ import { LoggingBindings, WinstonLogger } from '@loopback/logging';
 import { authenticate } from '@loopback/authentication';
 import { authorize } from '@loopback/authorization';
 
-@authenticate('keycloak')
 export class LanguageController {
     constructor(
         @repository(LanguageRepository) private repo: LanguageRepository,
@@ -17,15 +16,15 @@ export class LanguageController {
     ) { }
 
     @get('/languages')
-    @authorize({ allowedRoles: ['migrant_user', 'pa_editor', 'ngo_editor', 'admin'] })
+    @authenticate.skip()
     async list(
         @param.query.boolean('active') active?: boolean,
         @param.query.string('q') q?: string,
     ): Promise<Language[]> {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const where: any = {};
         if (active !== undefined) where.active = active;
 
-        // semplice search (puoi evolverlo con full-text)
         if (q) {
             where.or = [
                 { lang: { like: `%${q}%` } },
@@ -38,31 +37,34 @@ export class LanguageController {
     }
 
     @get('/languages/{lang}')
-    @authorize({ allowedRoles: ['migrant_user', 'pa_editor', 'ngo_editor', 'admin'] })
+    @authenticate.skip()
     async getOne(@param.path.string('lang') lang: string): Promise<Language> {
         return this.repo.findById(lang);
     }
 
     @post('/languages')
+    @authenticate('keycloak')
     @authorize({ allowedRoles: ['pa_editor', 'ngo_editor', 'admin'] })
-    async create(@requestBody() body: Omit<Language, 'createdAt' | 'updatedAt'>): Promise<Language> {
-        this.logger.info(`{ op: 'languages.create', lang: ${body.lang} }, 'Create language'`);
+    async create(
+        @requestBody() body: Omit<Language, 'createdAt' | 'updatedAt'>,
+    ): Promise<Language> {
+        this.logger.info(`[languages.create] lang=${body.lang}`);
 
-        // enforce single default: se body.isDefault=true, unset others
         if (body.isDefault) {
             await this.repo.updateAll({ isDefault: false }, { isDefault: true });
-            body.active = true; // coerente con chk
+            body.active = true;
         }
         return this.repo.create(body as Language);
     }
 
     @patch('/languages/{lang}')
+    @authenticate('keycloak')
     @authorize({ allowedRoles: ['pa_editor', 'ngo_editor', 'admin'] })
     async patchOne(
         @param.path.string('lang') lang: string,
         @requestBody() body: Partial<Language>,
     ): Promise<void> {
-        this.logger.info(`{ op: 'languages.patch', ${lang}, body: ${JSON.stringify(body)} }, 'Patch language'`);
+        this.logger.info(`[languages.patch] lang=${lang} body=${JSON.stringify(body)}`);
 
         if (body.isDefault === true) {
             await this.repo.updateAll({ isDefault: false }, { isDefault: true });
@@ -72,12 +74,13 @@ export class LanguageController {
     }
 
     @put('/languages/{lang}')
+    @authenticate('keycloak')
     @authorize({ allowedRoles: ['pa_editor', 'ngo_editor', 'admin'] })
     async replaceOne(
         @param.path.string('lang') lang: string,
         @requestBody() body: Language,
     ): Promise<void> {
-        this.logger.info(`{ op: 'languages.replace', lang: ${lang} }, 'Replace language'`);
+        this.logger.info(`[languages.replace] lang=${lang}`);
 
         if (body.isDefault) {
             await this.repo.updateAll({ isDefault: false }, { isDefault: true });
@@ -87,9 +90,16 @@ export class LanguageController {
     }
 
     @del('/languages/{lang}')
+    @authenticate('keycloak')
     @authorize({ allowedRoles: ['admin'] })
     async deleteOne(@param.path.string('lang') lang: string): Promise<void> {
-        this.logger.warn(`{ op: 'languages.delete', lang: ${lang} }, 'Delete language'`);
+        const existing = await this.repo.findById(lang);
+        if (existing.isDefault) {
+            throw new HttpErrors.UnprocessableEntity(
+                `Cannot delete the default language '${lang}'. Set another language as default first.`,
+            );
+        }
+        this.logger.warn(`[languages.delete] lang=${lang}`);
         await this.repo.deleteById(lang);
     }
 }
