@@ -53,15 +53,60 @@ const MOCK_SETTINGS: PublicSetting[] = [
     { key: 'public.supportEmail', value: 'support@micado.example.com' },
     { key: 'public.maintenanceMode', value: 'false' },
     { key: 'public.version', value: '1.0.0' },
+    // ── App-bootstrap keys (read by loadData boot) ──────────────────────────
+    // The value matches a `lang` primary key in the languages table.
+    { key: 'default_language', value: 'en' },
+    { key: 'pa_tenant', value: 'micado_pa' },
+    { key: 'migrant_tenant', value: 'micado_migrant' },
+    { key: 'migrant_domain_name', value: 'migrants.micado.local' },
+    {
+        key: 'translationState',
+        value: JSON.stringify([
+            {
+                value: 'editing',
+                translation: [
+                    { lang: 'en', state: 'Editing' },
+                    { lang: 'fr', state: 'En cours' },
+                    { lang: 'ar', state: 'تحرير' },
+                ],
+            },
+            {
+                value: 'translatable',
+                translation: [
+                    { lang: 'en', state: 'Translatable' },
+                    { lang: 'fr', state: 'Traduisible' },
+                    { lang: 'ar', state: 'قابل للترجمة' },
+                ],
+            },
+            {
+                value: 'translating',
+                translation: [
+                    { lang: 'en', state: 'Translating' },
+                    { lang: 'fr', state: 'En traduction' },
+                    { lang: 'ar', state: 'يترجم' },
+                ],
+            },
+            {
+                value: 'translated',
+                translation: [
+                    { lang: 'en', state: 'Translated' },
+                    { lang: 'fr', state: 'Traduit' },
+                    { lang: 'ar', state: 'مترجم' },
+                ],
+            },
+        ]),
+    },
 ];
 
 export function registerSettingsMocks(mock: MockRegistry): void {
     mock.onGet('/public/settings').reply((config: MockRequestConfig): MockReplyTuple => {
-        const prefix = config.params?.['prefix'] !== undefined
-            ? String(config.params['prefix'])
-            : 'public.';
-        const result = MOCK_SETTINGS.filter(s => s.key.startsWith(prefix));
-        logger.debug('[mock] GET /public/settings', { count: result.length });
+        // If a prefix param was explicitly passed, filter by it.
+        // If no prefix param is given (the loadData boot call), return all settings.
+        const rawPrefix = config.params?.['prefix'];
+        const result = rawPrefix !== undefined
+            ? MOCK_SETTINGS.filter(s => s.key.startsWith(String(rawPrefix)))
+            : MOCK_SETTINGS;
+        logger.debug('[mock] GET /public/settings', { prefix: rawPrefix ?? '(none)', count: result.length });
         return [200, result];
     });
 

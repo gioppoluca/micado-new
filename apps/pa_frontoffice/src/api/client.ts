@@ -28,6 +28,7 @@ import axios, {
 } from 'axios';
 import { keycloak } from 'src/auth/keycloak';
 import { logger } from 'src/services/Logger';
+import { getRuntimeConfigOrDefaults } from 'src/config/env';
 
 // ─── Typed error ─────────────────────────────────────────────────────────────
 // Extends Error so Promise.reject(new ApiError(...)) satisfies
@@ -70,9 +71,16 @@ function normaliseError(error: unknown): ApiError {
 }
 
 // ─── Axios instance ───────────────────────────────────────────────────────────
+// NOTE: getRuntimeConfigOrDefaults() is used here (not getRuntimeConfig())
+// because this module is evaluated when it is first imported — which can happen
+// before the envvar boot has completed.  The axios instance is created with
+// whatever URL is available at evaluation time; the correct production URL will
+// be present because envvar runs before any API call is made.
+// If for any reason the base URL needs to change after boot (it shouldn't), you
+// can call apiClient.defaults.baseURL = newUrl at that point.
 
 export const apiClient: AxiosInstance = axios.create({
-    baseURL: import.meta.env.VITE_API_BASE_URL as string,
+    baseURL: getRuntimeConfigOrDefaults().apiUrl,
     timeout: 15_000,
     headers: {
         'Content-Type': 'application/json',

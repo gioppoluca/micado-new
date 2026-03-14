@@ -1,25 +1,39 @@
+# ── Stage 1: build ────────────────────────────────────────────────────────────
 FROM node:24-bookworm AS build
-RUN corepack enable && corepack prepare yarn@4.6.0 --activate
+
+RUN corepack enable && corepack prepare pnpm@latest --activate
 
 WORKDIR /app
 
-COPY .yarnrc.yml package.json ./
-RUN yarn install
+# Install dependencies first (layer-cached unless package files change)
+COPY package.json pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
 
-COPY src ./src
-COPY index.html tsconfig.json vite.config.ts ./
+# Copy source and build
+# NOTE: No VITE_* ARGs here. Runtime config is fetched from /config.json.
+#       The only env var Vite sees is NODE_ENV=production (set automatically).
+COPY . .
+RUN pnpm build
 
-ARG VITE_API_BASE_URL
-ARG VITE_KEYCLOAK_URL
-ARG VITE_KEYCLOAK_REALM
-ARG VITE_KEYCLOAK_CLIENT_ID
-ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
-ENV VITE_KEYCLOAK_URL=$VITE_KEYCLOAK_URL
-ENV VITE_KEYCLOAK_REALM=$VITE_KEYCLOAK_REALM
-ENV VITE_KEYCLOAK_CLIENT_ID=$VITE_KEYCLOAK_CLIENT_ID
-
-RUN yarn build
-
+# ── Stage 2: serve ────────────────────────────────────────────────────────────
 FROM nginx:1.27-alpine
+
+# Remove default nginx static assets
+RUN rm -rf /usr/share/nginx/html/*
+
+# Copy built app
+COPY --from=build /app/dist/spa /usr/share/nginx/html
+
+# Copy nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/dist /usr/share/nginx/html
+
+# Copy and wire the entrypoint that writes config.json from env vars
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
+# config.json is generated at container startup — do not COPY a static one here.
+# The entrypoint will create /usr/share/nginx/html/config.json from env vars.
+
+EXPOSE 80
+
+ENTRYPOINT ["/docker-entrypoint.sh"]
