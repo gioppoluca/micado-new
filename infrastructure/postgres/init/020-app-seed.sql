@@ -11,7 +11,7 @@ ON CONFLICT (lang) DO NOTHING;
 -- Seed: application settings
 INSERT INTO app_settings (key, value, description) VALUES
   -- Bootstrap / public
-  ('public.app_name',       'Micado',             'Application display name'),
+  ('app_name',              'Micado',             'Application display name'),
   ('default_language',      'it',                 'Default UI language code (lang PK)'),
   ('pa_tenant',             'pa_frontoffice',     'Keycloak realm for the PA frontend'),
   ('migrant_tenant',        'migrants',           'Keycloak realm for the Migrant frontend'),
