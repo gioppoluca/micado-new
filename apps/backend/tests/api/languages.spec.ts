@@ -1,6 +1,6 @@
 import { test, expect, request } from '@playwright/test';
 
-const baseURL = process.env.API_BASE_URL ?? 'http://localhost:3000';
+const baseURL = process.env.API_BASE_URL ?? 'http://api.localhost';
 const token = process.env.E2E_TOKEN_ADMIN ?? '';
 
 test.describe('Languages API CRUD', () => {
