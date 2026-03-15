@@ -1,15 +1,19 @@
 /**
  * src/api/index.ts
  *
- * Barrel export — import everything from 'src/api' in page/store files.
+ * Barrel export — importa tutto da 'src/api' nei file page/store.
+ *
+ * ── MODIFICA rispetto all'originale ─────────────────────────────────────────
+ * Aggiunti gli export di micado-entities.api (nuovo modulo per il rich-text editor).
  *
  * Examples:
- *   import { languageApi }            from 'src/api';
- *   import { settingsApi }            from 'src/api';
- *   import type { Language }          from 'src/api';
+ *   import { languageApi }              from 'src/api';
+ *   import { micadoEntitiesApi }        from 'src/api';
+ *   import type { MicadoEntity }        from 'src/api';
  *   import { isApiError, type ApiError } from 'src/api';
  */
 
+// ── Originali (invariati) ─────────────────────────────────────────────────────
 export { apiClient, isApiError } from './client';
 export type { ApiError } from './client';
 
@@ -27,3 +31,11 @@ export type { PublicSetting } from './settings.api';
 export { isMockEnabled } from './mock';
 export { featuresApi } from './features.api';
 export type { FeatureFlag, PatchFeatureFlagPayload } from './features.api';
+
+// ── Nuovo: entità MICADO per il rich-text editor ──────────────────────────────
+export { micadoEntitiesApi } from './micado-entities.api';
+export type {
+    MicadoEntity,
+    EntityTranslation,
+    EntityListParams,
+} from './micado-entities.api';

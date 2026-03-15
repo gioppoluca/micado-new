@@ -5,53 +5,125 @@ const routes: RouteRecordRaw[] = [
     path: '/',
     component: () => import('layouts/MainLayout.vue'),
     children: [
-      // public home
+      // ── Public home ──────────────────────────────────────────────────────
       { path: '', name: 'home', component: () => import('pages/IndexPage.vue') },
 
-      // post-login language selection (auth required)
-      { path: 'languages', name: 'languages', component: () => import('pages/LandingPage.vue'), meta: { requiresAuth: true } },
+      // ── Post-login language selection ────────────────────────────────────
+      {
+        path: 'languages',
+        name: 'languages',
+        component: () => import('pages/LandingPage.vue'),
+        meta: { requiresAuth: true },
+      },
 
-      // protected profile
-      { path: 'profile', name: 'profile', component: () => import('pages/ProfilePage.vue'), meta: { requiresAuth: true } },
+      // ── Profile ──────────────────────────────────────────────────────────
+      {
+        path: 'profile',
+        name: 'profile',
+        component: () => import('pages/ProfilePage.vue'),
+        meta: { requiresAuth: true },
+      },
 
-      // ── Data settings — nested, matches legacy /data_settings/* structure ──
+      // ── Settings section ─────────────────────────────────────────────────
+      // SettingsLayout renders the secondary settings drawer + <router-view>.
+      // Every child route is rendered inside that layout's page container.
       {
         path: 'data_settings',
+        component: () => import('layouts/SettingsLayout.vue'),
         meta: { requiresAuth: true },
         children: [
-          // Default redirect: sidebar links to /data_settings/profile_settings
-          { path: '', redirect: { name: 'data-settings-profile' } },
-
-          // Profile settings (accessible to all authenticated roles)
+          // Default: redirect to profile_settings (matches sidebar default link)
           {
-            path: 'profile_settings',
-            name: 'data-settings-profile',
-            component: () => import('pages/SettingsPage.vue'),
+            path: '',
+            redirect: { name: 'settings-profile' },
           },
 
-          // Function configuration (superadmin only)
+          // ── Profile settings (all authenticated) ─────────────────────────
+          {
+            path: 'profile_settings',
+            name: 'settings-profile',
+            component: () => import('pages/settings/ProfileSettingsPage.vue'),
+          },
+
+          // ── Function configuration (superadmin) ──────────────────────────
           {
             path: 'settings',
-            name: 'data-settings-function',
+            name: 'settings-function',
             component: () => import('pages/SettingsPage.vue'),
             meta: { roles: ['micado_superadmin'] },
           },
 
-          // Language / translation management
+          // ── Survey management (superadmin) ───────────────────────────────
+          {
+            path: 'survey',
+            name: 'settings-survey',
+            component: () => import('pages/settings/SurveyManagementPage.vue'),
+            meta: { roles: ['micado_superadmin'] },
+          },
+
+          // ── Language / translation management (admin+) ───────────────────
           {
             path: 'language',
-            name: 'data-settings-language',
-            component: () => import('pages/SettingsPage.vue'),
-            meta: { roles: ['micado_admin', 'micado_superadmin'] },
+            name: 'settings-language',
+            component: () => import('pages/settings/TranslationManagementPage.vue'),
+            meta: { roles: ['micado_superadmin', 'micado_admin'] },
+          },
+
+          // ── PA user management (superadmin) ─────────────────────────────
+          {
+            path: 'usermgmt',
+            name: 'settings-usermgmt',
+            component: () => import('pages/settings/UserManagementPage.vue'),
+            meta: { roles: ['micado_superadmin'] },
+          },
+
+          // ── Privacy policy (all authenticated) ──────────────────────────
+          {
+            path: 'privacy',
+            name: 'settings-privacy',
+            component: () => import('pages/settings/PrivacyPolicyPage.vue'),
+          },
+
+          // ── Data management sub-pages (admin+) ───────────────────────────
+          {
+            path: 'document_types',
+            name: 'settings-document-types',
+            component: () => import('pages/settings/DocumentTypesPage.vue'),
+            meta: { roles: ['micado_superadmin', 'micado_admin'] },
+          },
+          {
+            path: 'intervention_categories',
+            name: 'settings-intervention-categories',
+            component: () => import('pages/settings/InterventionCategoriesPage.vue'),
+            meta: { roles: ['micado_superadmin', 'micado_admin'] },
+          },
+          {
+            path: 'intervention_types',
+            name: 'settings-intervention-types',
+            component: () => import('pages/settings/InterventionTypesPage.vue'),
+            meta: { roles: ['micado_superadmin', 'micado_admin'] },
+          },
+          {
+            path: 'topics',
+            name: 'settings-topics',
+            component: () => import('pages/settings/TopicsPage.vue'),
+            meta: { roles: ['micado_superadmin', 'micado_admin'] },
+          },
+          {
+            path: 'user_types',
+            name: 'settings-user-types',
+            component: () => import('pages/settings/UserTypesPage.vue'),
+            meta: { roles: ['micado_superadmin', 'micado_admin'] },
           },
         ],
       },
     ],
   },
 
-  // login route (optional; protected pages auto-redirect to Keycloak)
+  // ── Login (optional — protected pages auto-redirect to Keycloak) ─────────
   { path: '/login', name: 'login', component: () => import('pages/LoginPage.vue') },
 
+  // ── 404 ──────────────────────────────────────────────────────────────────
   { path: '/:catchAll(.*)*', name: 'not-found', component: () => import('pages/ErrorNotFound.vue') },
 ];
 

@@ -58,10 +58,7 @@ export const settingsApi = {
 // ─── Mock handlers ────────────────────────────────────────────────────────────
 
 const MOCK_SETTINGS: PublicSetting[] = [
-    { key: 'public.appName', value: 'Micado PA' },
-    { key: 'public.supportEmail', value: 'support@micado.example.com' },
-    { key: 'public.maintenanceMode', value: 'false' },
-    { key: 'public.version', value: '1.0.0' },
+    { key: 'app_name', value: 'Micado PA' },
     // ── App-bootstrap keys (read by loadData boot) ──────────────────────────
     // The value matches a `lang` primary key in the languages table.
     { key: 'default_language', value: 'en' },
@@ -132,8 +129,7 @@ export function registerSettingsMocks(mock: MockRegistry): void {
 
     mock.onGet(/\/public\/settings\/.+/).reply((config: MockRequestConfig): MockReplyTuple => {
         const key = (config.url ?? '').split('/public/settings/').pop() ?? '';
-        const fullKey = key.startsWith('public.') ? key : `public.${key}`;
-        const found = MOCK_SETTINGS.find(s => s.key === fullKey);
+        const found = MOCK_SETTINGS.find(s => s.key === key);
         if (!found) return [404, { error: `Setting '${key}' not found` }];
         return [200, found];
     });

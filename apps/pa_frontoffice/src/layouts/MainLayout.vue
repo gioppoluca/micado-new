@@ -101,7 +101,7 @@ const navs: NavItem[] = [
     label: 'menu.setting',
     icon: 'settings', active_icon: 'settings',
     // Nested route — exact:false so active-class applies for all /data_settings/* children
-    to: '/data_settings/profile_settings',
+    to: '/data_settings/profile_settings',  // resolves to named route 'settings-profile'
     exact: false,
     description: 'menu.setting_desc',
   },
