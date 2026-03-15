@@ -8,10 +8,26 @@ VALUES
 ON CONFLICT (lang) DO NOTHING;
 
 
--- Seed: default public settings
+-- Seed: application settings
 INSERT INTO app_settings (key, value, description) VALUES
-  ('public.app_name',    'Micado',  'Application display name'),
-  ('public.default_lang', 'it',    'Default UI language code')
+  -- Bootstrap / public
+  ('public.app_name',       'Micado',             'Application display name'),
+  ('default_language',      'it',                 'Default UI language code (lang PK)'),
+  ('pa_tenant',             'pa_frontoffice',     'Keycloak realm for the PA frontend'),
+  ('migrant_tenant',        'migrants',           'Keycloak realm for the Migrant frontend'),
+  ('migrant_domain_name',   'migrants.localhost', 'Public hostname of the Migrant frontend'),
+  ('translationState',      '[{"value":"editing","translation":[{"lang":"it","state":"In modifica"},{"lang":"en","state":"Editing"}]},{"value":"translatable","translation":[{"lang":"it","state":"Traducibile"},{"lang":"en","state":"Translatable"}]},{"value":"translating","translation":[{"lang":"it","state":"In traduzione"},{"lang":"en","state":"Translating"}]},{"value":"translated","translation":[{"lang":"it","state":"Tradotto"},{"lang":"en","state":"Translated"}]}]', 'Translation workflow state options (JSON array)'),
+  -- Survey settings
+  ('internal_survey',       'false',              'Use internal survey (true) or external (false)'),
+  ('survey_local',          '',                   'URL for the local survey'),
+  ('survey_pa',             '',                   'URL for the PA survey'),
+  ('survey_cso',            '',                   'URL for the CSO survey'),
+  -- Helpdesk settings
+  ('helpdesk_pa',           '',                   'Helpdesk URL for PA operators'),
+  ('helpdesk_ngo',          '',                   'Helpdesk URL for NGO operators'),
+  ('helpdesk_migrant',      '',                   'Helpdesk URL for migrants'),
+  ('feedback_email',        '',                   'Support / feedback email address'),
+  ('duration_of_new',       '7',                  'Number of days a content item is shown as new')
 ON CONFLICT (key) DO NOTHING;
 
 -- Seed flags
