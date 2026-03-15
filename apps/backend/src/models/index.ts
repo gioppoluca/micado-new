@@ -3,3 +3,8 @@ export * from './setting.model';
 export * from './translation-export-request.model';
 export * from './feature-flag.model';
 export * from './feature-flag-i18n.model';
+export * from './content-type.model';
+export * from './content-item.model';
+export * from './content-revision.model';
+export * from './content-revision-translation.model';
+export * from './content-item-relation.model';

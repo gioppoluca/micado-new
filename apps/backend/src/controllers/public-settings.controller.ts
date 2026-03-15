@@ -62,8 +62,7 @@ export class PublicSettingsController {
     async getByKey(
         @param.path.string('key') key: string,
     ): Promise<{ key: string; value: string }> {
-        const fullKey = key.startsWith('public.') ? key : `public.${key}`;
-        const row = await this.settingsRepo.findById(fullKey);
+        const row = await this.settingsRepo.findById(key);
         return { key: row.key, value: row.value };
     }
 
