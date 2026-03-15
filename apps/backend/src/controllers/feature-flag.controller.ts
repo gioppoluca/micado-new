@@ -40,7 +40,7 @@ export class FeatureFlagController {
      * GET /features-flags?lang=it
      */
     @get('/features-flags')
-    @authorize({ allowedRoles: ['pa_editor', 'admin'] })
+    @authorize({ allowedRoles: ['pa_admin', 'pa_operator'] })
     async list(
         @param.query.string('lang') lang?: string,
     ): Promise<FeatureFlagWithLabel[]> {
@@ -67,14 +67,14 @@ export class FeatureFlagController {
 
     /** GET /features-flags/:id */
     @get('/features-flags/{id}')
-    @authorize({ allowedRoles: ['pa_editor', 'admin'] })
+    @authorize({ allowedRoles: ['pa_admin', 'pa_operator'] })
     async getOne(@param.path.number('id') id: number): Promise<FeatureFlag> {
         return this.flagRepo.findById(id);
     }
 
     /** POST /features-flags */
     @post('/features-flags')
-    @authorize({ allowedRoles: ['admin'] })
+    @authorize({ allowedRoles: ['pa_admin'] })
     async create(
         @requestBody() body: Pick<FeatureFlag, 'flagKey' | 'enabled'>,
     ): Promise<FeatureFlag> {
@@ -84,7 +84,7 @@ export class FeatureFlagController {
 
     /** PATCH /features-flags/:id  — toggle enabled or rename */
     @patch('/features-flags/{id}')
-    @authorize({ allowedRoles: ['pa_editor', 'admin'] })
+    @authorize({ allowedRoles: ['pa_admin', 'pa_operator'] })
     async patchOne(
         @param.path.number('id') id: number,
         @requestBody() body: Partial<Pick<FeatureFlag, 'enabled' | 'flagKey'>>,
@@ -95,7 +95,7 @@ export class FeatureFlagController {
 
     /** DELETE /features-flags/:id */
     @del('/features-flags/{id}')
-    @authorize({ allowedRoles: ['admin'] })
+    @authorize({ allowedRoles: ['pa_admin'] })
     async deleteOne(@param.path.number('id') id: number): Promise<void> {
         this.logger.warn(`[features-flags.delete] id=${id}`);
         await this.flagRepo.deleteById(id);
@@ -107,7 +107,7 @@ export class FeatureFlagController {
 
     /** GET /features-flags/:id/labels */
     @get('/features-flags/{id}/labels')
-    @authorize({ allowedRoles: ['pa_editor', 'admin'] })
+    @authorize({ allowedRoles: ['pa_admin', 'pa_operator'] })
     async listLabels(
         @param.path.number('id') id: number,
     ): Promise<FeatureFlagI18n[]> {
@@ -116,7 +116,7 @@ export class FeatureFlagController {
 
     /** PUT /features-flags/:id/labels/:lang  — upsert a single label */
     @post('/features-flags/{id}/labels/{lang}')
-    @authorize({ allowedRoles: ['admin'] })
+    @authorize({ allowedRoles: ['pa_admin'] })
     async upsertLabel(
         @param.path.number('id') id: number,
         @param.path.string('lang') lang: string,
@@ -138,7 +138,7 @@ export class FeatureFlagController {
 
     /** DELETE /features-flags/:id/labels/:lang */
     @del('/features-flags/{id}/labels/{lang}')
-    @authorize({ allowedRoles: ['admin'] })
+    @authorize({ allowedRoles: ['pa_admin'] })
     async deleteLabel(
         @param.path.number('id') id: number,
         @param.path.string('lang') lang: string,

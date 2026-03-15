@@ -44,7 +44,7 @@ export class LanguageController {
 
     @post('/languages')
     @authenticate('keycloak')
-    @authorize({ allowedRoles: ['pa_editor', 'ngo_editor', 'admin'] })
+    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'ngo_admin', 'ngo_operator'] })
     async create(
         @requestBody() body: Omit<Language, 'createdAt' | 'updatedAt'>,
     ): Promise<Language> {
@@ -59,7 +59,7 @@ export class LanguageController {
 
     @patch('/languages/{lang}')
     @authenticate('keycloak')
-    @authorize({ allowedRoles: ['pa_editor', 'ngo_editor', 'admin'] })
+    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'ngo_admin', 'ngo_operator'] })
     async patchOne(
         @param.path.string('lang') lang: string,
         @requestBody() body: Partial<Language>,
@@ -75,7 +75,7 @@ export class LanguageController {
 
     @put('/languages/{lang}')
     @authenticate('keycloak')
-    @authorize({ allowedRoles: ['pa_editor', 'ngo_editor', 'admin'] })
+    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'ngo_admin', 'ngo_operator'] })
     async replaceOne(
         @param.path.string('lang') lang: string,
         @requestBody() body: Language,
@@ -91,7 +91,7 @@ export class LanguageController {
 
     @del('/languages/{lang}')
     @authenticate('keycloak')
-    @authorize({ allowedRoles: ['admin'] })
+    @authorize({ allowedRoles: ['pa_admin', 'ngo_admin'] })
     async deleteOne(@param.path.string('lang') lang: string): Promise<void> {
         const existing = await this.repo.findById(lang);
         if (existing.isDefault) {

@@ -12,7 +12,7 @@ export function readDummyAuthConfig(): DummyAuthConfig {
     const dummySub = process.env.AUTH_DUMMY_SUB?.trim() || 'test-user';
     const dummyUsername =
         process.env.AUTH_DUMMY_USERNAME?.trim() || 'test.user';
-    const dummyRoles = (process.env.AUTH_DUMMY_ROLES?.trim() || 'admin')
+    const dummyRoles = (process.env.AUTH_DUMMY_ROLES?.trim() || 'pa_admin')
         .split(',')
         .map(role => role.trim())
         .filter(Boolean);
