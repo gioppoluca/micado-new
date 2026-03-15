@@ -13,7 +13,7 @@
  */
 
 import { logger } from 'src/services/Logger';
-import { apiGet } from './client';
+import { apiGet, apiPatch } from './client';
 import type { MockRegistry, MockRequestConfig, MockReplyTuple } from './mock';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -44,6 +44,15 @@ export const settingsApi = {
         logger.info('[settings.api] getByKey', { key });
         return apiGet<PublicSetting>(`/public/settings/${key}`);
     },
+
+    /**
+     * Create or update a setting by key.
+     * Auth: pa_editor, admin
+     */
+    async patch(key: string, value: string): Promise<PublicSetting> {
+        logger.info('[settings.api] patch', { key });
+        return apiPatch<PublicSetting>(`/settings/${key}`, { value });
+    },
 };
 
 // ─── Mock handlers ────────────────────────────────────────────────────────────
@@ -59,6 +68,17 @@ const MOCK_SETTINGS: PublicSetting[] = [
     { key: 'pa_tenant', value: 'micado_pa' },
     { key: 'migrant_tenant', value: 'micado_migrant' },
     { key: 'migrant_domain_name', value: 'migrants.micado.local' },
+    // ── Survey settings ─────────────────────────────────────────────────────
+    { key: 'internal_survey', value: 'false' },
+    { key: 'survey_local', value: '' },
+    { key: 'survey_pa', value: '' },
+    { key: 'survey_cso', value: '' },
+    // ── Helpdesk settings ───────────────────────────────────────────────────
+    { key: 'helpdesk_pa', value: '' },
+    { key: 'helpdesk_ngo', value: '' },
+    { key: 'helpdesk_migrant', value: '' },
+    { key: 'feedback_email', value: '' },
+    { key: 'duration_of_new', value: '7' },
     {
         key: 'translationState',
         value: JSON.stringify([
@@ -116,6 +136,12 @@ export function registerSettingsMocks(mock: MockRegistry): void {
         const found = MOCK_SETTINGS.find(s => s.key === fullKey);
         if (!found) return [404, { error: `Setting '${key}' not found` }];
         return [200, found];
+    });
+
+    mock.onPatch(/\/settings\/.+/).reply((config: MockRequestConfig): MockReplyTuple => {
+        const key = (config.url ?? '').split('/settings/').pop() ?? '';
+        logger.debug('[mock] PATCH /settings', { key });
+        return [200, { key, value: '' }];
     });
 
     logger.debug('[mock] settings handlers registered');

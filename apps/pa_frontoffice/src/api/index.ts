@@ -25,3 +25,5 @@ export { settingsApi } from './settings.api';
 export type { PublicSetting } from './settings.api';
 
 export { isMockEnabled } from './mock';
+export { featuresApi } from './features.api';
+export type { FeatureFlag, PatchFeatureFlagPayload } from './features.api';

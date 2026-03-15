@@ -1,13 +1,10 @@
 <script setup lang="ts">
 /**
- * MainLayout — Vue 3 / Quasar 2 migration of the original Layout.vue.
+ * MainLayout — Vue 3 / Quasar 2 sidebar layout.
  *
- * Role format note:
- *   The old Vue 2 auth plugin used "Application/micado_superadmin" style strings.
- *   Keycloak tokens carry the raw role name: "micado_superadmin", "micado_admin",
- *   "micado_migrant_manager". getRoles() in keycloak.ts reads realm_access.roles
- *   and resource_access[clientId].roles — no "Application/" prefix.
- *   → All role checks here use the raw names.
+ * Role format: raw Keycloak token values (no "Application/" prefix).
+ * exact: true  → active-class only matches when path is exactly `to`
+ * exact: false → active-class matches when path starts with `to` (for nested routes)
  */
 import { ref, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -20,24 +17,10 @@ const auth = useAuthStore();
 const leftDrawerOpen = ref(false);
 const selectedKey = ref('menu.home');
 
-// ---------------------------------------------------------------------------
-// Auth
-// ---------------------------------------------------------------------------
-
-// Simple: is the user authenticated with Keycloak at all?
 const isLoggedIn = computed(() => auth.authenticated);
 
-function toLogin() {
-  void auth.login(window.location.href);
-}
-
-function toLogout() {
-  void auth.logout(window.location.origin);
-}
-
-// ---------------------------------------------------------------------------
-// Navigation
-// ---------------------------------------------------------------------------
+function toLogin() { void auth.login(window.location.href); }
+function toLogout() { void auth.logout(window.location.origin); }
 
 interface NavItem {
   label: string;
@@ -45,94 +28,81 @@ interface NavItem {
   active_icon: string;
   to: string;
   description: string;
-  /** Raw Keycloak role name(s) required. Omit = visible to all logged-in users. */
+  /** When false, active-class matches on any child path (nested routes). Default true. */
+  exact?: boolean;
   auth?: string | string[];
 }
 
-/**
- * Role names match raw Keycloak token values (no "Application/" prefix).
- * Icon values are Material Icons placeholders until statics/icons/ is provided.
- * Once you copy the PNG/SVG files to public/icons/, replace with:
- *   icon: 'img:/icons/Icon - Home.png'
- *   active_icon: 'img:/icons/Icon - Home (selected).png'
- */
 const navs: NavItem[] = [
   {
     label: 'menu.home',
-    icon: 'home',
-    active_icon: 'home',
+    icon: 'home', active_icon: 'home',
     to: '/',
+    exact: true,
     description: 'menu.home_desc',
   },
   {
     label: 'menu.situation',
-    icon: 'public',
-    active_icon: 'public',
+    icon: 'public', active_icon: 'public',
     to: '/situation/main',
     auth: ['micado_superadmin', 'micado_admin'],
     description: 'menu.situation_desc',
   },
   {
     label: 'menu.migrant',
-    icon: 'people',
-    active_icon: 'people',
+    icon: 'people', active_icon: 'people',
     to: '/migrant',
     auth: 'micado_migrant_manager',
     description: 'menu.migrant_desc',
   },
   {
     label: 'menu.cso',
-    icon: 'supervisor_account',
-    active_icon: 'supervisor_account',
+    icon: 'supervisor_account', active_icon: 'supervisor_account',
     to: '/cso',
     auth: 'micado_superadmin',
     description: 'menu.cso_desc',
   },
   {
     label: 'menu.process',
-    icon: 'timeline',
-    active_icon: 'timeline',
+    icon: 'timeline', active_icon: 'timeline',
     to: '/guided_process_editor',
     auth: ['micado_superadmin', 'micado_admin'],
     description: 'menu.process_desc',
   },
   {
     label: 'menu.information_centre',
-    icon: 'info',
-    active_icon: 'info',
+    icon: 'info', active_icon: 'info',
     to: '/information',
     auth: ['micado_superadmin', 'micado_admin'],
     description: 'menu.information_centre_desc',
   },
   {
     label: 'menu.events',
-    icon: 'event',
-    active_icon: 'event',
+    icon: 'event', active_icon: 'event',
     to: '/events',
     auth: ['micado_superadmin', 'pa_admin'],
     description: 'menu.events_desc',
   },
   {
     label: 'menu.usage',
-    icon: 'bar_chart',
-    active_icon: 'bar_chart',
+    icon: 'bar_chart', active_icon: 'bar_chart',
     to: '/dashboard',
     auth: ['micado_superadmin', 'micado_admin'],
     description: 'menu.usage_desc',
   },
   {
     label: 'menu.glossary',
-    icon: 'menu_book',
-    active_icon: 'menu_book',
+    icon: 'menu_book', active_icon: 'menu_book',
     to: '/glossary',
     auth: ['micado_superadmin', 'micado_admin'],
     description: 'menu.glossary_desc',
   },
   {
     label: 'menu.setting',
-    icon: 'settings',
-    active_icon: 'settings',
+    icon: 'settings', active_icon: 'settings',
+    // Nested route — exact:false so active-class applies for all /data_settings/* children
     to: '/data_settings/profile_settings',
+    exact: false,
     description: 'menu.setting_desc',
   },
 ];
@@ -151,29 +121,14 @@ function changeIcon(label: string) {
 <template>
   <q-layout view="hHh LpR fFf">
 
-    <!-- ------------------------------------------------------------------ -->
-    <!-- Drawer                                                               -->
-    <!-- ------------------------------------------------------------------ -->
-    <q-drawer
-      :mini="leftDrawerOpen"
-      show-if-above
-      :breakpoint="767"
-      bordered
-      class="bg-accent text-white"
-    >
+    <q-drawer :mini="leftDrawerOpen" show-if-above :breakpoint="767" bordered class="bg-accent text-white">
       <!-- Hamburger + title -->
       <q-item class="shadow-box shadow-10">
         <q-item-section avatar>
-          <q-icon
-            name="menu"
-            class="cursor-pointer"
-            @click="leftDrawerOpen = !leftDrawerOpen"
-          />
+          <q-icon name="menu" class="cursor-pointer" @click="leftDrawerOpen = !leftDrawerOpen" />
         </q-item-section>
         <q-item-section>
-          <q-item-label class="app_label">
-            {{ t('application_title') }}
-          </q-item-label>
+          <q-item-label class="app_label">{{ t('application_title') }}</q-item-label>
         </q-item-section>
       </q-item>
 
@@ -184,24 +139,16 @@ function changeIcon(label: string) {
 
       <hr class="separator">
 
-      <!-- Login — only when NOT authenticated -->
+      <!-- Login -->
       <q-item v-if="!isLoggedIn" clickable @click="toLogin">
-        <q-item-section avatar>
-          <q-icon name="exit_to_app" />
-        </q-item-section>
-        <q-item-section>
-          <q-item-label>{{ t('menu.login') }}</q-item-label>
-        </q-item-section>
+        <q-item-section avatar><q-icon name="exit_to_app" /></q-item-section>
+        <q-item-section><q-item-label>{{ t('menu.login') }}</q-item-label></q-item-section>
       </q-item>
 
-      <!-- Logout — only when authenticated -->
+      <!-- Logout -->
       <q-item v-if="isLoggedIn" clickable @click="toLogout">
-        <q-item-section avatar>
-          <q-icon name="power_settings_new" />
-        </q-item-section>
-        <q-item-section>
-          <q-item-label>{{ t('menu.logout') }}</q-item-label>
-        </q-item-section>
+        <q-item-section avatar><q-icon name="power_settings_new" /></q-item-section>
+        <q-item-section><q-item-label>{{ t('menu.logout') }}</q-item-label></q-item-section>
       </q-item>
 
       <hr class="separator">
@@ -210,18 +157,9 @@ function changeIcon(label: string) {
       <q-list dark v-if="isLoggedIn">
         <q-item-label header>{{ t('menu.title') }}</q-item-label>
 
-        <q-item
-          v-for="nav in navs"
-          :key="nav.label"
-          :disable="!checkAuth(nav.auth)"
-          exact
-          dark
-          clickable
-          active-class="my-menu-link"
-          :to="nav.to"
-          style="padding-top:16px; padding-bottom:16px"
-          @click="changeIcon(nav.label)"
-        >
+        <q-item v-for="nav in navs" :key="nav.label" :disable="!checkAuth(nav.auth)" :exact="nav.exact !== false" dark
+          clickable active-class="my-menu-link" :to="nav.to" style="padding-top:16px; padding-bottom:16px"
+          @click="changeIcon(nav.label)">
           <q-item-section avatar>
             <q-icon :name="selectedKey === nav.label ? nav.active_icon : nav.icon" />
           </q-item-section>
@@ -245,9 +183,6 @@ function changeIcon(label: string) {
       </q-list>
     </q-drawer>
 
-    <!-- ------------------------------------------------------------------ -->
-    <!-- Page container                                                       -->
-    <!-- ------------------------------------------------------------------ -->
     <q-page-container>
       <router-view />
     </q-page-container>
@@ -261,6 +196,7 @@ function changeIcon(label: string) {
     color: white;
     background: #0b91ce;
   }
+
   body {
     font-family: 'Nunito', sans-serif;
   }
