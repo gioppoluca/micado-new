@@ -36,6 +36,12 @@
  */
 
 import { defineBoot } from '#q-app/wrappers';
+import type { WritableComputedRef } from 'vue';
+// Import the i18n instance directly from the boot file that created it.
+// With legacy: false, vue-i18n does NOT register $i18n on globalProperties,
+// so app.config.globalProperties.$i18n is undefined at runtime.
+// The named export from boot/i18n.ts is the correct way to share the instance.
+import { i18n } from 'src/boot/i18n';
 import { languageApi } from 'src/api/language.api';
 import { settingsApi } from 'src/api/settings.api';
 import { useLanguageStore } from 'src/stores/language-store';
@@ -65,14 +71,8 @@ function toLocaleKey(lang: string): string {
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 
-export default defineBoot(async ({ app }) => {
+export default defineBoot(async () => {
     logger.info('[boot:loadData] starting');
-
-    // Access the i18n instance installed by boot/i18n.ts.
-    // useI18n() is a component composable and cannot be called in a boot file,
-    // so we reach the global instance through the app properties.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const i18n = app.config.globalProperties.$i18n as any;
 
     // ── 1. Fetch languages and settings in parallel ───────────────────────────
 
@@ -86,8 +86,6 @@ export default defineBoot(async ({ app }) => {
     const langStore = useLanguageStore();
 
     if (languagesResult.status === 'fulfilled') {
-        // Use the store action so reactivity and any future side-effects are
-        // handled in one place, rather than mutating the ref directly.
         await langStore.fetchAll();
         logger.info('[boot:loadData] languages loaded', { count: languagesResult.value.length });
     } else {
@@ -116,22 +114,15 @@ export default defineBoot(async ({ app }) => {
     langStore.setDefaultByLang(defaultLangKey);
 
     // ── 5. Switch i18n locale ─────────────────────────────────────────────────
-    // Mutates the active locale on the already-installed instance.
-    // Composition API mode (legacy: false) → locale is a Ref<string>.
-    // Legacy mode                          → locale is a plain string.
+    // i18n.global.locale is a Ref<string> in Composition API mode (legacy: false).
+    // Assigning .value switches the active locale for the entire app instantly.
 
     const localeKey = toLocaleKey(defaultLangKey);
-
-    if (i18n?.global?.locale !== undefined) {
-        if (typeof i18n.global.locale === 'object' && 'value' in i18n.global.locale) {
-            i18n.global.locale.value = localeKey;
-        } else {
-            i18n.global.locale = localeKey;
-        }
-        logger.info('[boot:loadData] i18n locale set', { localeKey });
-    } else {
-        logger.warn('[boot:loadData] $i18n not found on app — locale not switched');
-    }
+    // Cast needed: WritableComputedRef<Locales> is narrowed to known message keys
+    // by vue-i18n, but we switch locale at runtime to keys that may not yet
+    // have a bundle (graceful fallback to en-US via vue-i18n fallback config).
+    (i18n.global.locale as WritableComputedRef<string>).value = localeKey;
+    logger.info('[boot:loadData] i18n locale set', { localeKey });
 
     // ── 6. Parse translationState ─────────────────────────────────────────────
 

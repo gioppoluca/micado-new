@@ -29,6 +29,7 @@ export default defineConfig((ctx) => {
       //               no auth needed); populates language-store and app-store;
       //               switches i18n locale to the backend default_language value
       'loadData',
+      'featureflag', // 5. featureflag — loads GET /active-features and pushes keys into service; also registers the directive and router guard globally
       // 6. keycloak — initialises Keycloak PKCE using URLs from RuntimeConfig
       'keycloak',
       // 7. router-guard — attaches the beforeEach guard; must run after keycloak
