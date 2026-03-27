@@ -62,3 +62,169 @@ FROM (VALUES
 JOIN features_flags f USING (flag_key)
 ON CONFLICT (flag_id, lang) DO NOTHING;
  
+
+
+
+-- ---------------------------------------------------------------------------
+-- Helper: upsert a content_type row by primary key (code).
+-- Columns updated on conflict:
+--   - name           : allows label corrections without data loss
+--   - revision_schema / translation_schema : allows schema evolution
+--   - weblate_namespace : allows namespace refactoring
+--   - updated_at     : reflects the change timestamp
+-- created_at is intentionally NOT updated on conflict.
+-- ---------------------------------------------------------------------------
+
+INSERT INTO content_type (
+    code,
+    name,
+    revision_schema,
+    translation_schema,
+    weblate_namespace
+)
+VALUES
+
+-- -------------------------------------------------------------------------
+-- USER_TYPE
+-- Classifies the user / migrant profile type used in the migrants app.
+-- Legacy table: user_types (id serial, user_type text, description text)
+-- -------------------------------------------------------------------------
+(
+    'USER_TYPE',
+    'User Type',
+    -- revision_schema: no type-specific non-translatable fields yet.
+    '{}'::jsonb,
+    -- translation_schema: only core title/description columns are used.
+    '{}'::jsonb,
+    'user-types'
+),
+
+-- -------------------------------------------------------------------------
+-- NEWS
+-- News articles published by the PA for migrants.
+-- Legacy table: news / news_i18n
+-- -------------------------------------------------------------------------
+(
+    'NEWS',
+    'News',
+    -- revision_schema: publication_date, image_url, category_id are
+    -- non-translatable and will live in data_extra.
+    '{
+      "type": "object",
+      "properties": {
+        "publication_date": { "type": "string", "format": "date" },
+        "image_url":        { "type": "string"  },
+        "category_id":      { "type": "integer" }
+      }
+    }'::jsonb,
+    -- translation_schema: content/body is translatable via i18n_extra.
+    '{
+      "type": "object",
+      "properties": {
+        "content": { "type": "string" }
+      }
+    }'::jsonb,
+    'news'
+),
+
+-- -------------------------------------------------------------------------
+-- PROCESS
+-- Administrative processes / procedures for migrants.
+-- -------------------------------------------------------------------------
+(
+    'PROCESS',
+    'Process',
+    '{
+      "type": "object",
+      "properties": {
+        "category_id": { "type": "integer" },
+        "icon":        { "type": "string"  }
+      }
+    }'::jsonb,
+    '{
+      "type": "object",
+      "properties": {
+        "content": { "type": "string" }
+      }
+    }'::jsonb,
+    'processes'
+),
+
+-- -------------------------------------------------------------------------
+-- STEP
+-- A single step inside a PROCESS.
+-- -------------------------------------------------------------------------
+(
+    'STEP',
+    'Step',
+    '{
+      "type": "object",
+      "properties": {
+        "sort_order":  { "type": "integer" },
+        "is_optional": { "type": "boolean" }
+      }
+    }'::jsonb,
+    '{
+      "type": "object",
+      "properties": {
+        "content": { "type": "string" }
+      }
+    }'::jsonb,
+    'steps'
+),
+
+-- -------------------------------------------------------------------------
+-- CATEGORY
+-- Content categories shared across NEWS, PROCESS, etc.
+-- -------------------------------------------------------------------------
+(
+    'CATEGORY',
+    'Category',
+    '{
+      "type": "object",
+      "properties": {
+        "icon":       { "type": "string" },
+        "color":      { "type": "string" },
+        "sort_order": { "type": "integer" }
+      }
+    }'::jsonb,
+    '{}'::jsonb,
+    'categories'
+),
+
+-- -------------------------------------------------------------------------
+-- FAQ
+-- Frequently asked questions.
+-- -------------------------------------------------------------------------
+(
+    'FAQ',
+    'FAQ',
+    '{
+      "type": "object",
+      "properties": {
+        "category_id": { "type": "integer" },
+        "sort_order":  { "type": "integer" }
+      }
+    }'::jsonb,
+    '{
+      "type": "object",
+      "properties": {
+        "answer": { "type": "string" }
+      }
+    }'::jsonb,
+    'faqs'
+)
+
+ON CONFLICT (code) DO UPDATE SET
+    name               = EXCLUDED.name,
+    revision_schema    = EXCLUDED.revision_schema,
+    translation_schema = EXCLUDED.translation_schema,
+    weblate_namespace  = EXCLUDED.weblate_namespace,
+    updated_at         = NOW();
+
+-- ---------------------------------------------------------------------------
+-- Verification: list the seeded types so the DBA / CI log shows what changed.
+-- ---------------------------------------------------------------------------
+SELECT code, name, weblate_namespace, updated_at
+FROM   content_type
+ORDER  BY code;
