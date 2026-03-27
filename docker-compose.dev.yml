@@ -71,6 +71,8 @@ services:
       context: ./apps/pa_frontoffice
       dockerfile: Dockerfile.dev
     environment:
+      CHOKIDAR_USEPOLLING: "1"
+      CHOKIDAR_INTERVAL: "1000"
       VITE_API_BASE_URL: http://api.${BASE_DOMAIN}
       VITE_KEYCLOAK_URL: http://auth.${BASE_DOMAIN}
       VITE_KEYCLOAK_REALM: pa_frontoffice
@@ -86,6 +88,8 @@ services:
       context: ./apps/ngo_frontoffice
       dockerfile: Dockerfile.dev
     environment:
+      CHOKIDAR_USEPOLLING: "1"
+      CHOKIDAR_INTERVAL: "1000"
       VITE_API_BASE_URL: http://api.${BASE_DOMAIN}
       VITE_KEYCLOAK_URL: http://auth.${BASE_DOMAIN}
       VITE_KEYCLOAK_REALM: ngo_frontoffice
