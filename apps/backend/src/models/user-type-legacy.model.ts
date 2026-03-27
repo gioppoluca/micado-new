@@ -1,14 +1,13 @@
-import { model, property } from '@loopback/repository';
+import { Model, model, property } from '@loopback/repository';
 
 @model({
     description: 'Legacy-compatible User Type DTO mapped to the generic content core',
 })
-export class UserTypeLegacy {
+export class UserTypeLegacy extends Model {
     @property({
         type: 'number',
-        required: true,
     })
-    id: number;
+    id?: number;
 
     @property({
         type: 'string',

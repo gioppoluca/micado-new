@@ -150,6 +150,12 @@ export class KeycloakJwtStrategy implements AuthenticationStrategy {
           [securityId]: payload.sub as string,
           id: payload.sub,
           name: (payload.preferred_username as string) ?? 'unknown',
+          // Extra fields consumed by buildActorStamp() for audit columns.
+          // LB4 UserProfile accepts arbitrary extra properties.
+          displayName: (payload['name'] as string | undefined)
+            ?? (payload.preferred_username as string)
+            ?? 'unknown',
+          realm,   // the realm variable from the for-loop above
           roles: rolesArray,
         };
       } catch (e: unknown) {

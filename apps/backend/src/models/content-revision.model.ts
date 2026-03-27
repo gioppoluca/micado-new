@@ -7,6 +7,22 @@ import {
 } from '@loopback/repository';
 import { ContentItem } from './content-item.model';
 import { ContentRevisionTranslation } from './content-revision-translation.model';
+import type { ActorStamp } from '../auth/actor-stamp';
+
+/** Reusable jsonb property descriptor for actor stamp columns. */
+const actorStampProperty = {
+    type: 'object' as const,
+    jsonSchema: {
+        type: 'object' as const,
+        properties: {
+            sub: { type: 'string' as const },
+            username: { type: 'string' as const },
+            name: { type: 'string' as const },
+            realm: { type: 'string' as const },
+        },
+        additionalProperties: false,
+    },
+};
 
 @model({
     settings: {
@@ -18,10 +34,7 @@ export class ContentRevision extends Entity {
         type: 'string',
         id: true,
         generated: false,
-        postgresql: {
-            columnName: 'id',
-            dataType: 'uuid',
-        },
+        postgresql: { columnName: 'id', dataType: 'uuid' },
     })
     id?: string;
 
@@ -30,117 +43,86 @@ export class ContentRevision extends Entity {
         keyFrom: 'itemId',
         keyTo: 'id',
     }, {
-        postgresql: {
-            columnName: 'item_id',
-            dataType: 'uuid',
-        },
+        postgresql: { columnName: 'item_id', dataType: 'uuid' },
     })
     itemId: string;
 
     @property({
         type: 'number',
         required: true,
-        postgresql: {
-            columnName: 'revision_no',
-            dataType: 'integer',
-        },
+        postgresql: { columnName: 'revision_no', dataType: 'integer' },
     })
     revisionNo: number;
 
     @property({
         type: 'string',
         required: true,
-        jsonSchema: {
-            enum: ['DRAFT', 'APPROVED', 'PUBLISHED', 'ARCHIVED'],
-        },
-        postgresql: {
-            columnName: 'status',
-            dataType: 'varchar',
-        },
+        jsonSchema: { enum: ['DRAFT', 'APPROVED', 'PUBLISHED', 'ARCHIVED'] },
+        postgresql: { columnName: 'status', dataType: 'varchar' },
     })
     status: 'DRAFT' | 'APPROVED' | 'PUBLISHED' | 'ARCHIVED';
 
     @property({
         type: 'string',
         required: true,
-        postgresql: {
-            columnName: 'source_lang',
-            dataType: 'varchar',
-            dataLength: 16,
-        },
+        postgresql: { columnName: 'source_lang', dataType: 'varchar', dataLength: 16 },
     })
     sourceLang: string;
 
     @property({
         type: 'object',
         required: true,
-        jsonSchema: {
-            type: 'object',
-            additionalProperties: true,
-        },
-        postgresql: {
-            columnName: 'data_extra',
-            dataType: 'jsonb',
-        },
+        jsonSchema: { type: 'object', additionalProperties: true },
+        postgresql: { columnName: 'data_extra', dataType: 'jsonb' },
     })
     dataExtra: Record<string, unknown>;
 
     @property({
         type: 'date',
-        postgresql: {
-            columnName: 'created_at',
-            dataType: 'timestamptz',
-        },
+        postgresql: { columnName: 'created_at', dataType: 'timestamptz' },
     })
     createdAt?: string;
 
+    /**
+     * Actor who created this revision.
+     * Shape: { sub, username, name, realm } — stored as JSONB.
+     * Build with buildActorStamp() from src/auth/actor-stamp.ts.
+     */
     @property({
-        type: 'string',
-        postgresql: {
-            columnName: 'created_by',
-            dataType: 'varchar',
-            dataLength: 255,
-        },
+        ...actorStampProperty,
+        postgresql: { columnName: 'created_by', dataType: 'jsonb' },
     })
-    createdBy?: string;
+    createdBy?: ActorStamp;
 
     @property({
         type: 'date',
-        postgresql: {
-            columnName: 'approved_at',
-            dataType: 'timestamptz',
-        },
+        postgresql: { columnName: 'approved_at', dataType: 'timestamptz' },
     })
     approvedAt?: string;
 
+    /**
+     * Actor who approved this revision (set when status → APPROVED).
+     */
     @property({
-        type: 'string',
-        postgresql: {
-            columnName: 'approved_by',
-            dataType: 'varchar',
-            dataLength: 255,
-        },
+        ...actorStampProperty,
+        postgresql: { columnName: 'approved_by', dataType: 'jsonb' },
     })
-    approvedBy?: string;
+    approvedBy?: ActorStamp;
 
     @property({
         type: 'date',
-        postgresql: {
-            columnName: 'published_at',
-            dataType: 'timestamptz',
-        },
+        postgresql: { columnName: 'published_at', dataType: 'timestamptz' },
     })
     publishedAt?: string;
 
+    /**
+     * Actor who published this revision (set when status → PUBLISHED).
+     */
     @property({
-        type: 'string',
-        postgresql: {
-            columnName: 'published_by',
-            dataType: 'varchar',
-            dataLength: 255,
-        },
+        ...actorStampProperty,
+        postgresql: { columnName: 'published_by', dataType: 'jsonb' },
     })
-    publishedBy?: string;
+    publishedBy?: ActorStamp;
 
     @hasMany(() => ContentRevisionTranslation, { keyTo: 'revisionId' })
     translations?: ContentRevisionTranslation[];

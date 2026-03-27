@@ -25,6 +25,8 @@
     "test": "lb-mocha --allow-console-logs \"dist/__tests__\"",
     "posttest": "npm run lint",
     "test:dev": "lb-mocha --allow-console-logs dist/__tests__/**/*.js && npm run posttest",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
     "docker:build": "docker build -t backend .",
     "docker:run": "docker run -p 3000:3000 -d backend",
     "premigrate": "npm run build",

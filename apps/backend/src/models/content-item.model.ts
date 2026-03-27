@@ -8,6 +8,7 @@ import {
 import { ContentType } from './content-type.model';
 import { ContentRevision } from './content-revision.model';
 import { ContentItemRelation } from './content-item-relation.model';
+import type { ActorStamp } from '../auth/actor-stamp';
 
 @model({
     settings: {
@@ -81,15 +82,30 @@ export class ContentItem extends Entity {
     })
     createdAt?: string;
 
+    /**
+     * Structured actor stamp stored as JSONB.
+     * Shape: { sub, username, name, realm }
+     * Use buildActorStamp() from src/auth/actor-stamp.ts to create values.
+     * Use parseActorStamp() to read them back typed.
+     */
     @property({
-        type: 'string',
+        type: 'object',
+        jsonSchema: {
+            type: 'object',
+            properties: {
+                sub: { type: 'string' },
+                username: { type: 'string' },
+                name: { type: 'string' },
+                realm: { type: 'string' },
+            },
+            additionalProperties: false,
+        },
         postgresql: {
             columnName: 'created_by',
-            dataType: 'varchar',
-            dataLength: 255,
+            dataType: 'jsonb',
         },
     })
-    createdBy?: string;
+    createdBy?: ActorStamp;
 
     @property({
         type: 'date',
@@ -101,14 +117,23 @@ export class ContentItem extends Entity {
     updatedAt?: string;
 
     @property({
-        type: 'string',
+        type: 'object',
+        jsonSchema: {
+            type: 'object',
+            properties: {
+                sub: { type: 'string' },
+                username: { type: 'string' },
+                name: { type: 'string' },
+                realm: { type: 'string' },
+            },
+            additionalProperties: false,
+        },
         postgresql: {
             columnName: 'updated_by',
-            dataType: 'varchar',
-            dataLength: 255,
+            dataType: 'jsonb',
         },
     })
-    updatedBy?: string;
+    updatedBy?: ActorStamp;
 
     @hasMany(() => ContentRevision, { keyTo: 'itemId' })
     revisions?: ContentRevision[];

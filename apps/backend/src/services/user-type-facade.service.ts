@@ -1,76 +1,108 @@
-import { injectable, BindingScope } from '@loopback/core';
+/**
+ * src/services/user-type-facade.service.ts
+ *
+ * Facade bridging the generic Item/Revision/Translation core to the two
+ * consumer-specific DTOs:
+ *
+ *   UserTypeLegacy  — flat, lightweight; used by list (GET /user-types) and
+ *                     create (POST /user-types).  Contains only the sourceLang
+ *                     translation so the list never pays a per-language query cost.
+ *
+ *   UserTypeFull    — rich; used by single-item GET (/user-types/:id) and the
+ *                     PUT save (/user-types/:id).  Contains ALL per-language
+ *                     translation rows embedded in `translations`.
+ *
+ * ── API surface ──────────────────────────────────────────────────────────────
+ *
+ *   GET  /user-types          → find()        → UserTypeLegacy[]  (list, lean)
+ *   POST /user-types          → create()      → UserTypeLegacy    (returns flat)
+ *   GET  /user-types/:id      → findById()    → UserTypeFull      (form open, rich)
+ *   PUT  /user-types/:id      → replaceById() → 204               (form save, full)
+ *   PATCH /user-types/:id     → updateById()  → 204               (status toggle / icon)
+ *   DELETE /user-types/:id    → deleteById()  → 204
+ *   GET  /user-types-migrant  → getTranslatedForFrontend()        (migrant, published only)
+ *   GET  /user-types/to-production?id → publish()                 (workflow action)
+ *
+ * ── Actor stamp ──────────────────────────────────────────────────────────────
+ *
+ *   Every write method calls buildActorStamp(this.currentUser) and writes the
+ *   result to the relevant JSONB audit column(s).  The stamp is an object:
+ *     { sub, username, name, realm }
+ *   stored natively as JSONB — no JSON.stringify/parse needed anywhere.
+ *
+ *   The facade is scoped TRANSIENT (not SINGLETON) so that LoopBack injects a
+ *   fresh instance per HTTP request, giving each instance its own currentUser.
+ *   SINGLETON would share one instance across all requests, breaking isolation.
+ *
+ * ── "Send to translation" toggle (DRAFT → APPROVED) ─────────────────────────
+ *
+ *   When replaceById() or updateById() receives status='APPROVED':
+ *     - content_revision.status      → APPROVED
+ *     - content_revision.approved_at → now()
+ *     - content_revision.approved_by → actor stamp
+ *     - Non-source translation rows  → tStatus='STALE'
+ *
+ * ── Role-based consumer map ──────────────────────────────────────────────────
+ *
+ *   PA admin  → GET /user-types       UserTypeLegacy[] (list)
+ *             → GET /user-types/:id   UserTypeFull     (all tabs for editor)
+ *   Migrant   → GET /user-types-migrant  flat, PUBLISHED, current lang only
+ */
+
+import { inject, injectable, BindingScope } from '@loopback/core';
 import { Filter, repository } from '@loopback/repository';
 import { HttpErrors } from '@loopback/rest';
+import { SecurityBindings, UserProfile } from '@loopback/security';
 import {
     ContentItem,
     ContentRevision,
     ContentRevisionTranslation,
     UserTypeLegacy,
 } from '../models';
+import { UserTypeFull } from '../models/user-type-full.model';
 import {
     ContentItemRepository,
     ContentRevisionRepository,
     ContentRevisionTranslationRepository,
 } from '../repositories';
+import { buildActorStamp, ActorStamp } from '../auth/actor-stamp';
 
 const USER_TYPE_CODE = 'USER_TYPE';
 
-@injectable({ scope: BindingScope.SINGLETON })
+/**
+ * Fallback stamp used when publishing without a live HTTP request context
+ * (e.g. background jobs, CLI scripts). Distinguishable from real users by sub='system'.
+ */
+const SYSTEM_STAMP: ActorStamp = {
+    sub: 'system',
+    username: 'system',
+    name: 'System',
+    realm: 'internal',
+};
+
+// TRANSIENT scope — a new instance per HTTP request so each instance gets its
+// own currentUser from SecurityBindings. SINGLETON would share one instance
+// across all requests and always hold the first user who triggered instantiation.
+@injectable({ scope: BindingScope.TRANSIENT })
 export class UserTypeFacadeService {
     constructor(
         @repository(ContentItemRepository)
         protected contentItemRepository: ContentItemRepository,
+
         @repository(ContentRevisionRepository)
         protected contentRevisionRepository: ContentRevisionRepository,
+
         @repository(ContentRevisionTranslationRepository)
         protected contentRevisionTranslationRepository: ContentRevisionTranslationRepository,
+
+        // The authenticated user from the current HTTP request.
+        // optional: true — the facade still works in background contexts
+        // (boot observers, migration scripts) where no JWT is present.
+        @inject(SecurityBindings.USER, { optional: true })
+        protected currentUser: UserProfile | undefined,
     ) { }
 
-    async create(input: Omit<UserTypeLegacy, 'id' | 'status'>): Promise<UserTypeLegacy> {
-        const externalKey = String(await this.nextExternalKey());
-        const sourceLang = input.sourceLang ?? 'en';
-
-        const item = await this.contentItemRepository.create({
-            typeCode: USER_TYPE_CODE,
-            externalKey,
-        });
-
-        const revision = await this.contentRevisionRepository.create({
-            itemId: item.id!,
-            revisionNo: 1,
-            status: 'DRAFT',
-            sourceLang,
-            dataExtra: input.dataExtra ?? {},
-        });
-
-        await this.contentRevisionTranslationRepository.create({
-            revisionId: revision.id!,
-            lang: sourceLang,
-            title: input.user_type ?? '',
-            description: input.description ?? '',
-            i18nExtra: {},
-            tStatus: 'DRAFT',
-        });
-
-        return this.toLegacyDto(item, revision, {
-            lang: sourceLang,
-            title: input.user_type ?? '',
-            description: input.description ?? '',
-        });
-    }
-
-    async count(where?: Record<string, unknown>): Promise<{ count: number }> {
-        const mappedWhere: Record<string, unknown> = {
-            typeCode: USER_TYPE_CODE,
-        };
-
-        if (where?.id != null) {
-            mappedWhere.externalKey = String(where.id);
-        }
-
-        const result = await this.contentItemRepository.count(mappedWhere);
-        return { count: result.count };
-    }
+    // ── List (lean) ───────────────────────────────────────────────────────────
 
     async find(_filter?: Filter<UserTypeLegacy>): Promise<UserTypeLegacy[]> {
         const items = await this.contentItemRepository.find({
@@ -81,86 +113,226 @@ export class UserTypeFacadeService {
         const result: UserTypeLegacy[] = [];
 
         for (const item of items) {
-            const draftOrPublished = await this.findPreferredRevision(item.id!);
-            if (!draftOrPublished) continue;
+            const revision = await this.findPreferredRevision(item.id!);
+            if (!revision) continue;
 
             const sourceTranslation =
                 await this.contentRevisionTranslationRepository.findOne({
-                    where: {
-                        revisionId: draftOrPublished.id,
-                        lang: draftOrPublished.sourceLang,
-                    },
+                    where: { revisionId: revision.id, lang: revision.sourceLang },
                 });
 
-            result.push(
-                this.toLegacyDto(item, draftOrPublished, sourceTranslation ?? undefined),
-            );
+            result.push(this.toLegacyDto(item, revision, sourceTranslation ?? undefined));
         }
 
         return result;
     }
 
-    async findById(id: number): Promise<UserTypeLegacy> {
+    async count(where?: Record<string, unknown>): Promise<{ count: number }> {
+        const mappedWhere: Record<string, unknown> = { typeCode: USER_TYPE_CODE };
+        if (where?.id != null) mappedWhere.externalKey = String(where.id);
+        const result = await this.contentItemRepository.count(mappedWhere);
+        return { count: result.count };
+    }
+
+    // ── Single item (rich — form open) ────────────────────────────────────────
+
+    /**
+     * Returns UserTypeFull with ALL per-language translations embedded.
+     * One query set — no second round-trip needed by the PA form.
+     */
+    async findById(id: number): Promise<UserTypeFull> {
         const item = await this.findItemByLegacyIdOrFail(id);
         const revision = await this.findPreferredRevision(item.id!);
 
         if (!revision) {
-            throw new HttpErrors.NotFound(
-                `No revision found for USER_TYPE ${id}`,
-            );
+            throw new HttpErrors.NotFound(`No revision found for USER_TYPE ${id}`);
         }
 
-        const translation = await this.contentRevisionTranslationRepository.findOne({
-            where: {
-                revisionId: revision.id,
-                lang: revision.sourceLang,
-            },
+        const translationRows = await this.contentRevisionTranslationRepository.find({
+            where: { revisionId: revision.id! },
         });
 
-        return this.toLegacyDto(item, revision, translation ?? undefined);
+        return this.toFullDto(item, revision, translationRows);
     }
 
-    async updateById(id: number, patch: Partial<UserTypeLegacy>): Promise<void> {
+    // ── Create ────────────────────────────────────────────────────────────────
+
+    /**
+     * Creates item + revision + translations in one transaction-like sequence.
+     *
+     * Accepts an optional `translations` map so the form can send all language
+     * content in the initial POST — one round-trip for new records.
+     *
+     * Actor stamp written to:
+     *   content_item.created_by      ← stamp
+     *   content_item.updated_by      ← stamp (same at creation time)
+     *   content_revision.created_by  ← stamp
+     */
+    async create(input: Omit<UserTypeLegacy, 'id' | 'status'> & {
+        translations?: Record<string, { title: string; description?: string }>;
+    }): Promise<UserTypeLegacy> {
+        const stamp = buildActorStamp(this.currentUser);
+        const externalKey = String(await this.nextExternalKey());
+        const sourceLang = input.sourceLang ?? 'en';
+
+        const item = await this.contentItemRepository.create({
+            typeCode: USER_TYPE_CODE,
+            externalKey,
+            // Conditional spread — exactOptionalPropertyTypes forbids explicit undefined.
+            ...(stamp && { createdBy: stamp, updatedBy: stamp }),
+        });
+
+        const revision = await this.contentRevisionRepository.create({
+            itemId: item.id!,
+            revisionNo: 1,
+            status: 'DRAFT',
+            sourceLang,
+            dataExtra: input.dataExtra ?? {},
+            ...(stamp && { createdBy: stamp }),
+        });
+
+        const translationMap = input.translations ?? {};
+        const hasMap = Object.keys(translationMap).length > 0;
+
+        if (hasMap) {
+            for (const [lang, content] of Object.entries(translationMap)) {
+                await this.contentRevisionTranslationRepository.create({
+                    revisionId: revision.id!,
+                    lang,
+                    title: content.title,
+                    description: content.description ?? '',
+                    i18nExtra: {},
+                    tStatus: 'DRAFT',
+                });
+            }
+        } else {
+            // Fallback: single sourceLang row from flat fields
+            await this.contentRevisionTranslationRepository.create({
+                revisionId: revision.id!,
+                lang: sourceLang,
+                title: input.user_type ?? '',
+                description: input.description ?? '',
+                i18nExtra: {},
+                tStatus: 'DRAFT',
+            });
+        }
+
+        const sourceTr = hasMap
+            ? translationMap[sourceLang]
+            : { title: input.user_type ?? '', description: input.description ?? '' };
+
+        return this.toLegacyDto(item, revision, {
+            lang: sourceLang,
+            title: sourceTr?.title ?? '',
+            description: sourceTr?.description ?? '',
+        });
+    }
+
+    // ── Full replace (form save) ──────────────────────────────────────────────
+
+    /**
+     * Replaces the full user type — metadata + all translations — in one call.
+     * Used by PUT /user-types/:id (the PA form Save button).
+     *
+     * Languages absent from body.translations are NOT deleted — only upserted.
+     * A translator working on language X should not lose work if the PA editor
+     * saves without that tab open.
+     *
+     * Actor stamp written to:
+     *   content_item.updated_by      ← stamp (every save)
+     *   content_revision.approved_by ← stamp (only on DRAFT → APPROVED transition)
+     *   content_revision.approved_at ← now() (same condition)
+     */
+    async replaceById(id: number, body: UserTypeFull): Promise<void> {
+        const stamp = buildActorStamp(this.currentUser);
         const item = await this.findItemByLegacyIdOrFail(id);
         const draft = await this.findOrCreateDraft(item);
 
-        const dataExtra = {
-            ...(draft.dataExtra ?? {}),
-            ...(patch.dataExtra ?? {}),
-        };
+        const sourceLang = body.sourceLang ?? draft.sourceLang;
 
-        await this.contentRevisionRepository.updateById(draft.id!, {
-            dataExtra,
+        // Always update item audit trail on any save
+        await this.contentItemRepository.updateById(item.id!, {
+            ...(stamp && { updatedBy: stamp }),
         });
 
-        if (
-            patch.user_type !== undefined ||
-            patch.description !== undefined
-        ) {
-            const lang = patch.sourceLang ?? draft.sourceLang;
+        await this.contentRevisionRepository.updateById(draft.id!, {
+            sourceLang,
+            dataExtra: body.dataExtra ?? {},
+        });
 
-            const existingTranslation =
-                await this.contentRevisionTranslationRepository.findOne({
-                    where: {
-                        revisionId: draft.id!,
-                        lang,
-                    },
+        // Upsert all translations from the body
+        for (const [lang, entry] of Object.entries(body.translations ?? {})) {
+            const existing = await this.contentRevisionTranslationRepository.findOne({
+                where: { revisionId: draft.id!, lang },
+            });
+
+            if (existing) {
+                await this.contentRevisionTranslationRepository.updateById(existing.id!, {
+                    title: entry.title,
+                    description: entry.description ?? '',
+                    tStatus: 'DRAFT',
                 });
+            } else {
+                await this.contentRevisionTranslationRepository.create({
+                    revisionId: draft.id!,
+                    lang,
+                    title: entry.title,
+                    description: entry.description ?? '',
+                    i18nExtra: {},
+                    tStatus: 'DRAFT',
+                });
+            }
+        }
 
-            if (existingTranslation) {
-                await this.contentRevisionTranslationRepository.updateById(
-                    existingTranslation.id!,
-                    {
-                        title:
-                            patch.user_type !== undefined
-                                ? patch.user_type
-                                : existingTranslation.title,
-                        description:
-                            patch.description !== undefined
-                                ? patch.description
-                                : existingTranslation.description,
-                    },
-                );
+        // Handle DRAFT → APPROVED transition ("Send to translation" toggle)
+        if (body.status === 'APPROVED' && draft.status !== 'APPROVED') {
+            await this.contentRevisionRepository.updateById(draft.id!, {
+                status: 'APPROVED',
+                approvedAt: new Date().toISOString(),
+                ...(stamp && { approvedBy: stamp }),
+            });
+            await this.markNonSourceTranslationsStale(draft.id!, sourceLang);
+        }
+    }
+
+    // ── Partial update (status toggle, icon-only) ─────────────────────────────
+
+    /**
+     * Partial update — handles the list-row status toggle and single-field
+     * changes (e.g. icon update without re-sending all translations).
+     *
+     * Actor stamp written to:
+     *   content_item.updated_by      ← stamp (always)
+     *   content_revision.approved_by ← stamp (only on DRAFT → APPROVED)
+     *   content_revision.approved_at ← now() (same condition)
+     */
+    async updateById(id: number, patch: Partial<UserTypeLegacy>): Promise<void> {
+        const stamp = buildActorStamp(this.currentUser);
+        const item = await this.findItemByLegacyIdOrFail(id);
+        const draft = await this.findOrCreateDraft(item);
+
+        // Always update item audit trail
+        await this.contentItemRepository.updateById(item.id!, {
+            ...(stamp && { updatedBy: stamp }),
+        });
+
+        if (patch.dataExtra !== undefined) {
+            await this.contentRevisionRepository.updateById(draft.id!, {
+                dataExtra: { ...(draft.dataExtra ?? {}), ...patch.dataExtra },
+            });
+        }
+
+        if (patch.user_type !== undefined || patch.description !== undefined) {
+            const lang = patch.sourceLang ?? draft.sourceLang;
+            const existing = await this.contentRevisionTranslationRepository.findOne({
+                where: { revisionId: draft.id!, lang },
+            });
+
+            if (existing) {
+                await this.contentRevisionTranslationRepository.updateById(existing.id!, {
+                    title: patch.user_type !== undefined ? patch.user_type : existing.title,
+                    description: patch.description !== undefined ? patch.description : existing.description,
+                });
             } else {
                 await this.contentRevisionTranslationRepository.create({
                     revisionId: draft.id!,
@@ -172,46 +344,23 @@ export class UserTypeFacadeService {
                 });
             }
         }
-    }
 
-    async replaceById(id: number, body: UserTypeLegacy): Promise<void> {
-        const item = await this.findItemByLegacyIdOrFail(id);
-        const draft = await this.findOrCreateDraft(item);
+        // Handle status transition
+        if (patch.status !== undefined && patch.status !== draft.status) {
+            const revisionUpdate: Parameters<typeof this.contentRevisionRepository.updateById>[1] = {
+                status: patch.status,
+            };
 
-        const sourceLang = body.sourceLang ?? draft.sourceLang;
+            if (patch.status === 'APPROVED') {
+                revisionUpdate.approvedAt = new Date().toISOString();
+                if (stamp) revisionUpdate.approvedBy = stamp;
+            }
 
-        await this.contentRevisionRepository.updateById(draft.id!, {
-            sourceLang,
-            dataExtra: body.dataExtra ?? {},
-        });
+            await this.contentRevisionRepository.updateById(draft.id!, revisionUpdate);
 
-        const existingTranslation =
-            await this.contentRevisionTranslationRepository.findOne({
-                where: {
-                    revisionId: draft.id!,
-                    lang: sourceLang,
-                },
-            });
-
-        if (existingTranslation) {
-            await this.contentRevisionTranslationRepository.updateById(
-                existingTranslation.id!,
-                {
-                    title: body.user_type ?? '',
-                    description: body.description ?? '',
-                    i18nExtra: {},
-                    tStatus: 'DRAFT',
-                },
-            );
-        } else {
-            await this.contentRevisionTranslationRepository.create({
-                revisionId: draft.id!,
-                lang: sourceLang,
-                title: body.user_type ?? '',
-                description: body.description ?? '',
-                i18nExtra: {},
-                tStatus: 'DRAFT',
-            });
+            if (patch.status === 'APPROVED') {
+                await this.markNonSourceTranslationsStale(draft.id!, draft.sourceLang);
+            }
         }
     }
 
@@ -220,15 +369,14 @@ export class UserTypeFacadeService {
         await this.contentItemRepository.deleteById(item.id!);
     }
 
+    // ── Migrant frontend ──────────────────────────────────────────────────────
+
     async getTranslatedForFrontend(
         defaultLang = 'en',
         currentLang = 'en',
     ): Promise<Array<Record<string, unknown>>> {
         const items = await this.contentItemRepository.find({
-            where: {
-                typeCode: USER_TYPE_CODE,
-                publishedRevisionId: { neq: undefined },
-            },
+            where: { typeCode: USER_TYPE_CODE, publishedRevisionId: { neq: undefined } },
         });
 
         const result: Array<Record<string, unknown>> = [];
@@ -236,72 +384,67 @@ export class UserTypeFacadeService {
         for (const item of items) {
             if (!item.publishedRevisionId) continue;
 
-            const currentTranslation =
-                await this.contentRevisionTranslationRepository.findOne({
-                    where: {
-                        revisionId: item.publishedRevisionId,
-                        lang: currentLang,
-                        tStatus: 'PUBLISHED',
-                    },
-                });
-
-            const fallbackTranslation =
-                currentTranslation ??
+            const tr =
                 (await this.contentRevisionTranslationRepository.findOne({
-                    where: {
-                        revisionId: item.publishedRevisionId,
-                        lang: defaultLang,
-                        tStatus: 'PUBLISHED',
-                    },
+                    where: { revisionId: item.publishedRevisionId, lang: currentLang, tStatus: 'PUBLISHED' },
+                })) ??
+                (await this.contentRevisionTranslationRepository.findOne({
+                    where: { revisionId: item.publishedRevisionId, lang: defaultLang, tStatus: 'PUBLISHED' },
                 }));
 
-            if (!fallbackTranslation) continue;
+            if (!tr) continue;
 
             result.push({
                 id: Number(item.externalKey),
-                user_type: fallbackTranslation.title,
-                description: fallbackTranslation.description,
-                lang: fallbackTranslation.lang,
+                user_type: tr.title,
+                description: tr.description,
+                lang: tr.lang,
             });
         }
 
         return result;
     }
 
+    // ── Publish ───────────────────────────────────────────────────────────────
+
+    /**
+     * Promotes the APPROVED revision to PUBLISHED and sets it as live.
+     *
+     * Actor stamp written to:
+     *   content_revision.published_by ← stamp (or SYSTEM_STAMP for background jobs)
+     *   content_revision.published_at ← now()
+     *   content_item.updated_by       ← stamp
+     */
     async publish(id: number): Promise<void> {
+        const stamp = buildActorStamp(this.currentUser) ?? SYSTEM_STAMP;
         const item = await this.findItemByLegacyIdOrFail(id);
 
-        const approvedRevision = await this.contentRevisionRepository.findOne({
-            where: {
-                itemId: item.id!,
-                status: 'APPROVED',
-            },
+        const approved = await this.contentRevisionRepository.findOne({
+            where: { itemId: item.id!, status: 'APPROVED' },
             order: ['revisionNo DESC'],
         });
 
-        if (!approvedRevision) {
+        if (!approved) {
             throw new HttpErrors.BadRequest(
                 `No APPROVED revision available for USER_TYPE ${id}`,
             );
         }
 
-        await this.contentRevisionRepository.updateById(approvedRevision.id!, {
+        await this.contentRevisionRepository.updateById(approved.id!, {
             status: 'PUBLISHED',
             publishedAt: new Date().toISOString(),
-            publishedBy: 'system',
+            publishedBy: stamp,
         });
 
         await this.contentItemRepository.updateById(item.id!, {
-            publishedRevisionId: approvedRevision.id!,
+            publishedRevisionId: approved.id!,
+            updatedBy: stamp,
         });
 
-        const translations =
-            await this.contentRevisionTranslationRepository.find({
-                where: {
-                    revisionId: approvedRevision.id!,
-                    tStatus: 'APPROVED',
-                },
-            });
+        // Mark all APPROVED translation rows as PUBLISHED
+        const translations = await this.contentRevisionTranslationRepository.find({
+            where: { revisionId: approved.id!, tStatus: 'APPROVED' },
+        });
 
         for (const tr of translations) {
             await this.contentRevisionTranslationRepository.updateById(tr.id!, {
@@ -310,107 +453,114 @@ export class UserTypeFacadeService {
         }
     }
 
+    // ── Internal helpers ──────────────────────────────────────────────────────
+
+    /**
+     * When a revision moves to APPROVED, all non-source translation rows that
+     * are still DRAFT are set to STALE.  This signals to translators (and
+     * the Weblate workflow) that the source text has been frozen and their
+     * work needs review.  STALE rows that were already APPROVED/PUBLISHED are
+     * left untouched — they were already validated.
+     */
+    protected async markNonSourceTranslationsStale(
+        revisionId: string,
+        sourceLang: string,
+    ): Promise<void> {
+        const rows = await this.contentRevisionTranslationRepository.find({
+            where: { revisionId },
+        });
+        for (const row of rows) {
+            if (row.lang !== sourceLang && row.tStatus === 'DRAFT') {
+                await this.contentRevisionTranslationRepository.updateById(row.id!, {
+                    tStatus: 'STALE',
+                });
+            }
+        }
+    }
+
     protected async nextExternalKey(): Promise<number> {
         const items = await this.contentItemRepository.find({
             where: { typeCode: USER_TYPE_CODE },
             fields: { externalKey: true },
         });
-        const max = items.reduce((acc, item) => {
+        return items.reduce((acc, item) => {
             const n = Number(item.externalKey);
             return Number.isFinite(n) && n > acc ? n : acc;
-        }, 0);
-        return max + 1;
+        }, 0) + 1;
     }
 
     protected async findItemByLegacyIdOrFail(id: number): Promise<ContentItem> {
         const item = await this.contentItemRepository.findOne({
-            where: {
-                typeCode: USER_TYPE_CODE,
-                externalKey: String(id),
-            },
+            where: { typeCode: USER_TYPE_CODE, externalKey: String(id) },
         });
-
-        if (!item) {
-            throw new HttpErrors.NotFound(`USER_TYPE ${id} not found`);
-        }
-
+        if (!item) throw new HttpErrors.NotFound(`USER_TYPE ${id} not found`);
         return item;
     }
 
     protected async findPreferredRevision(
         itemId: string,
     ): Promise<ContentRevision | null> {
-        const draft = await this.contentRevisionRepository.findOne({
-            where: { itemId, status: 'DRAFT' },
-            order: ['revisionNo DESC'],
-        });
-
-        if (draft) return draft;
-
-        const published = await this.contentRevisionRepository.findOne({
-            where: { itemId, status: 'PUBLISHED' },
-            order: ['revisionNo DESC'],
-        });
-
-        if (published) return published;
-
-        const approved = await this.contentRevisionRepository.findOne({
-            where: { itemId, status: 'APPROVED' },
-            order: ['revisionNo DESC'],
-        });
-
-        return approved ?? null;
+        // Editor always sees the most recent work: DRAFT > PUBLISHED > APPROVED
+        for (const status of ['DRAFT', 'PUBLISHED', 'APPROVED'] as const) {
+            const rev = await this.contentRevisionRepository.findOne({
+                where: { itemId, status },
+                order: ['revisionNo DESC'],
+            });
+            if (rev) return rev;
+        }
+        return null;
     }
 
-    protected async findOrCreateDraft(
-        item: ContentItem,
-    ): Promise<ContentRevision> {
-        const existingDraft = await this.contentRevisionRepository.findOne({
-            where: {
-                itemId: item.id!,
-                status: 'DRAFT',
-            },
+    /**
+     * Returns the existing DRAFT revision, or creates a new one forked from
+     * the latest revision (copying all translation rows into the new draft).
+     * Used whenever an edit is triggered on a non-DRAFT item.
+     */
+    protected async findOrCreateDraft(item: ContentItem): Promise<ContentRevision> {
+        const existing = await this.contentRevisionRepository.findOne({
+            where: { itemId: item.id!, status: 'DRAFT' },
         });
+        if (existing) return existing;
 
-        if (existingDraft) {
-            return existingDraft;
-        }
-
-        const latestRevision = await this.contentRevisionRepository.findOne({
+        const latest = await this.contentRevisionRepository.findOne({
             where: { itemId: item.id! },
             order: ['revisionNo DESC'],
         });
 
-        const nextRevisionNo = latestRevision ? latestRevision.revisionNo + 1 : 1;
+        const stamp = buildActorStamp(this.currentUser);
 
-        const newDraft = await this.contentRevisionRepository.create({
+        const draft = await this.contentRevisionRepository.create({
             itemId: item.id!,
-            revisionNo: nextRevisionNo,
+            revisionNo: latest ? latest.revisionNo + 1 : 1,
             status: 'DRAFT',
-            sourceLang: latestRevision?.sourceLang ?? 'en',
-            dataExtra: latestRevision?.dataExtra ?? {},
+            sourceLang: latest?.sourceLang ?? 'en',
+            dataExtra: latest?.dataExtra ?? {},
+            ...(stamp && { createdBy: stamp }),
         });
 
-        if (latestRevision) {
-            const translations =
-                await this.contentRevisionTranslationRepository.find({
-                    where: { revisionId: latestRevision.id! },
-                });
-
-            for (const tr of translations) {
+        // Fork all translation rows from the latest revision into the new draft
+        if (latest) {
+            const rows = await this.contentRevisionTranslationRepository.find({
+                where: { revisionId: latest.id! },
+            });
+            for (const row of rows) {
                 await this.contentRevisionTranslationRepository.create({
-                    revisionId: newDraft.id!,
-                    lang: tr.lang,
-                    title: tr.title,
-                    description: tr.description,
-                    i18nExtra: tr.i18nExtra ?? {},
-                    tStatus: tr.lang === newDraft.sourceLang ? 'DRAFT' : 'STALE',
+                    revisionId: draft.id!,
+                    lang: row.lang,
+                    title: row.title,
+                    description: row.description,
+                    i18nExtra: row.i18nExtra ?? {},
+                    // Source lang stays DRAFT; other langs keep their current tStatus
+                    // (they may already be STALE from a previous approval cycle)
+                    tStatus: row.lang === draft.sourceLang ? 'DRAFT' : row.tStatus,
                 });
             }
         }
 
-        return newDraft;
+        return draft;
     }
+
+    // ── DTO mappers ───────────────────────────────────────────────────────────
 
     protected toLegacyDto(
         item: ContentItem,
@@ -424,6 +574,34 @@ export class UserTypeFacadeService {
             status: revision.status,
             sourceLang: revision.sourceLang,
             dataExtra: revision.dataExtra ?? {},
+        });
+    }
+
+    protected toFullDto(
+        item: ContentItem,
+        revision: ContentRevision,
+        translationRows: ContentRevisionTranslation[],
+    ): UserTypeFull {
+        const translations: Record<string, {
+            title: string;
+            description: string;
+            tStatus: 'DRAFT' | 'APPROVED' | 'PUBLISHED' | 'STALE';
+        }> = {};
+
+        for (const row of translationRows) {
+            translations[row.lang] = {
+                title: row.title,
+                description: row.description ?? '',
+                tStatus: row.tStatus,
+            };
+        }
+
+        return Object.assign(new UserTypeFull(), {
+            id: Number(item.externalKey),
+            status: revision.status,
+            sourceLang: revision.sourceLang,
+            dataExtra: revision.dataExtra ?? {},
+            translations,
         });
     }
 }
