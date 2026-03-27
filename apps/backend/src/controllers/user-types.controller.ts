@@ -19,7 +19,7 @@ import { UserTypeLegacy } from '../models';
 import { inject, service } from '@loopback/core';
 import { UserTypeFacadeService } from '../services/user-type-facade.service';
 
-@authenticate('micado')
+@authenticate('keycloak')
 export class UserTypesController {
     constructor(
         @service(UserTypeFacadeService)
@@ -44,11 +44,12 @@ export class UserTypesController {
                 'application/json': {
                     schema: getModelSchemaRef(UserTypeLegacy, {
                         title: 'NewUserTypes',
+                        exclude: ['id'],
                     }),
                 },
             },
         })
-        userTypes: Omit<UserTypeLegacy, 'status'>,
+        userTypes: Omit<UserTypeLegacy, 'id' | 'status'>,
     ): Promise<UserTypeLegacy> {
         return this.userTypeFacadeService.create(userTypes);
     }

@@ -1,4 +1,5 @@
 export * from './language.model';
+export * from './user-type-legacy.model';
 export * from './setting.model';
 export * from './translation-export-request.model';
 export * from './feature-flag.model';
