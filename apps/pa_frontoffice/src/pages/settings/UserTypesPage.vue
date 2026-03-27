@@ -192,15 +192,17 @@
                     -->
                     <q-item-section>
                         <q-item-label class="text-weight-medium">
-                            {{ ut.user_type }}
-                            <q-tooltip v-if="ut.description" anchor="top middle" self="bottom middle" :offset="[0, 4]"
-                                max-width="320px" class="description-tooltip">{{ stripMarkdown(ut.description)
-                                }}</q-tooltip>
+                            <span style="cursor: default">
+                                {{ ut.user_type }}
+                                <q-tooltip v-if="ut.description" anchor="top left" self="bottom left" :offset="[0, 4]"
+                                    max-width="320px" class="description-tooltip">{{ stripMarkdown(ut.description)
+                                    }}</q-tooltip>
+                            </span>
                         </q-item-label>
                         <q-item-label caption class="row items-center q-gutter-x-xs q-mt-xs">
                             <span class="text-grey-7">{{ t('input_labels.available_transl') }}</span>
                             <q-chip v-for="lang in displayLangs(ut)" :key="lang" dense color="grey-4" text-color="white"
-                                size="xs" class="q-ma-none lang-chip" :label="lang.toUpperCase()" />
+                                size="sm" class="q-ma-none lang-chip" :label="lang.toUpperCase()" />
                         </q-item-label>
                     </q-item-section>
 
@@ -511,24 +513,39 @@ async function onSave(): Promise<void> {
         return;
     }
 
-    // Build UserTypeFull payload — same shape for both create and save
+    // Build UserTypeFull payload — same shape for both create and save.
+    //
+    // Non-source language rows with an empty title are excluded from the payload.
+    // The backend facade only upserts keys present in body.translations, so omitting
+    // a key leaves the existing DB row untouched.
+    //
+    // Why: the user may open a non-source tab, type a description, then delete it.
+    // getAllTranslations() returns { title: '', description: '' } for that lang.
+    // Sending title='' to the backend would trigger "title cannot be empty" validation.
+    // The correct behaviour is: if a non-source lang has no meaningful content,
+    // do not include it in the save payload at all.
+    const translationEntries = Object.entries(latestTranslations)
+        .filter(([lang, entry]) => {
+            if (lang === srcLang) return true;          // source lang always included
+            const title = entry.title?.trim() ?? '';
+            const desc = entry.description?.trim() ?? '';
+            return title !== '' || desc !== '';          // non-source: skip if both empty
+        })
+        .map(([lang, entry]) => [
+            lang,
+            {
+                title: entry.title?.trim() ?? '',
+                description: entry.description ?? '',
+            },
+        ]);
+
     const full: UserTypeFull = {
         status: form.value.status,
         sourceLang: srcLang,
         ...(form.value.iconPreview
             ? { dataExtra: { icon: form.value.iconPreview } }
             : {}),
-        // Convert tabs shape to UserTypeFull.translations
-        // (title is always string here — default to '' if undefined)
-        translations: Object.fromEntries(
-            Object.entries(latestTranslations).map(([lang, entry]) => [
-                lang,
-                {
-                    title: entry.title?.trim() ?? '',
-                    description: entry.description,
-                },
-            ]),
-        ),
+        translations: Object.fromEntries(translationEntries),
     };
 
     if (isNew.value) {
@@ -556,25 +573,19 @@ async function onSave(): Promise<void> {
 
 // ── Publish / Unpublish ───────────────────────────────────────────────────
 
+/**
+ * Direct state change — calls the API immediately without a confirm dialog.
+ * Toggling ON:  APPROVED → PUBLISHED  (store.publish → GET /to-production)
+ * Toggling OFF: PUBLISHED → DRAFT     (store.unpublish → PATCH status=DRAFT)
+ *
+ * The toggle is disabled for DRAFT items (they need APPROVED first).
+ * On API error, store.error is set and the list re-renders with the original status.
+ */
 function onPublishedToggle(newValue: boolean, ut: UserType): void {
     if (newValue) {
-        $q.notify({
-            type: 'warning', timeout: 0,
-            message: t('warning.publish_user_type'),
-            actions: [
-                { label: t('lists.yes'), color: 'accent', handler: () => { void store.publish(ut.id); } },
-                { label: t('lists.no'), color: 'red', handler: () => { } },
-            ],
-        });
+        void store.publish(ut.id);
     } else {
-        $q.notify({
-            type: 'warning', timeout: 0,
-            message: t('warning.unpublish_user_type'),
-            actions: [
-                { label: t('lists.yes'), color: 'accent', handler: () => { void store.unpublish(ut.id); } },
-                { label: t('lists.no'), color: 'red', handler: () => { } },
-            ],
-        });
+        void store.unpublish(ut.id);
     }
 }
 
@@ -722,9 +733,9 @@ h5 {
 
 /* Language chips in the Available translations row */
 .lang-chip {
-    height: 20px;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
+    letter-spacing: 0.3px;
 }
 
 /* Description tooltip — plain text, comfortable reading width */
