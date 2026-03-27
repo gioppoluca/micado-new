@@ -47,7 +47,7 @@
                     <q-expansion-item :label="t('data_settings.data_management')" default-opened expand-separator
                         header-class="settings-group-header">
                         <q-item v-for="item in dataManagementItems" :key="item.labelKey"
-                            :data-cy="item.labelKey.replace('.', '_')" :disable="!checkRoles(item.roles)" clickable
+                            :data-cy="item.labelKey.replace('.', '_')" :disable="!canAccess(item.path)" clickable
                             :to="'/data_settings' + item.path" active-class="settings-link-active"
                             class="settings-sub-item">
                             <q-item-section>{{ t(item.labelKey) }}</q-item-section>
@@ -57,7 +57,7 @@
 
                     <!-- Flat items ───────────────────────────────────────────────────── -->
                     <q-item v-for="item in flatItems" :key="item.labelKey" :data-cy="item.labelKey.replace('.', '_')"
-                        :disable="item.roles ? !checkRoles(item.roles) : false" clickable
+                        :disable="!canAccess(item.path)" clickable
                         :to="'/data_settings' + item.path" active-class="settings-link-active"
                         class="settings-flat-item">
                         <q-item-section>{{ t(item.labelKey) }}</q-item-section>
@@ -69,9 +69,7 @@
 
         <!-- ── Child page ─────────────────────────────────────────────────────── -->
         <q-page-container>
-            <q-page>
-                <router-view />
-            </q-page>
+            <router-view />
         </q-page-container>
 
     </q-layout>
@@ -80,93 +78,52 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useRouter } from 'vue-router';
 import { useAuthStore } from 'src/stores/auth-store';
 
 const { t } = useI18n();
-const auth = useAuthStore();
+const auth   = useAuthStore();
+const router = useRouter();
 
 const drawerOpen = ref(true);
 
 // ── Nav item types ─────────────────────────────────────────────────────────
+// Roles are intentionally NOT stored here — they are read from route meta
+// so that routes.ts is the single source of truth.
 
 interface SettingsNavItem {
     labelKey: string;
+    /** Path segment appended to /data_settings, e.g. '/user_types' */
     path: string;
-    /** Raw Keycloak role names. Omit = visible to all authenticated users. */
-    roles?: string[];
 }
 
 // ── Expandable "Data management" group ────────────────────────────────────
-// These are reference-data editors (taxonomies used by content editors).
 
 const dataManagementItems: SettingsNavItem[] = [
-    {
-        labelKey: 'data_settings.document_types',
-        path: '/document_types',
-        roles: ['micado_superadmin', 'micado_admin'],
-    },
-    {
-        labelKey: 'data_settings.intervention_categories',
-        path: '/intervention_categories',
-        roles: ['micado_superadmin', 'micado_admin'],
-    },
-    {
-        labelKey: 'data_settings.intervention_types',
-        path: '/intervention_types',
-        roles: ['micado_superadmin', 'micado_admin'],
-    },
-    {
-        labelKey: 'data_settings.topics',
-        path: '/topics',
-        roles: ['micado_superadmin', 'micado_admin'],
-    },
-    {
-        labelKey: 'data_settings.user_types',
-        path: '/user_types',
-        roles: ['micado_superadmin', 'micado_admin'],
-    },
+    { labelKey: 'data_settings.document_types',          path: '/document_types' },
+    { labelKey: 'data_settings.intervention_categories', path: '/intervention_categories' },
+    { labelKey: 'data_settings.intervention_types',      path: '/intervention_types' },
+    { labelKey: 'data_settings.topics',                  path: '/topics' },
+    { labelKey: 'data_settings.user_types',              path: '/user_types' },
 ];
 
 // ── Flat items ────────────────────────────────────────────────────────────
-// These are the primary settings pages — each has its own route.
 
 const flatItems: SettingsNavItem[] = [
-    {
-        labelKey: 'data_settings.settings',
-        path: '/settings',
-        roles: ['micado_superadmin'],
-    },
-    {
-        labelKey: 'data_settings.surveymanagement',
-        path: '/survey',
-        roles: ['micado_superadmin'],
-    },
-    {
-        labelKey: 'data_settings.translations',
-        path: '/language',
-        roles: ['micado_superadmin', 'micado_admin'],
-    },
-    {
-        labelKey: 'data_settings.usermgmt',
-        path: '/usermgmt',
-        roles: ['micado_superadmin'],
-    },
-    {
-        labelKey: 'data_settings.profile_settings',
-        path: '/profile_settings',
-        // No roles: all authenticated users can access their own profile
-    },
-    {
-        labelKey: 'data_settings.privacy_policy',
-        path: '/privacy',
-        // No roles: all authenticated users can view privacy policy
-    },
+    { labelKey: 'data_settings.settings',         path: '/settings' },
+    { labelKey: 'data_settings.surveymanagement', path: '/survey' },
+    { labelKey: 'data_settings.translations',     path: '/language' },
+    { labelKey: 'data_settings.usermgmt',         path: '/usermgmt' },
+    { labelKey: 'data_settings.profile_settings', path: '/profile_settings' },
+    { labelKey: 'data_settings.privacy_policy',   path: '/privacy' },
 ];
 
 // ── Role check ────────────────────────────────────────────────────────────
-// Returns true if the user has at least one of the required roles.
+// Reads required roles from route meta — no duplication with routes.ts.
 
-function checkRoles(roles: string[] | undefined): boolean {
+function canAccess(path: string): boolean {
+    const resolved = router.resolve('/data_settings' + path);
+    const roles = resolved.meta?.['roles'] as string[] | undefined;
     if (!roles?.length) return true;
     return roles.some(role => auth.hasRole(role));
 }

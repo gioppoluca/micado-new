@@ -45,12 +45,12 @@ const routes: RouteRecordRaw[] = [
             component: () => import('pages/settings/ProfileSettingsPage.vue'),
           },
 
-          // ── Function configuration (superadmin) ──────────────────────────
+          // ── Function configuration (pa_admin) ────────────────────────────
           {
             path: 'settings',
             name: 'settings-function',
             component: () => import('pages/SettingsPage.vue'),
-            meta: { roles: ['micado_superadmin'] },
+            meta: { roles: ['pa_admin'] },
           },
 
           // ── Survey management (superadmin) ───────────────────────────────
@@ -66,15 +66,15 @@ const routes: RouteRecordRaw[] = [
             path: 'language',
             name: 'settings-language',
             component: () => import('pages/settings/TranslationManagementPage.vue'),
-            meta: { roles: ['micado_superadmin', 'micado_admin'] },
+            meta: { roles: ['pa_admin', 'micado_admin'] },
           },
 
-          // ── PA user management (superadmin) ─────────────────────────────
+          // ── PA user management (pa_admin) ────────────────────────────────
           {
             path: 'usermgmt',
             name: 'settings-usermgmt',
             component: () => import('pages/settings/UserManagementPage.vue'),
-            meta: { roles: ['micado_superadmin'] },
+            meta: { roles: ['pa_admin'] },
           },
 
           // ── Privacy policy (all authenticated) ──────────────────────────
@@ -89,31 +89,31 @@ const routes: RouteRecordRaw[] = [
             path: 'document_types',
             name: 'settings-document-types',
             component: () => import('pages/settings/DocumentTypesPage.vue'),
-            meta: { roles: ['micado_superadmin', 'micado_admin'] },
+            meta: { roles: ['pa_admin', 'micado_admin'] },
           },
           {
             path: 'intervention_categories',
             name: 'settings-intervention-categories',
             component: () => import('pages/settings/InterventionCategoriesPage.vue'),
-            meta: { roles: ['micado_superadmin', 'micado_admin'] },
+            meta: { roles: ['pa_admin', 'micado_admin'] },
           },
           {
             path: 'intervention_types',
             name: 'settings-intervention-types',
             component: () => import('pages/settings/InterventionTypesPage.vue'),
-            meta: { roles: ['micado_superadmin', 'micado_admin'] },
+            meta: { roles: ['pa_admin', 'micado_admin'] },
           },
           {
             path: 'topics',
             name: 'settings-topics',
             component: () => import('pages/settings/TopicsPage.vue'),
-            meta: { roles: ['micado_superadmin', 'micado_admin'] },
+            meta: { roles: ['pa_admin', 'micado_admin'] },
           },
           {
             path: 'user_types',
             name: 'settings-user-types',
             component: () => import('pages/settings/UserTypesPage.vue'),
-            meta: { roles: ['micado_superadmin', 'micado_admin'] },
+            meta: { roles: ['pa_admin', 'micado_admin'] },
           },
         ],
       },

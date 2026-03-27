@@ -3,21 +3,26 @@
  *
  * Central axios instance for the micado_pa application.
  *
- * Responsibilities:
- *  - Attach the Keycloak Bearer token to every request via a request interceptor.
- *    The token is retrieved lazily from keycloak.ts so this module has no
- *    circular-dependency issues with the boot files.
- *  - Attempt a silent token refresh (updateToken) before each request so the
- *    token is never stale by the time it reaches the backend.
- *  - Normalise error responses into a typed ApiError so callers never have to
- *    inspect raw AxiosError internals.
- *  - Log every request / response / error through the shared consola logger so
- *    all HTTP traffic is visible in one place.
+ * ── Fix: [object Object] in error banner ────────────────────────────────────
  *
- * Mocking:
- *  If VITE_API_MOCK=true the axios-mock-adapter is installed on this instance
- *  so every API module's mock handlers kick in automatically without any
- *  changes to callers.
+ * LoopBack 4 wraps HTTP errors in a nested shape:
+ *
+ *   { "error": { "statusCode": 413, "name": "PayloadTooLargeError", "message": "..." } }
+ *
+ * The previous normaliseError() only looked one level deep:
+ *   data?.error   →  evaluates to the inner *object*, not a string
+ *   data?.message →  undefined (the message is nested inside data.error)
+ *
+ * When `serverMsg` ended up being an object, `error.value = serverMsg` caused
+ * the banner template to render "[object Object]".
+ *
+ * Fix: drill into `data.error.message` first, then fall back to the flat
+ * shapes used by other services, then to the Axios message.
+ *
+ * ── Body size ────────────────────────────────────────────────────────────────
+ * The axios instance timeout is raised to 30 s to tolerate large icon uploads.
+ * The real guard against oversized payloads is the frontend's file-size check
+ * in onIconSelected (UserTypesPage.vue) + the backend's requestBodyParser limit.
  */
 
 import axios, {
@@ -31,20 +36,14 @@ import { logger } from 'src/services/Logger';
 import { getRuntimeConfigOrDefaults } from 'src/config/env';
 
 // ─── Typed error ─────────────────────────────────────────────────────────────
-// Extends Error so Promise.reject(new ApiError(...)) satisfies
-// @typescript-eslint/prefer-promise-reject-errors, which requires rejection
-// reasons to be Error instances.
 
 export class ApiError extends Error {
     /** HTTP status code, or 0 for network / setup errors */
     readonly status: number;
 
     constructor(message: string, status: number, cause?: unknown) {
-        // Passing { cause } to super() sets the inherited Error.cause property
-        // (ES2022+) without needing to redeclare it on this class.
         super(message, { cause });
-        // override is required: Error already declares 'name' on its prototype.
-        this.name = 'ApiError';
+        this.name   = 'ApiError';
         this.status = status;
     }
 }
@@ -53,35 +52,90 @@ export function isApiError(e: unknown): e is ApiError {
     return e instanceof ApiError;
 }
 
+// ─── LB4 error response shape ─────────────────────────────────────────────────
+
+/**
+ * LoopBack 4 serialises HttpErrors as:
+ *   { error: { statusCode: number; name: string; message: string; details?: unknown[] } }
+ *
+ * Some 3rd-party middleware (e.g. body-parser before LB4 catches it) produces a
+ * flat shape instead:
+ *   { message: string }
+ *
+ * We handle both.
+ */
+interface Lb4ErrorBody {
+    /** Nested LB4 error object */
+    error?: {
+        statusCode?: number;
+        name?: string;
+        message?: string;
+    } | string;          // guard: sometimes error is already a plain string
+    /** Flat message from non-LB4 middleware */
+    message?: string;
+}
+
+/**
+ * Extract a human-readable message from an HTTP error response body.
+ *
+ * Priority:
+ *  1. data.error.message  — standard LB4 HttpError (nested object)
+ *  2. data.error          — if error is already a plain string
+ *  3. data.message        — flat shape from body-parser / other middleware
+ *  4. undefined           — caller falls back to AxiosError.message
+ */
+function extractServerMessage(data: unknown): string | undefined {
+    if (!data || typeof data !== 'object') return undefined;
+
+    const body = data as Lb4ErrorBody;
+
+    // Case 1 & 2: data.error exists
+    if (body.error !== undefined) {
+        if (typeof body.error === 'string') {
+            return body.error;                   // plain string — return as-is
+        }
+        if (typeof body.error === 'object' && typeof body.error.message === 'string') {
+            return body.error.message;           // LB4 nested shape ← the fix
+        }
+    }
+
+    // Case 3: flat { message }
+    if (typeof body.message === 'string') {
+        return body.message;
+    }
+
+    return undefined;
+}
+
 function normaliseError(error: unknown): ApiError {
     if (error instanceof AxiosError) {
-        const status = error.response?.status ?? 0;
-        const serverMsg =
-            (error.response?.data as { error?: string; message?: string } | undefined)
-                ?.error ??
-            (error.response?.data as { error?: string; message?: string } | undefined)
-                ?.message;
-        const message = serverMsg ?? error.message ?? 'Unknown network error';
+        const status    = error.response?.status ?? 0;
+        const serverMsg = extractServerMessage(error.response?.data);
+        const message   = serverMsg ?? error.message ?? 'Unknown network error';
+
+        logger.debug('[api] normaliseError', {
+            status,
+            serverMsg,
+            rawData: error.response?.data,
+        });
+
         return new ApiError(message, status, error);
     }
+
     if (error instanceof Error) {
         return new ApiError(error.message, 0, error);
     }
+
     return new ApiError(String(error), 0, error);
 }
 
 // ─── Axios instance ───────────────────────────────────────────────────────────
-// NOTE: getRuntimeConfigOrDefaults() is used here (not getRuntimeConfig())
-// because this module is evaluated when it is first imported — which can happen
-// before the envvar boot has completed.  The axios instance is created with
-// whatever URL is available at evaluation time; the correct production URL will
-// be present because envvar runs before any API call is made.
-// If for any reason the base URL needs to change after boot (it shouldn't), you
-// can call apiClient.defaults.baseURL = newUrl at that point.
 
 export const apiClient: AxiosInstance = axios.create({
     baseURL: getRuntimeConfigOrDefaults().apiUrl,
-    timeout: 15_000,
+    // Raised to 30 s to accommodate large base64 icon uploads over slow links.
+    // The actual hard cap is enforced by the backend's requestBodyParser limit.
+    timeout: 30_000,
     headers: {
         'Content-Type': 'application/json',
     },
@@ -91,14 +145,10 @@ export const apiClient: AxiosInstance = axios.create({
 
 apiClient.interceptors.request.use(
     async (config: InternalAxiosRequestConfig): Promise<InternalAxiosRequestConfig> => {
-        // Only attempt token operations if Keycloak is authenticated
         if (keycloak.authenticated) {
             try {
-                // Refresh if the token expires within 30 seconds
                 await keycloak.updateToken(30);
             } catch (e) {
-                // Token refresh failed — log and continue; the backend will 401 and
-                // the response interceptor below will handle it.
                 logger.warn('[api] token refresh failed before request', {
                     url: config.url,
                     error: e,
@@ -107,19 +157,18 @@ apiClient.interceptors.request.use(
 
             const token = keycloak.token;
             if (token) {
-                config.headers = config.headers ?? {};
-                config.headers.Authorization = `Bearer ${token}`;
+                config.headers                  = config.headers ?? {};
+                config.headers.Authorization    = `Bearer ${token}`;
                 logger.debug('[api] →', {
-                    method: config.method?.toUpperCase(),
-                    url: config.url,
-                    // Never log the token value itself, only confirm it was attached
+                    method:       config.method?.toUpperCase(),
+                    url:          config.url,
                     tokenAttached: true,
                 });
             }
         } else {
             logger.debug('[api] → (unauthenticated)', {
                 method: config.method?.toUpperCase(),
-                url: config.url,
+                url:    config.url,
             });
         }
 
@@ -137,7 +186,7 @@ apiClient.interceptors.response.use(
     (response) => {
         logger.debug('[api] ←', {
             status: response.status,
-            url: response.config.url,
+            url:    response.config.url,
         });
         return response;
     },
@@ -145,9 +194,9 @@ apiClient.interceptors.response.use(
         const normalised = normaliseError(error);
 
         logger.error('[api] ← error', {
-            status: normalised.status,
+            status:  normalised.status,
             message: normalised.message,
-            url: error instanceof AxiosError ? error.config?.url : undefined,
+            url:     error instanceof AxiosError ? error.config?.url : undefined,
         });
 
         return Promise.reject(normalised);
@@ -155,8 +204,6 @@ apiClient.interceptors.response.use(
 );
 
 // ─── Convenience wrappers ─────────────────────────────────────────────────────
-// Thin wrappers that return T directly (not AxiosResponse<T>), so call-sites
-// only deal with the data they care about.
 
 export async function apiGet<T>(
     url: string,
