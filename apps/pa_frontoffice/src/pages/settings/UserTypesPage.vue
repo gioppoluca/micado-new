@@ -8,10 +8,13 @@
       onSave()       → store.create({ ...flat, translations }) in one POST
 
     EDIT record:
-      openEditDialog → onEditConfirmed → openEditForm(ut)
+      onEditRowClick(ut) → openEditForm(ut) directly (no intermediate dialog)
         → store.getOne(id) [GET /user-types/:id → UserTypeFull]
         → populates MultiLangEditorTabs v-model
       onSave()       → store.save(id, UserTypeFull) [PUT]
+
+    DELETE record:
+      onDeleteRowClick(ut) → $q.notify confirm → store.remove(ut.id)
 
     ── MultiLangEditorTabs ───────────────────────────────────────────────────
     :show-title="true"  → one q-input per language for the label
@@ -148,68 +151,83 @@
             </div>
         </q-card>
 
-        <!-- ── List header ─────────────────────────────────────────────────── -->
-        <q-item class="q-pb-none">
-            <q-item-section class="col-1">{{ t('input_labels.image') }}</q-item-section>
-            <q-item-section class="col-4">{{ t('input_labels.name') }}</q-item-section>
-            <q-item-section class="col-2 flex flex-center">{{ t('input_labels.is_published') }}</q-item-section>
-            <q-item-section class="col-2 flex flex-center">{{ t('input_labels.transl_state') }}</q-item-section>
-            <q-item-section class="col-1 flex flex-center">{{ t('input_labels.edit') }}</q-item-section>
-            <q-item-section class="col-1 flex flex-center">{{ t('input_labels.export') }}</q-item-section>
+        <!-- ── List header — widths mirror the data row sections exactly ────── -->
+        <q-item class="q-pb-xs list-header">
+            <q-item-section style="min-width:56px; max-width:56px">{{ t('input_labels.image') }}</q-item-section>
+            <q-item-section>{{ t('input_labels.name') }}</q-item-section>
+            <q-item-section style="min-width:100px; max-width:100px" class="flex flex-center">{{
+                t('input_labels.is_published')
+                }}</q-item-section>
+            <q-item-section style="min-width:120px; max-width:130px" class="flex flex-center">{{
+                t('input_labels.transl_state')
+                }}</q-item-section>
+            <q-item-section style="min-width:48px; max-width:48px" class="flex flex-center">{{ t('input_labels.edit')
+                }}</q-item-section>
+            <q-item-section style="min-width:48px; max-width:48px" class="flex flex-center">{{ t('button.delete')
+                }}</q-item-section>
         </q-item>
 
         <!-- ── List ───────────────────────────────────────────────────────── -->
         <q-list bordered separator>
             <template v-for="ut in store.userTypes" :key="ut.id">
-                <q-item>
-                    <!-- Icon -->
-                    <q-item-section class="col-1">
+                <!--
+                    Row height is driven by the two-line Name column content
+                    (name + "Available translations" chips), matching Figma Document Types.
+                    No description in the list — description is only visible in the edit form.
+                    Not dense: rows need natural two-line height (~64-72px).
+                -->
+                <q-item class="list-row">
+                    <!-- Icon: 48px grey placeholder matching Figma -->
+                    <q-item-section style="min-width:56px; max-width:56px; padding-right: 8px">
                         <q-img v-if="userTypeIcon(ut)" :src="userTypeIcon(ut)"
-                            style="width: 40px; height: 40px; object-fit: contain" />
-                        <q-icon v-else name="person" size="40px" color="grey-4" />
+                            style="width: 48px; height: 48px; object-fit: contain; border-radius: 4px;" />
+                        <div v-else class="icon-placeholder" />
                     </q-item-section>
 
-                    <!-- Name + description -->
-                    <q-item-section class="col-4">
-                        <q-item-label class="text-weight-medium">{{ ut.user_type }}</q-item-label>
-                        <q-item-label v-if="ut.description" caption>
-                            <RichTextViewer :content="ut.description" :all-entities-fetched="true" :read-more="true" />
+                    <!--
+                        Name column: two lines.
+                        Line 1 — name (medium weight).
+                        Line 2 — "Available translations" label + lang chips.
+                        No description shown here; keeps list compact like Figma.
+                    -->
+                    <q-item-section>
+                        <q-item-label class="text-weight-medium">
+                            {{ ut.user_type }}
+                            <q-tooltip v-if="ut.description" anchor="top middle" self="bottom middle" :offset="[0, 4]"
+                                max-width="320px" class="description-tooltip">{{ stripMarkdown(ut.description)
+                                }}</q-tooltip>
+                        </q-item-label>
+                        <q-item-label caption class="row items-center q-gutter-x-xs q-mt-xs">
+                            <span class="text-grey-7">{{ t('input_labels.available_transl') }}</span>
+                            <q-chip v-for="lang in displayLangs(ut)" :key="lang" dense color="grey-4" text-color="white"
+                                size="xs" class="q-ma-none lang-chip" :label="lang.toUpperCase()" />
                         </q-item-label>
                     </q-item-section>
 
                     <!-- Published toggle -->
-                    <q-item-section class="col-2 flex flex-center">
+                    <q-item-section style="min-width:100px; max-width:100px" class="flex flex-center">
                         <q-toggle :model-value="ut.status === 'PUBLISHED'" color="accent"
                             :disable="ut.status === 'DRAFT'" @update:model-value="onPublishedToggle($event, ut)" />
                     </q-item-section>
 
-                    <!-- Status badge -->
-                    <q-item-section class="col-2 flex flex-center">
-                        <q-badge :color="statusBadgeColor(ut.status)" :label="t(statusLabelKey(ut.status))" />
+                    <!-- Translation status pill — kept as pill per preference -->
+                    <q-item-section style="min-width:120px; max-width:130px" class="flex flex-center">
+                        <q-badge :color="statusBadgeColor(ut.status)" :label="t(statusLabelKey(ut.status))"
+                            class="status-pill" />
                     </q-item-section>
 
-                    <!-- Edit -->
-                    <q-item-section class="col-1 flex flex-center">
-                        <q-btn :data-cy="`edituser${ut.id}`" flat round icon="edit" size="sm"
-                            @click="openEditDialog(ut)" />
+                    <!-- Edit: orange pencil, flat, no background circle — matches Figma -->
+                    <q-item-section style="min-width:48px; max-width:48px" class="flex flex-center">
+                        <q-btn :data-cy="`edituser${ut.id}`" flat round icon="edit" size="sm" color="orange"
+                            @click="onEditRowClick(ut)" />
                     </q-item-section>
 
-                    <!-- Export -->
-                    <q-item-section class="col-1 flex flex-center">
-                        <q-btn :data-cy="`exportuser${ut.id}`" flat round icon="download" size="sm"
-                            @click="exportUserType(ut)" />
+                    <!-- Delete: red trash, flat — matches Figma -->
+                    <q-item-section style="min-width:48px; max-width:48px" class="flex flex-center">
+                        <q-btn :data-cy="`deleteuser${ut.id}`" flat round icon="delete" size="sm" color="negative"
+                            @click="onDeleteRowClick(ut)" />
                     </q-item-section>
                 </q-item>
-
-                <!-- Source language chip -->
-                <div class="row items-center q-px-md q-pb-xs">
-                    <span class="text-caption q-mr-sm text-grey-7">
-                        {{ t('input_labels.available_transl') }}:
-                    </span>
-                    <q-chip dense style="background-color: #C4C4C4" text-color="white">
-                        {{ ut.sourceLang.toUpperCase() }}
-                    </q-chip>
-                </div>
             </template>
 
             <q-item v-if="store.loading && store.userTypes.length === 0">
@@ -224,21 +242,6 @@
             </q-item>
         </q-list>
 
-        <!-- ── Edit / Delete dialog ─────────────────────────────────────────── -->
-        <q-dialog v-model="editDialogOpen">
-            <q-card class="q-pa-md" style="width: 700px; max-width: 80vw; padding-top: 0">
-                <div class="q-pt-lg text-center">
-                    <p class="text-grey-7">{{ t('input_labels.edit_or_delete') }}</p>
-                    <p class="text-weight-bold text-h6">{{ editingItem?.user_type }}?</p>
-                </div>
-                <div class="row justify-center q-gutter-md q-pb-md">
-                    <q-btn class="edit_button" :label="t('button.edit')" icon="edit" rounded unelevated no-caps
-                        @click="onEditConfirmed" />
-                    <q-btn class="delete_button" :label="t('button.delete')" icon="delete" rounded unelevated no-caps
-                        @click="onDeleteConfirmed" />
-                </div>
-            </q-card>
-        </q-dialog>
 
         <!-- ── Import confirm dialog ───────────────────────────────────────── -->
         <q-dialog v-model="importDialogOpen">
@@ -293,7 +296,6 @@ import { useI18n } from 'vue-i18n';
 import { useQuasar } from 'quasar';
 import HelpLabel from 'src/components/HelpLabel.vue';
 import MultiLangEditorTabs from 'src/components/rich-text-editor/MultiLangEditorTabs.vue';
-import RichTextViewer from 'src/components/rich-text-editor/RichTextViewer.vue';
 import { useUserTypeStore } from 'src/stores/user-type-store';
 import { useLanguageStore } from 'src/stores/language-store';
 import { useAppStore } from 'src/stores/app-store';
@@ -371,28 +373,23 @@ const sortedLanguages = computed(() => {
 
 // ── Edit / Delete dialog ──────────────────────────────────────────────────
 
-const editDialogOpen = ref(false);
-const editingItem = ref<UserType | null>(null);
-
-function openEditDialog(ut: UserType): void {
-    editingItem.value = ut;
-    editDialogOpen.value = true;
-}
-
-function onEditConfirmed(): void {
-    editDialogOpen.value = false;
-    if (!editingItem.value) return;
-    if (editingItem.value.status === 'PUBLISHED') {
+/**
+ * Edit row click — opens the form directly without an intermediate dialog.
+ * Matches Figma Document Types layout where edit icon goes straight to the form.
+ */
+function onEditRowClick(ut: UserType): void {
+    if (ut.status === 'PUBLISHED') {
         $q.notify({ color: 'red', message: t('warning.published_edit') });
         return;
     }
-    void openEditForm(editingItem.value);
+    void openEditForm(ut);
 }
 
-function onDeleteConfirmed(): void {
-    editDialogOpen.value = false;
-    const ut = editingItem.value;
-    if (!ut) return;
+/**
+ * Delete row click — confirms via $q.notify and deletes directly.
+ * No intermediate dialog — matches Figma where delete is a direct column action.
+ */
+function onDeleteRowClick(ut: UserType): void {
     $q.notify({
         type: 'warning', timeout: 0,
         message: t('warning.delete_user_type'),
@@ -581,6 +578,35 @@ function onPublishedToggle(newValue: boolean, ut: UserType): void {
     }
 }
 
+/**
+ * Strips common Markdown syntax for display in a plain-text tooltip.
+ * Removes bold/italic markers, headings, inline code, links and images.
+ * Not a full MD parser — just enough for typical short descriptions.
+ */
+function stripMarkdown(md: string): string {
+    return md
+        .replace(/!\[.*?\]\(.*?\)/g, '')        // images
+        .replace(/\[([^\]]+)\]\(.*?\)/g, '$1')  // links → label only
+        .replace(/#{1,6}\s+/g, '')               // headings
+        .replace(/(\*\*|__)(.*?)\1/g, '$2')     // bold
+        .replace(/(\*|_)(.*?)\1/g, '$2')        // italic
+        .replace(/`{1,3}[^`]*`{1,3}/g, '')      // inline code / fenced
+        .replace(/^[-*+]\s+/gm, '')             // list bullets
+        .replace(/\n{2,}/g, ' · ')              // paragraph breaks → separator
+        .replace(/\n/g, ' ')                    // single newlines → space
+        .trim();
+}
+
+/**
+ * Returns the language codes to show as chips in the list row.
+ * For the flat UserType list item we only have sourceLang — that's the minimum.
+ * Additional languages are only available after getOne() (form open).
+ * Shows sourceLang always; shows up to 3 langs if the store somehow carries more.
+ */
+function displayLangs(ut: UserType): string[] {
+    return [ut.sourceLang];
+}
+
 // ── Status badge ──────────────────────────────────────────────────────────
 
 function statusLabelKey(status: UserTypeStatus): string {
@@ -596,19 +622,6 @@ function statusBadgeColor(status: UserTypeStatus): string {
     }
 }
 
-// ── Export ────────────────────────────────────────────────────────────────
-
-function exportUserType(ut: UserType): void {
-    const filename = `${ut.user_type.replace(/\s+/g, '_')}.json`;
-    const href = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(ut, null, 4));
-    const a = document.createElement('a');
-    a.setAttribute('href', href);
-    a.setAttribute('download', filename);
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-}
 
 // ── Import ────────────────────────────────────────────────────────────────
 
@@ -669,6 +682,60 @@ onMounted(async () => {
 <style scoped>
 h5 {
     font-weight: bold;
+}
+
+/* Status pill — slightly more padding than a plain badge for readability */
+.status-pill {
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+}
+
+/*
+ * List rows: natural height driven by two-line name content (~64-72px).
+ * Row padding trimmed to match Figma's comfortable but not padded look.
+ */
+.list-row {
+    padding-top: 10px !important;
+    padding-bottom: 10px !important;
+}
+
+/* List header: smaller, grey, uppercase labels */
+.list-header {
+    min-height: 32px !important;
+    font-size: 11px;
+    color: #9e9e9e;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+}
+
+/* 48×48 grey placeholder when no icon uploaded — matches Figma grey square */
+.icon-placeholder {
+    width: 48px;
+    height: 48px;
+    background-color: #e0e0e0;
+    border-radius: 4px;
+}
+
+/* Language chips in the Available translations row */
+.lang-chip {
+    height: 20px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+/* Description tooltip — plain text, comfortable reading width */
+.description-tooltip {
+    font-size: 13px;
+    line-height: 1.5;
+    background: rgba(50, 50, 50, 0.92);
+    color: #fff;
+    border-radius: 6px;
+    padding: 6px 10px;
+    white-space: normal;
 }
 
 .delete-button {
