@@ -24,6 +24,10 @@ export default {
     "user_type": "Write the name of the user type",
     "user_type_description": "Decribe the type of user",
     "user_type_icon": "Upload an icon for the user type",
+    "icon_max_size": "Max {size} KB",
+    "send_to_translation": "Toggle ON to freeze the source text and allow translators to start working. Toggle OFF to keep the text editable.",
+    "source_editable": "Source text is editable (DRAFT). Toggle to freeze and send to translators.",
+    "source_frozen": "Source text is frozen (APPROVED). Translators can now work on other languages.",
     "topic": "Write the name of the topic",
     "topic_icon": "Upload an icon for the topic",
     "intervention_type": "Write the name of the intervention type",
@@ -371,6 +375,7 @@ export default {
     "days": "Days",
     "available_transl": "Available translations",
     "no_available_transl": "No available translations",
+    "no_data": "No items found.",
     "emitter": "Emitter",
     "language_name": "Language name",
     "language_iso": "ISO code",
@@ -575,7 +580,10 @@ export default {
     "change_pass": "The new password and the confirmation password do not match",
     "change_pic": "Do you really want to change picture?",
     "no_results": "No results",
-    "published_edit": "You can't edit published content. In order to edit you have to unpublish first."
+    "published_edit": "You can't edit published content. In order to edit you have to unpublish first.",
+    "icon_too_large": "Image too large ({fileSize} KB). Maximum allowed: {maxSize} KB. Please choose a smaller file.",
+    "icon_read_error": "Could not read the selected file. Please try again with a different image.",
+    "translations_save_failed": "Content saved, but some translations could not be saved. Please try again."
   },
   "text_editor": {
     "word_count": "Word count"
