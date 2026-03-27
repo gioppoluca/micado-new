@@ -26,22 +26,9 @@ export class UserTypeFacadeService {
         protected contentRevisionTranslationRepository: ContentRevisionTranslationRepository,
     ) { }
 
-    async create(input: Omit<UserTypeLegacy, 'status'>): Promise<UserTypeLegacy> {
-        const externalKey = String(input.id);
+    async create(input: Omit<UserTypeLegacy, 'id' | 'status'>): Promise<UserTypeLegacy> {
+        const externalKey = String(await this.nextExternalKey());
         const sourceLang = input.sourceLang ?? 'en';
-
-        const existing = await this.contentItemRepository.findOne({
-            where: {
-                typeCode: USER_TYPE_CODE,
-                externalKey,
-            },
-        });
-
-        if (existing) {
-            throw new HttpErrors.Conflict(
-                `USER_TYPE with legacy id ${input.id} already exists`,
-            );
-        }
 
         const item = await this.contentItemRepository.create({
             typeCode: USER_TYPE_CODE,
@@ -240,7 +227,7 @@ export class UserTypeFacadeService {
         const items = await this.contentItemRepository.find({
             where: {
                 typeCode: USER_TYPE_CODE,
-                publishedRevisionId: { neq: null },
+                publishedRevisionId: { neq: undefined },
             },
         });
 
@@ -321,6 +308,18 @@ export class UserTypeFacadeService {
                 tStatus: 'PUBLISHED',
             });
         }
+    }
+
+    protected async nextExternalKey(): Promise<number> {
+        const items = await this.contentItemRepository.find({
+            where: { typeCode: USER_TYPE_CODE },
+            fields: { externalKey: true },
+        });
+        const max = items.reduce((acc, item) => {
+            const n = Number(item.externalKey);
+            return Number.isFinite(n) && n > acc ? n : acc;
+        }, 0);
+        return max + 1;
     }
 
     protected async findItemByLegacyIdOrFail(id: number): Promise<ContentItem> {
@@ -418,13 +417,13 @@ export class UserTypeFacadeService {
         revision: ContentRevision,
         translation?: Partial<ContentRevisionTranslation>,
     ): UserTypeLegacy {
-        return {
+        return Object.assign(new UserTypeLegacy(), {
             id: Number(item.externalKey),
             user_type: translation?.title ?? '',
             description: translation?.description ?? '',
             status: revision.status,
             sourceLang: revision.sourceLang,
             dataExtra: revision.dataExtra ?? {},
-        };
+        });
     }
 }
