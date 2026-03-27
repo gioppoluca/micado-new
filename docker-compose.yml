@@ -261,7 +261,7 @@ services:
       bootstrap-perms:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/api/ >/dev/null"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/healthz/ >/dev/null"]
       interval: 15s
       timeout: 5s
       retries: 20

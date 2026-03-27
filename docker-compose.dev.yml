@@ -21,7 +21,15 @@ services:
       - "5432:5432"
 
   keycloak:
-    command: ["start-dev", "--import-realm", "--proxy-headers", "xforwarded", "--http-enabled", "true"]
+    command:
+      [
+        "start-dev",
+        "--import-realm",
+        "--proxy-headers",
+        "xforwarded",
+        "--http-enabled",
+        "true",
+      ]
 
   backend:
     build:
@@ -109,5 +117,11 @@ services:
       - traefik.enable=false
 
   weblate:
+    environment:
+      # Disable rate limiting in dev — the healthcheck polls /healthz/ every 15s
+      # which would exhaust the anonymous rate limit quickly.
+      # The base compose already uses /healthz/ (not /api/) for the healthcheck,
+      # but this env var provides an additional safety net for dev workflows.
+      WEBLATE_RATELIMIT_ENABLED: "false"
     labels:
       - traefik.http.routers.weblate.tls=false
