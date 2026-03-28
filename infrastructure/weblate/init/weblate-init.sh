@@ -31,6 +31,10 @@ APP_NAME="weblate-init"
 : "${WEBLATE_PROJECT_SLUG:=micado}"
 : "${WEBLATE_PROJECT_WEB:=http://weblate.local}"
 
+: "${WEBLATE_WEBHOOK_URL:=}"
+: "${WEBLATE_WEBHOOK_SECRET:=}"
+: "${WEBLATE_WEBHOOK_EVENTS:=17}"
+
 : "${WEBLATE_GIT_REPO:=http://gitea:3000/weblate-bot/translations.git}"
 : "${WEBLATE_GIT_BRANCH:=main}"
 : "${WEBLATE_FILE_FORMAT:=json}"
@@ -251,6 +255,69 @@ component_exists() {
   api_get "/api/components/${WEBLATE_PROJECT_SLUG}/${1}/" >/dev/null 2>&1
 }
 
+component_api_url() {
+  comp_slug="$1"
+  printf '%s/api/components/%s/%s/' "${WEBLATE_URL}" "${WEBLATE_PROJECT_SLUG}" "${comp_slug}"
+}
+
+find_component_webhook_addon_id() {
+  comp_slug="$1"
+  comp_url=$(component_api_url "$comp_slug")
+
+  api_get "/api/addons/?page_size=1000" 2>/dev/null \
+    | tr '{' '\n' \
+    | grep "\"name\":\"weblate.webhook.webhook\"" \
+    | grep "\"component\":\"${comp_url}\"" \
+    | sed -n 's/.*"url":"[^"]*\/api\/addons\/\([0-9][0-9]*\)\/".*/\1/p' \
+    | head -n1
+}
+
+ensure_webhook_addon() {
+  comp_slug="$1"
+
+  if [ -z "${WEBLATE_WEBHOOK_URL:-}" ]; then
+    info "WEBLATE_WEBHOOK_URL not set — skipping webhook add-on for '${comp_slug}'"
+    return 0
+  fi
+
+  addon_id=$(find_component_webhook_addon_id "$comp_slug" || true)
+
+  payload=$(
+    cat <<EOF
+{
+  "name": "weblate.webhook.webhook",
+  "configuration": {
+    "webhook_url": "${WEBLATE_WEBHOOK_URL}",
+    "secret": "${WEBLATE_WEBHOOK_SECRET}",
+    "events": [${WEBLATE_WEBHOOK_EVENTS}]
+  }
+}
+EOF
+  )
+
+  if [ -n "${addon_id}" ]; then
+    info "Webhook add-on already exists on '${comp_slug}' (id=${addon_id}) — updating"
+    response=$(curl -sS -w '\n%{http_code}' \
+      -H "Authorization: Token ${WEBLATE_ADMIN_API_TOKEN}" \
+      -H "Accept: application/json" \
+      -H "Content-Type: application/json" \
+      -X PATCH -d "$payload" \
+      "${WEBLATE_URL}/api/addons/${addon_id}/")
+    http_code=$(printf '%s' "$response" | tail -n1)
+    body_out=$(printf '%s' "$response" | sed '$d')
+    if [ "$http_code" -lt 200 ] || [ "$http_code" -gt 299 ]; then
+      error "PATCH /api/addons/${addon_id}/ returned HTTP ${http_code}: ${body_out}"
+      return 1
+    fi
+    info "Webhook add-on updated for '${comp_slug}'"
+    return 0
+  fi
+
+  info "Installing webhook add-on on '${comp_slug}'"
+  api_post_json "/api/components/${WEBLATE_PROJECT_SLUG}/${comp_slug}/addons/" "$payload" >/dev/null
+  info "Webhook add-on installed for '${comp_slug}'"
+}
+
 # ---------------------------------------------------------------------------
 # Project
 # ---------------------------------------------------------------------------
@@ -416,6 +483,7 @@ main() {
     "backend" \
     "backend/*.json" \
     "backend/en.json"
+  ensure_webhook_addon "backend"
   refresh_component "backend"
 
   if [ -n "${MICADO_CATEGORIES:-}" ]; then
@@ -431,6 +499,7 @@ main() {
       filemask="backend/${cat_slug}/*.json"
       template="backend/${cat_slug}/${MICADO_SOURCE_LANG}.json"
       ensure_component "$comp_name" "$comp_slug" "$filemask" "$template"
+      ensure_webhook_addon "$comp_slug"
       refresh_component "$comp_slug"
     done
   else
