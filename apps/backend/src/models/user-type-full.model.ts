@@ -34,6 +34,45 @@
 
 import { Model, model, property } from '@loopback/repository';
 
+/**
+ * Lightweight revision summary — included in UserTypeFull.revisions[].
+ * Contains no translation content; just enough for the version history panel.
+ * Read-only on PUT (ignored by the backend if sent back).
+ */
+@model()
+export class RevisionSummary extends Model {
+    /** Monotonic revision number (1, 2, 3, …). */
+    @property({ type: 'number' })
+    revisionNo: number;
+
+    /** Workflow state of this revision. */
+    @property({
+        type: 'string',
+        jsonSchema: { enum: ['DRAFT', 'APPROVED', 'PUBLISHED', 'ARCHIVED'] },
+    })
+    status: 'DRAFT' | 'APPROVED' | 'PUBLISHED' | 'ARCHIVED';
+
+    /** ISO timestamp when this revision was created. */
+    @property({ type: 'string' })
+    createdAt?: string;
+
+    /**
+     * Display name of the actor who created this revision.
+     * Derived from createdBy.name — the JSONB is unpacked in the facade
+     * so the frontend never has to drill into a nested object.
+     */
+    @property({ type: 'string' })
+    createdByName?: string;
+
+    /** ISO timestamp when this revision was published (undefined if not yet published). */
+    @property({ type: 'string' })
+    publishedAt?: string;
+
+    constructor(data?: Partial<RevisionSummary>) {
+        super(data);
+    }
+}
+
 /** Single per-language entry within the translations map. */
 @model()
 export class UserTypeTranslationEntry extends Model {
@@ -122,6 +161,34 @@ export class UserTypeFull extends Model {
         },
     })
     translations?: Record<string, UserTypeTranslationEntry>;
+
+    /**
+     * All revisions of this content item, sorted ascending by revision_no.
+     * Included in GET /user-types/:id responses — the form gets the full
+     * version history in the same call it was already making.
+     * Read-only: ignored by PUT (the backend never updates revisions from this field).
+     *
+     * UI use: version history panel below the editor tabs.
+     * The current (preferred) revision is the one matching `status` above.
+     */
+    @property({
+        type: 'array',
+        itemType: RevisionSummary,
+        jsonSchema: {
+            type: 'array',
+            items: {
+                type: 'object',
+                properties: {
+                    revisionNo: { type: 'number' },
+                    status: { type: 'string' },
+                    createdAt: { type: 'string' },
+                    createdByName: { type: 'string' },
+                    publishedAt: { type: 'string' },
+                },
+            },
+        },
+    })
+    revisions?: RevisionSummary[];
 
     constructor(data?: Partial<UserTypeFull>) {
         super(data);

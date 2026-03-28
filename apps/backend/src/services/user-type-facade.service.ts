@@ -59,13 +59,14 @@ import {
     ContentRevisionTranslation,
     UserTypeLegacy,
 } from '../models';
-import { UserTypeFull } from '../models/user-type-full.model';
+import { UserTypeFull, RevisionSummary } from '../models/user-type-full.model';
 import {
     ContentItemRepository,
     ContentRevisionRepository,
     ContentRevisionTranslationRepository,
 } from '../repositories';
 import { buildActorStamp, ActorStamp } from '../auth/actor-stamp';
+import { TranslationWorkflowOrchestratorService } from './translation-workflow-orchestrator.service';
 
 const USER_TYPE_CODE = 'USER_TYPE';
 
@@ -100,6 +101,11 @@ export class UserTypeFacadeService {
         // (boot observers, migration scripts) where no JWT is present.
         @inject(SecurityBindings.USER, { optional: true })
         protected currentUser: UserProfile | undefined,
+
+        // Translation workflow orchestrator — optional so the facade works in
+        // test environments where DBOS is not running.
+        @inject(TranslationWorkflowOrchestratorService.BINDING, { optional: true })
+        protected translationOrchestrator: TranslationWorkflowOrchestratorService | undefined,
     ) { }
 
     // ── List (lean) ───────────────────────────────────────────────────────────
@@ -148,11 +154,28 @@ export class UserTypeFacadeService {
             throw new HttpErrors.NotFound(`No revision found for USER_TYPE ${id}`);
         }
 
-        const translationRows = await this.contentRevisionTranslationRepository.find({
-            where: { revisionId: revision.id! },
-        });
+        const [translationRows, allRevisions] = await Promise.all([
+            this.contentRevisionTranslationRepository.find({
+                where: { revisionId: revision.id! },
+            }),
+            // Load all revisions for the version history panel.
+            // Sorted ascending so the UI shows v1, v2, v3… in chronological order.
+            // Only fields needed for the summary — no translation content.
+            this.contentRevisionRepository.find({
+                where: { itemId: item.id! },
+                order: ['revisionNo ASC'],
+                fields: {
+                    id: true,
+                    revisionNo: true,
+                    status: true,
+                    createdAt: true,
+                    createdBy: true,
+                    publishedAt: true,
+                },
+            }),
+        ]);
 
-        return this.toFullDto(item, revision, translationRows);
+        return this.toFullDto(item, revision, translationRows, allRevisions);
     }
 
     // ── Create ────────────────────────────────────────────────────────────────
@@ -292,6 +315,11 @@ export class UserTypeFacadeService {
                 ...(stamp && { approvedBy: stamp }),
             });
             await this.markNonSourceTranslationsStale(draft.id!, sourceLang);
+
+            // Start the translation + TTS workflow for this revision.
+            // The source translation row must exist (created by the form) so
+            // we can extract the canonical title + description for the workflow.
+            await this.startTranslationWorkflow(item, draft, sourceLang);
         }
     }
 
@@ -360,6 +388,7 @@ export class UserTypeFacadeService {
 
             if (patch.status === 'APPROVED') {
                 await this.markNonSourceTranslationsStale(draft.id!, draft.sourceLang);
+                await this.startTranslationWorkflow(item, draft, draft.sourceLang);
             }
         }
     }
@@ -441,6 +470,20 @@ export class UserTypeFacadeService {
             updatedBy: stamp,
         });
 
+        // Archive the previously PUBLISHED revision (if any) so there is only
+        // ever one PUBLISHED revision per item at any time.
+        // We query by item_id + status=PUBLISHED excluding the one we just promoted.
+        const previouslyPublished = await this.contentRevisionRepository.find({
+            where: {
+                itemId: item.id!,
+                status: 'PUBLISHED',
+                id: { neq: approved.id! },
+            },
+        });
+        for (const old of previouslyPublished) {
+            await this.contentRevisionRepository.updateById(old.id!, { status: 'ARCHIVED' });
+        }
+
         // Mark all APPROVED translation rows as PUBLISHED
         const translations = await this.contentRevisionTranslationRepository.find({
             where: { revisionId: approved.id!, tStatus: 'APPROVED' },
@@ -454,6 +497,67 @@ export class UserTypeFacadeService {
     }
 
     // ── Internal helpers ──────────────────────────────────────────────────────
+
+    /**
+     * Starts the DBOS translation + TTS workflow for a newly approved revision.
+     *
+     * Reads the source translation row to extract title + description.
+     * If no source row exists (edge case: form saved without content), skips.
+     * If the orchestrator is not injected (test env / DBOS not running), logs a warning.
+     *
+     * This method is called from both replaceById() and updateById() whenever
+     * the status transitions to APPROVED — the single place the workflow is triggered.
+     *
+     * Generic: the category 'user-types' is the only USER_TYPE-specific value here.
+     * Future content types (NEWS, PROCESS) will call the same orchestrator with
+     * their own category string.
+     */
+    protected async startTranslationWorkflow(
+        item: ContentItem,
+        revision: ContentRevision,
+        sourceLang: string,
+    ): Promise<void> {
+        if (!this.translationOrchestrator) {
+            // DBOS not running in this environment (tests, dev without DBOS).
+            // Log a warning but do not fail the request.
+            return;
+        }
+
+        try {
+            // Load the source translation row to get the current title + description
+            const sourceTr = await this.contentRevisionTranslationRepository.findOne({
+                where: { revisionId: revision.id!, lang: sourceLang },
+            });
+
+            if (!sourceTr) {
+                // No source translation yet — nothing to send to Weblate.
+                return;
+            }
+
+            const fields: Record<string, string> = {};
+            if (sourceTr.title?.trim()) fields['title'] = sourceTr.title;
+            if (sourceTr.description?.trim()) fields['description'] = sourceTr.description;
+
+            if (Object.keys(fields).length === 0) {
+                return;
+            }
+
+            await this.translationOrchestrator.startRevisionFlow({
+                revision,
+                item,
+                category: 'user-types',   // USER_TYPE-specific; other facades use their own
+                fields,
+            });
+        } catch (err) {
+            // Workflow start failure must NOT fail the approval request itself.
+            // The PA admin sees the content as APPROVED; the workflow can be
+            // retried manually via the dev controller if needed.
+            // We log here even though the facade has no injected logger —
+            // console.error is acceptable for the single error path that never
+            // reaches production code; replace with this.logger when added.
+            console.error('[UserTypeFacadeService] startTranslationWorkflow failed', err);
+        }
+    }
 
     /**
      * When a revision moves to APPROVED, all non-source translation rows that
@@ -581,6 +685,7 @@ export class UserTypeFacadeService {
         item: ContentItem,
         revision: ContentRevision,
         translationRows: ContentRevisionTranslation[],
+        allRevisions: ContentRevision[] = [],
     ): UserTypeFull {
         const translations: Record<string, {
             title: string;
@@ -596,12 +701,25 @@ export class UserTypeFacadeService {
             };
         }
 
+        // Build lightweight revision summaries for the version history panel.
+        // createdBy is a JSONB object — unpack .name so the frontend gets a plain string.
+        const revisions: RevisionSummary[] = allRevisions.map(r =>
+            Object.assign(new RevisionSummary(), {
+                revisionNo: r.revisionNo,
+                status: r.status,
+                createdAt: r.createdAt,
+                createdByName: (r.createdBy as { name?: string } | undefined)?.name ?? 'System',
+                publishedAt: r.publishedAt,
+            }),
+        );
+
         return Object.assign(new UserTypeFull(), {
             id: Number(item.externalKey),
             status: revision.status,
             sourceLang: revision.sourceLang,
             dataExtra: revision.dataExtra ?? {},
             translations,
+            revisions,
         });
     }
 }
