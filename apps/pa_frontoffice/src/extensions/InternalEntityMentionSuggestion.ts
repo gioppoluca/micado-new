@@ -24,13 +24,12 @@
  */
 
 import { Extension } from '@tiptap/core';
-import { Suggestion } from '@tiptap/suggestion';
+import { Suggestion, type SuggestionProps } from '@tiptap/suggestion';
 import { PluginKey } from '@tiptap/pm/state';
 import { createApp, defineComponent, ref, h, type App } from 'vue';
 import { logger } from 'src/services/Logger';
 import { useMicadoEntitiesStore } from 'src/stores/micado-entities-store';
 import type { EntityTypeCode } from 'src/stores/micado-entities-store';
-//import { buildMentionSyntax } from './InternalEntityMention';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -160,11 +159,7 @@ const InternalEntityMentionSuggestion = Extension.create({
                     let selectCommand: ((item: MentionSuggestionItem) => void) | null = null;
 
                     return {
-                        onStart(props: {
-                            items: MentionSuggestionItem[];
-                            clientRect: (() => DOMRect | null) | null | undefined;
-                            command: (item: MentionSuggestionItem) => void;
-                        }) {
+                        onStart(props: SuggestionProps<MentionSuggestionItem>) {
                             selectCommand = props.command;
                             currentItems = props.items;
                             selectedIndex = 0;
@@ -175,11 +170,7 @@ const InternalEntityMentionSuggestion = Extension.create({
                             positionPopup(popup.el, props.clientRect);
                         },
 
-                        onUpdate(props: {
-                            items: MentionSuggestionItem[];
-                            clientRect: (() => DOMRect | null) | null | undefined;
-                            command: (item: MentionSuggestionItem) => void;
-                        }) {
+                        onUpdate(props: SuggestionProps<MentionSuggestionItem>) {
                             selectCommand = props.command;
                             currentItems = props.items;
                             selectedIndex = 0;

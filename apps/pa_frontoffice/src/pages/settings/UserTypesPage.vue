@@ -142,6 +142,39 @@
 
             <q-separator class="q-my-md" />
 
+            <!--
+                Version history panel — visible only when editing an existing record.
+                Shows all revisions sorted chronologically (oldest first).
+                The current working revision is highlighted.
+                Read-only: no actions here, just audit visibility.
+            -->
+            <div v-if="!isNew && form.revisions.length > 0" class="version-history q-mb-md">
+                <div class="text-caption text-grey-7 q-mb-xs version-history__label">
+                    {{ t('input_labels.version_history') }}
+                </div>
+                <div class="row q-gutter-xs flex-wrap">
+                    <q-chip v-for="rev in form.revisions" :key="rev.revisionNo" dense
+                        :color="revisionChipColor(rev.status)" text-color="white"
+                        :icon="rev.status === 'PUBLISHED' ? 'check_circle' : rev.status === 'ARCHIVED' ? 'archive' : rev.status === 'APPROVED' ? 'lock' : 'edit'"
+                        class="version-chip">
+                        <span class="version-chip__label">
+                            v{{ rev.revisionNo }}
+                            <q-tooltip max-width="240px" anchor="top middle" self="bottom middle">
+                                <div class="text-caption">
+                                    <div>{{ statusLabelForRevision(rev.status) }}</div>
+                                    <div v-if="rev.createdByName">{{ t('input_labels.by') }}: {{ rev.createdByName }}
+                                    </div>
+                                    <div v-if="rev.publishedAt">{{ t('input_labels.published') }}: {{
+                                        formatRevDate(rev.publishedAt) }}</div>
+                                    <div v-else-if="rev.createdAt">{{ t('input_labels.created') }}: {{
+                                        formatRevDate(rev.createdAt) }}</div>
+                                </div>
+                            </q-tooltip>
+                        </span>
+                    </q-chip>
+                </div>
+            </div>
+
             <div class="row q-gutter-sm">
                 <q-btn data-cy="cancelusertype" no-caps class="delete-button" unelevated rounded
                     :label="t('button.cancel')" @click="closeForm" />
@@ -302,7 +335,7 @@ import { useUserTypeStore } from 'src/stores/user-type-store';
 import { useLanguageStore } from 'src/stores/language-store';
 import { useAppStore } from 'src/stores/app-store';
 import { getRuntimeConfigOrDefaults } from 'src/config/env';
-import type { UserType, UserTypeStatus, UserTypeFull } from 'src/api/user-type.api';
+import type { UserType, UserTypeStatus, UserTypeFull, RevisionSummary } from 'src/api/user-type.api';
 import { translationStateKey, userTypeIcon } from 'src/api/user-type.api';
 import { logger } from 'src/services/Logger';
 
@@ -339,6 +372,11 @@ interface FormState {
      * Shape: Record<lang, { title?: string; description: string }>
      */
     translations: Record<string, { title?: string; description: string }>;
+    /**
+     * Revision history — populated from UserTypeFull.revisions[] on edit open.
+     * Empty for new records. Read-only; never sent to the backend.
+     */
+    revisions: RevisionSummary[];
 }
 
 const formOpen = ref(false);
@@ -352,6 +390,7 @@ function blankForm(): FormState {
         sourceLang: src,
         iconPreview: '',
         translations: { [src]: { title: '', description: '' } },
+        revisions: [],
     };
 }
 
@@ -427,6 +466,8 @@ async function openEditForm(ut: UserType): Promise<void> {
         translations: {
             [ut.sourceLang]: { title: ut.user_type, description: ut.description ?? '' },
         },
+        // Empty until getOne() completes — required by FormState
+        revisions: [],
     };
     isNew.value = false;
     formOpen.value = true;
@@ -440,6 +481,7 @@ async function openEditForm(ut: UserType): Promise<void> {
     // Populate form from the full DTO
     form.value.status = full.status ?? ut.status;
     form.value.sourceLang = full.sourceLang ?? ut.sourceLang;
+    form.value.revisions = full.revisions ?? [];
     form.value.iconPreview = (full.dataExtra?.icon) ?? (ut.dataExtra?.icon ?? '');
 
     // Convert UserTypeFull.translations to the shape MultiLangEditorTabs expects
@@ -680,6 +722,45 @@ async function onImportConfirmed(): Promise<void> {
     importPayload.value = null;
 }
 
+// ── Version history helpers ──────────────────────────────────────────────────
+
+/**
+ * Chip color per revision status — mirrors statusBadgeColor but for the
+ * version history panel which uses a different visual context.
+ * PUBLISHED → positive (green)   the live version
+ * APPROVED  → info (blue)        frozen, sent to translators
+ * DRAFT     → warning (amber)    current working copy
+ * ARCHIVED  → grey               superseded, historical record
+ */
+function revisionChipColor(status: RevisionSummary['status']): string {
+    switch (status) {
+        case 'PUBLISHED': return 'positive';
+        case 'APPROVED': return 'info';
+        case 'ARCHIVED': return 'grey-5';
+        default: return 'warning';
+    }
+}
+
+function statusLabelForRevision(status: RevisionSummary['status']): string {
+    switch (status) {
+        case 'PUBLISHED': return t('translation_states.translated');   // reuse: "Published"
+        case 'APPROVED': return t('translation_states.translatable'); // reuse: "Approved"
+        case 'ARCHIVED': return t('input_labels.archived') ?? 'Archived';
+        default: return t('translation_states.editing');       // reuse: "Draft"
+    }
+}
+
+/** Format an ISO timestamp as a short locale date string. */
+function formatRevDate(iso: string): string {
+    try {
+        return new Date(iso).toLocaleDateString(undefined, {
+            year: 'numeric', month: 'short', day: 'numeric',
+        });
+    } catch {
+        return iso;
+    }
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────
 
 onMounted(async () => {
@@ -736,6 +817,24 @@ h5 {
     font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.3px;
+}
+
+/* Version history chip strip */
+.version-history {
+    &__label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+}
+
+.version-chip {
+    cursor: default;
+
+    &__label {
+        font-size: 11px;
+        font-weight: 600;
+    }
 }
 
 /* Description tooltip — plain text, comfortable reading width */

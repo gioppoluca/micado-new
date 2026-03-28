@@ -82,6 +82,20 @@ export interface UserTypeTranslation {
  * Note: `user_type` (the flat label field) is NOT present — use
  * translations[sourceLang].title instead, which is the same value.
  */
+/**
+ * Single revision summary — lightweight, no translation content.
+ * Returned inside UserTypeFull.revisions[] by GET /user-types/:id.
+ * Read-only: never sent back to the backend on PUT.
+ */
+export interface RevisionSummary {
+    revisionNo: number;
+    status: 'DRAFT' | 'APPROVED' | 'PUBLISHED' | 'ARCHIVED';
+    createdAt?: string;
+    /** Display name of the actor who created this revision (already unpacked from JSONB). */
+    createdByName?: string;
+    publishedAt?: string;
+}
+
 export interface UserTypeFull {
     id?: number;
     status?: UserTypeStatus;
@@ -93,6 +107,13 @@ export interface UserTypeFull {
      * On PUT: present entries are upserted; absent entries are left untouched.
      */
     translations?: Record<string, UserTypeTranslation>;
+
+    /**
+     * All revisions of this item, sorted ascending by revision_no.
+     * Populated by GET /user-types/:id — no extra API call needed.
+     * Not sent to the backend on PUT (ignored if present).
+     */
+    revisions?: RevisionSummary[];
 }
 
 export type CreateUserTypePayload = Omit<UserType, 'id'> & {
@@ -336,7 +357,10 @@ export function registerUserTypeMocks(mock: MockRegistry): void {
         if (idx === -1) return [404, { error: { message: `UserType ${id} not found` } }];
         const body = (cfg as unknown as { data?: string }).data;
         const p: Partial<UserType> = body ? JSON.parse(body) : {};
-        const patched: UserType = { ...mockStore[idx]!, ...p };
+        // Extract base to typed variable — exactOptionalPropertyTypes forbids
+        // spreading an array-indexed value directly into a typed assignment.
+        const base: UserType = mockStore[idx] as UserType;
+        const patched: UserType = { ...base, ...p };
         mockStore[idx] = patched;
         if (mockFull[id]) mockFull[id].status = patched.status;
         logger.debug('[mock] PATCH /user-types/:id', { id, fields: Object.keys(p) });
