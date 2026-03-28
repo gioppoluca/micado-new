@@ -17,67 +17,73 @@
   -->
     <div class="rich-text-editor">
 
-        <!-- ── Toolbar ────────────────────────────────────────────────────── -->
-        <div v-if="!readonly" class="editor-toolbar row items-center q-gutter-xs q-pa-xs">
-            <q-btn flat dense round icon="format_bold" :class="{ 'text-accent': editor?.isActive('bold') }"
-                @click="editor?.chain().focus().toggleBold().run()" />
+        <!-- ── Single border frame — toolbar + content share one border so left
+             edges are physically identical. No double-border misalignment. -->
+        <div :class="readonly ? 'editor-frame editor-frame--readonly' : 'editor-frame'">
 
-            <q-btn flat dense round icon="format_italic" :class="{ 'text-accent': editor?.isActive('italic') }"
-                @click="editor?.chain().focus().toggleItalic().run()" />
+            <!-- ── Toolbar ────────────────────────────────────────────────────── -->
+            <div v-if="!readonly" class="editor-toolbar row items-center q-gutter-xs">
+                <q-btn flat dense round icon="format_bold" :class="{ 'text-accent': editor?.isActive('bold') }"
+                    @click="editor?.chain().focus().toggleBold().run()" />
 
-            <q-separator vertical inset class="q-mx-xs" />
+                <q-btn flat dense round icon="format_italic" :class="{ 'text-accent': editor?.isActive('italic') }"
+                    @click="editor?.chain().focus().toggleItalic().run()" />
 
-            <q-btn flat dense round icon="link" :class="{ 'text-accent': editor?.isActive('link') }"
-                :disable="isSelectionEmpty" @click="openLinkDialog">
-                <q-tooltip v-if="isSelectionEmpty">{{ t('link_modal.selected') }}</q-tooltip>
-            </q-btn>
+                <q-separator vertical inset class="q-mx-xs" />
 
-            <q-btn flat dense round icon="image" @click="showImageDialog = true" />
+                <q-btn flat dense round icon="link" :class="{ 'text-accent': editor?.isActive('link') }"
+                    :disable="isSelectionEmpty" @click="openLinkDialog">
+                    <q-tooltip v-if="isSelectionEmpty">{{ t('link_modal.selected') }}</q-tooltip>
+                </q-btn>
 
-            <q-separator vertical inset class="q-mx-xs" />
+                <q-btn flat dense round icon="image" @click="showImageDialog = true" />
 
-            <q-btn flat dense round icon="undo" :disable="!editor?.can().undo()"
-                @click="editor?.chain().focus().undo().run()" />
+                <q-separator vertical inset class="q-mx-xs" />
 
-            <q-btn flat dense round icon="redo" :disable="!editor?.can().redo()"
-                @click="editor?.chain().focus().redo().run()" />
+                <q-btn flat dense round icon="undo" :disable="!editor?.can().undo()"
+                    @click="editor?.chain().focus().undo().run()" />
 
-            <q-space />
+                <q-btn flat dense round icon="redo" :disable="!editor?.can().redo()"
+                    @click="editor?.chain().focus().redo().run()" />
 
-            <!-- Conteggio parole — CharacterCount extension (rimpiazza computed manuale) -->
-            <span class="text-caption text-grey-6">
-                {{ t('text_editor.word_count') }}: {{ wordCount }}
-            </span>
-            <span v-if="hasCharError" class="text-caption text-negative q-ml-xs">
-                (max {{ maxCharLimit }})
-            </span>
+                <q-space />
 
-            <!-- Slot per pulsanti extra (approvazione, versioning, ecc.) -->
-            <slot name="toolbar-extra" />
-        </div>
+                <!-- Conteggio parole — CharacterCount extension (rimpiazza computed manuale) -->
+                <span class="text-caption text-grey-6">
+                    {{ t('text_editor.word_count') }}: {{ wordCount }}
+                </span>
+                <span v-if="hasCharError" class="text-caption text-negative q-ml-xs">
+                    (max {{ maxCharLimit }})
+                </span>
 
-        <!-- ── BubbleMenu link ───────────────────────────────────────────────── -->
-        <BubbleMenu v-if="editor && !readonly" :editor="editor" :should-show="shouldShowBubbleMenu"
-            class="editor-bubble-menu">
-            <template v-if="bubbleMode === 'form'">
-                <q-input v-model="bubbleLinkUrl" dense borderless dark placeholder="https://"
-                    class="editor-bubble-menu__input" @keydown.enter.prevent="applyBubbleLink"
-                    @keydown.esc="closeBubble" ref="bubbleInputRef" autofocus />
-                <q-btn flat dense dark icon="check" color="positive" @click="applyBubbleLink" />
-                <q-btn v-if="editor?.isActive('link')" flat dense dark icon="link_off" color="negative"
-                    @click="removeLink" />
-                <q-btn flat dense dark icon="close" @click="closeBubble" />
-            </template>
-            <template v-else>
-                <q-btn flat dense dark size="sm" :icon="editor?.isActive('link') ? 'edit' : 'add_link'"
-                    :label="editor?.isActive('link') ? t('button.update_link') : t('button.add_link')"
-                    @click="openBubble" />
-            </template>
-        </BubbleMenu>
+                <!-- Slot per pulsanti extra (approvazione, versioning, ecc.) -->
+                <slot name="toolbar-extra" />
+            </div>
 
-        <!-- ── Area editor ProseMirror ─────────────────────────────────────── -->
-        <editor-content v-if="editor" :editor="editor" class="editor-content"
-            :class="{ 'editor-content--readonly': readonly }" />
+            <!-- ── BubbleMenu link ───────────────────────────────────────────────── -->
+            <BubbleMenu v-if="editor && !readonly" :editor="editor" :should-show="shouldShowBubbleMenu"
+                class="editor-bubble-menu">
+                <template v-if="bubbleMode === 'form'">
+                    <q-input v-model="bubbleLinkUrl" dense borderless dark placeholder="https://"
+                        class="editor-bubble-menu__input" @keydown.enter.prevent="applyBubbleLink"
+                        @keydown.esc="closeBubble" ref="bubbleInputRef" autofocus />
+                    <q-btn flat dense dark icon="check" color="positive" @click="applyBubbleLink" />
+                    <q-btn v-if="editor?.isActive('link')" flat dense dark icon="link_off" color="negative"
+                        @click="removeLink" />
+                    <q-btn flat dense dark icon="close" @click="closeBubble" />
+                </template>
+                <template v-else>
+                    <q-btn flat dense dark size="sm" :icon="editor?.isActive('link') ? 'edit' : 'add_link'"
+                        :label="editor?.isActive('link') ? t('button.update_link') : t('button.add_link')"
+                        @click="openBubble" />
+                </template>
+            </BubbleMenu>
+
+            <!-- ── Area editor ProseMirror ─────────────────────────────────────── -->
+            <editor-content v-if="editor" :editor="editor" class="editor-content"
+                :class="{ 'editor-content--readonly': readonly }" />
+
+        </div><!-- /editor-frame -->
 
         <!-- ── Link dialog (fallback per click toolbar) ──────────────────── -->
         <q-dialog v-model="showLinkDialog" persistent>
@@ -149,6 +155,7 @@ import { FileHandler } from '@tiptap/extension-file-handler';
 import { Markdown } from 'tiptap-markdown';
 import { logger } from 'src/services/Logger';
 import InternalEntityMention from 'src/extensions/InternalEntityMention';
+import InternalEntityMentionSuggestion from 'src/extensions/InternalEntityMentionSuggestion';
 
 const { t } = useI18n();
 
@@ -236,8 +243,15 @@ const editor = useEditor({
          */
         Markdown.configure({ html: false, transformPastedText: true }),
 
-        /** Mention MICADO (@[type,id](text)) */
+        /** Mark — renders existing @[type,id](text) syntax from DB */
         InternalEntityMention,
+
+        /**
+         * Extension — handles @ typing, shows popup, inserts the mark.
+         * Must be a separate Extension (not inside the Mark) so that
+         * this.editor is fully mounted when addProseMirrorPlugins() runs.
+         */
+        InternalEntityMentionSuggestion,
     ],
 
     onUpdate({ editor: ed }: { editor: Editor }) {
@@ -431,26 +445,32 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped lang="scss">
-.editor-toolbar {
+.editor-frame {
     border: 1px solid $grey-4;
-    border-bottom: none;
-    border-radius: 4px 4px 0 0;
+    border-radius: 4px;
+    overflow: hidden; // clips children so border-radius shows correctly
+
+    &--readonly {
+        background: $grey-2;
+    }
+}
+
+.editor-toolbar {
+    // No border here — the frame provides the outer border.
+    border-bottom: 1px solid $grey-4;
+    border-radius: 0;
     background: $grey-2;
+    // Left padding = 8px so toolbar buttons left-align with editor text.
+    // We use padding-left directly (not q-pa-xs on the element) so we control
+    // the exact value that ProseMirror padding-left matches.
+    padding: 2px 4px 2px 4px;
 }
 
 .editor-content {
-    border: 1px solid $grey-4;
-    border-radius: 0 0 4px 4px;
+    // No border — frame provides it.
     min-height: 120px;
-    padding: 8px 12px;
     font-size: 16px;
     background: $grey-3;
-
-    &--readonly {
-        border-radius: 4px;
-        background: $grey-2;
-        cursor: default;
-    }
 }
 
 
@@ -471,6 +491,13 @@ onBeforeUnmount(() => {
 :deep(.ProseMirror) {
     outline: none;
     min-height: 100px;
+    // Padding here (not on .editor-content) keeps left edge of text flush with toolbar.
+    // q-pa-xs on the toolbar = 4px; we match with 4px left so text starts at same x.
+    // padding-left matches .editor-toolbar padding-left exactly (8px)
+    // so the first character of text and the first toolbar button icon are at the same x.
+    // Left padding 8px = toolbar padding-left (4px) + q-btn dense internal padding (4px)
+    // so text left edge aligns with icon glyph left edge.
+    padding: 8px 12px 8px 8px;
 
     p {
         margin: 0.5em 0;
