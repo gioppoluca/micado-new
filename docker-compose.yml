@@ -36,12 +36,13 @@ services:
     labels:
       - traefik.enable=false
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_SUPERUSER} -d ${POSTGRES_DB}"]
+      test:
+        ["CMD-SHELL", "pg_isready -U ${POSTGRES_SUPERUSER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 12
       start_period: 20s
-  
+
   cache:
     image: redis:7.4-alpine
     command: ["redis-server", "--appendonly", "yes"]
@@ -58,7 +59,15 @@ services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.5.3
     depends_on: [db]
-    command: ["start", "--import-realm", "--proxy-headers", "xforwarded", "--http-enabled", "true"]
+    command:
+      [
+        "start",
+        "--import-realm",
+        "--proxy-headers",
+        "xforwarded",
+        "--http-enabled",
+        "true",
+      ]
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD}
@@ -98,7 +107,7 @@ services:
       KEYCLOAK_EXPECTED_AUDIENCE: ${BACKEND_KEYCLOAK_EXPECTED_AUDIENCE}
       POSTGRES_DB: ${POSTGRES_DB}
       MICADO_APP_PASSWORD: ${MICADO_APP_PASSWORD}
-      
+      PIPER_BASE_URL: http://piper:8080
       DATABASE_URL: postgres://${APP_DB_USER}:${MICADO_APP_PASSWORD}@db:5432/${POSTGRES_DB}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       FRONTEND_LOG_LEVEL: ${FRONTEND_LOG_LEVEL:-info}
@@ -115,6 +124,7 @@ services:
       - traefik.http.services.backend.loadbalancer.server.port=${BACKEND_PORT}
     volumes:
       - bootstrap_data:/bootstrap
+      - piper_audio:/audio
 
   migrants:
     build:
@@ -181,7 +191,7 @@ services:
       GITEA__server__HTTP_PORT: 3000
       GITEA__security__INSTALL_LOCK: "true"
       GITEA__service__DISABLE_REGISTRATION: "true"
-      
+
     volumes:
       - gitea_data:/data
     labels:
@@ -191,7 +201,8 @@ services:
       - traefik.http.routers.gitea.middlewares=sec-headers@file
       - traefik.http.services.gitea.loadbalancer.server.port=3000
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/healthz >/dev/null"]
+      test:
+        ["CMD-SHELL", "curl -fsS http://localhost:3000/api/healthz >/dev/null"]
       interval: 10s
       timeout: 5s
       retries: 18
@@ -278,15 +289,15 @@ services:
       REDIS_HOST: cache
       WEBLATE_GIT_REPO: http://weblate-bot:${GITEA_WEBLATE_PASSWORD}@gitea:3000/weblate-bot/translations.git
       GIT_CONFIG_GLOBAL: /home/weblate/.gitconfig
-#      GIT_ALLOW_PROTOCOL: http:https
-#      GIT_CONFIG_COUNT: "1"
-#      GIT_CONFIG_KEY_0: protocol.http.allow
-#      GIT_CONFIG_VALUE_0: always
+    #      GIT_ALLOW_PROTOCOL: http:https
+    #      GIT_CONFIG_COUNT: "1"
+    #      GIT_CONFIG_KEY_0: protocol.http.allow
+    #      GIT_CONFIG_VALUE_0: always
     volumes:
       - weblate_data:/app/data
       - bootstrap_data:/bootstrap:ro
       - ./infrastructure/weblate/config/settings-override.py:/app/data/settings-override.py:ro
-#      - ./infrastructure/weblate/config/gitconfig:/app/data/home/.gitconfig:ro
+    #      - ./infrastructure/weblate/config/gitconfig:/app/data/home/.gitconfig:ro
     labels:
       - traefik.enable=true
       - traefik.http.routers.weblate.rule=Host(`weblate.${BASE_DOMAIN}`)
@@ -317,10 +328,10 @@ services:
       GIT_CONFIG_GLOBAL: /home/weblate/.gitconfig
       MICADO_SOURCE_LANG: ${MICADO_SOURCE_LANG:-it}
       MICADO_CATEGORIES: ${MICADO_CATEGORIES:-news,events,categories}
-#      GIT_ALLOW_PROTOCOL: http:https
-#      GIT_CONFIG_COUNT: "1"
-#      GIT_CONFIG_KEY_0: protocol.http.allow
-#      GIT_CONFIG_VALUE_0: always   
+      #      GIT_ALLOW_PROTOCOL: http:https
+      #      GIT_CONFIG_COUNT: "1"
+      #      GIT_CONFIG_KEY_0: protocol.http.allow
+      #      GIT_CONFIG_VALUE_0: always
 
       WEBLATE_URL: http://weblate:8080
       WEBLATE_PROJECT_NAME: micado
@@ -328,7 +339,7 @@ services:
       WEBLATE_PROJECT_WEB: http://weblate.local
       WEBLATE_PROJECT_INSTRUCTIONS: Micado translation project bootstrap managed by Docker Compose.
       WEBLATE_IMPORT_COMPONENTS: "true"
-#      WEBLATE_GIT_REPO: http://gitea:3000/weblate-bot/translations.git
+      #      WEBLATE_GIT_REPO: http://gitea:3000/weblate-bot/translations.git
       WEBLATE_GIT_BRANCH: main
       WEBLATE_FILEMASK: backend/*.json
       WEBLATE_BASE_FILE_TEMPLATE: backend/en.json
@@ -341,9 +352,28 @@ services:
       - bootstrap_data:/bootstrap:ro
       - ./infrastructure/weblate/config/settings-override.py:/app/data/settings-override.py:ro
       - ./infrastructure/weblate/init:/init:ro
-#      - ./infrastructure/weblate/config/gitconfig:/app/data/home/.gitconfig:ro
+    #      - ./infrastructure/weblate/config/gitconfig:/app/data/home/.gitconfig:ro
     entrypoint: ["sh", "/init/weblate-init.sh"]
     restart: "no"
+
+  piper:
+    build:
+      context: ./apps/piper
+      dockerfile: Dockerfile
+    environment:
+      MODELS_DIR: /models
+      OUTPUT_DIR: /audio
+    volumes:
+      - piper_models:/models
+      - piper_audio:/audio
+    labels:
+      - traefik.enable=false
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
 
 volumes:
   db_data:
@@ -351,4 +381,6 @@ volumes:
   keycloak_data:
   gitea_data:
   weblate_data:
-  bootstrap_data:  
+  bootstrap_data:
+  piper_models:
+  piper_audio:
