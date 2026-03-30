@@ -9,3 +9,5 @@ export * from './content-item.model';
 export * from './content-revision.model';
 export * from './content-revision-translation.model';
 export * from './content-item-relation.model';
+export * from './document-type-legacy.model';
+export * from './document-type-full.model';
