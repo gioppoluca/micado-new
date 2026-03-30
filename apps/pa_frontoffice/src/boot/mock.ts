@@ -29,10 +29,12 @@ export default defineBoot(async () => {
     const { registerLanguageMocks } = await import('src/api/language.api');
     const { registerSettingsMocks } = await import('src/api/settings.api');
     const { registerFeaturesMocks } = await import('src/api/features.api');
+    const { registerDocumentTypeMocks } = await import('src/api/document-type.api');
 
     registerLanguageMocks(adapter);
     registerSettingsMocks(adapter);
     registerFeaturesMocks(adapter);
+    registerDocumentTypeMocks(adapter);
 
     logger.warn('[boot:mock] all mock handlers registered');
 });

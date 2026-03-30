@@ -113,7 +113,9 @@ export default {
     "upload_file": "Upload a CSV or JSON-file",
     "api_link": "Provide the link to an external data source. Please note, if metadata is queried from the external source, not all fields are mandatory, except 'Link', 'Board' and 'Transformation function'",
     "chart_type": "Select BAR for bar chart, LINE for line chart and PIE for pie chart",
-    "transformation_function": "Choose the function the queried data should be transformed into the correct format. Please contact a system administrator if unsure"
+    "transformation_function": "Choose the function the queried data should be transformed into the correct format. Please contact a system administrator if unsure",
+    "hotspot_click_to_add": "Click anywhere on the image to add a hotspot pin.",
+    "validity_duration_hint": "Leave empty if the document does not expire."
   },
   "menu": {
     "title": "My Tools",
@@ -341,7 +343,6 @@ export default {
     "icon": "Icon",
     "upload_model": "Upload document model",
     "upload_file": "Upload file",
-    "upload_doc_pics": "Upload document pictures",
     "doc_pics": "Document pictures",
     "doc_cost": "Document cost",
     "doc": "Document",
@@ -396,7 +397,12 @@ export default {
     "add_api": "Add API Link",
     "file_source": "Select data source",
     "data_source": "Data source",
-    "transformation_function": "Transformation function"
+    "transformation_function": "Transformation function",
+    "hotspot": "Hotspot",
+    "hotspot_message": "Description (tooltip text)",
+    "validity_duration": "Validity (days)",
+    "model_uploaded": "PDF model uploaded",
+    "upload_doc_pics": "Upload document pictures"
   },
   "profile": {
     "username": "Username",
