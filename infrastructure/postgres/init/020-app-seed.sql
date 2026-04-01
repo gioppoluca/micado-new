@@ -601,7 +601,7 @@ VALUES
     -- No i18n_extra needed.
     '{}'::jsonb,
     'intervention-types'
-)
+),
 
 -- ---------------------------------------------------------------------------
 -- TENANT
@@ -655,7 +655,7 @@ VALUES
     }'::jsonb,
     '{}'::jsonb,
     NULL
-),
+)
 
 ON CONFLICT (code) DO UPDATE SET
     name               = EXCLUDED.name,

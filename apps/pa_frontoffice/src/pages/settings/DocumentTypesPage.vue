@@ -240,14 +240,14 @@
             <q-item-section>{{ t('input_labels.name') }}</q-item-section>
             <q-item-section style="min-width:100px; max-width:100px" class="flex flex-center">{{
                 t('input_labels.is_published')
-                }}</q-item-section>
+            }}</q-item-section>
             <q-item-section style="min-width:120px; max-width:130px" class="flex flex-center">{{
                 t('input_labels.transl_state')
-                }}</q-item-section>
+            }}</q-item-section>
             <q-item-section style="min-width:48px; max-width:48px" class="flex flex-center">{{ t('input_labels.edit')
-                }}</q-item-section>
+            }}</q-item-section>
             <q-item-section style="min-width:48px; max-width:48px" class="flex flex-center">{{ t('button.delete')
-                }}</q-item-section>
+            }}</q-item-section>
         </q-item>
 
         <q-list bordered separator>
@@ -607,12 +607,25 @@ async function onSave(): Promise<void> {
         ...(form.value.issuer ? { issuer: form.value.issuer } : {}),
     };
 
+    // Mirror the same empty-translation filter applied to document translations:
+    // strip hotspot translation entries where both title and message are blank,
+    // unless the lang is sourceLang (always kept so the backend has something to save).
+    const cleanedHotspots: DocumentHotspot[] = form.value.hotspots.map(h => ({
+        ...h,
+        translations: Object.fromEntries(
+            Object.entries(h.translations ?? {}).filter(([lang, tr]) => {
+                if (lang === srcLang) return true;
+                return (tr.title?.trim() ?? '') !== '' || (tr.message?.trim() ?? '') !== '';
+            }),
+        ),
+    }));
+
     const full: DocumentTypeFull = {
         status: form.value.status,
         sourceLang: srcLang,
         dataExtra,
         translations: Object.fromEntries(translationEntries),
-        hotspots: form.value.hotspots,
+        hotspots: cleanedHotspots,
         validatorIds: form.value.validable ? form.value.validatorIds : [],
     };
 

@@ -1,76 +1,71 @@
 /**
  * src/services/document-type-facade.service.ts
  *
- * Facade bridging the generic Item/Revision/Translation core to the two
- * consumer-specific DTOs for DOCUMENT_TYPE content:
- *
- *   DocumentTypeLegacy  — flat, lightweight; used by list (GET /document-types)
- *                         and create (POST /document-types). Contains only the
- *                         sourceLang translation so the list never pays a
- *                         per-language query cost.
- *
- *   DocumentTypeFull    — rich; used by single-item GET (/document-types/:id)
- *                         and PUT save (/document-types/:id). Contains ALL
- *                         per-language translation rows embedded in `translations`.
+ * Facade for DOCUMENT_TYPE content — bridges the generic Item/Revision/
+ * Translation/Relation core to the consumer DTOs.
  *
  * ── API surface ──────────────────────────────────────────────────────────────
  *
- *   GET  /document-types          → find()        → DocumentTypeLegacy[]  (list)
- *   POST /document-types          → create()      → DocumentTypeLegacy    (flat)
- *   GET  /document-types/:id      → findById()    → DocumentTypeFull      (form)
- *   PUT  /document-types/:id      → replaceById() → 204                   (save)
- *   PATCH /document-types/:id     → updateById()  → 204                   (toggle)
- *   DELETE /document-types/:id    → deleteById()  → 204
- *   GET  /document-types-migrant  → getTranslatedForFrontend()  (published, lang-resolved)
- *   GET  /document-types/to-production?id → publish()           (workflow action)
+ *   GET  /document-types          → find()
+ *   POST /document-types          → create()
+ *   GET  /document-types/:id      → findById()       ← rich, all relations
+ *   PUT  /document-types/:id      → replaceById()    ← full diff (hotspots, validators)
+ *   PATCH /document-types/:id     → updateById()
+ *   DELETE /document-types/:id    → deleteById()
+ *   GET  /document-types-migrant  → getTranslatedForFrontend()
+ *   GET  /document-types/to-production?id → publish()
  *
- * ── dataExtra field mapping ───────────────────────────────────────────────────
+ * ── Relation types used ──────────────────────────────────────────────────────
  *
- *   Legacy column     → data_extra key
- *   ──────────────────────────────────
- *   icon (text)       → icon             (base64 data URI)
- *   issuer (varchar)  → issuer
- *   model (text)      → model_template   (renamed to avoid JS reserved word)
- *   validable (bool)  → validable        (required in legacy, defaults to false here)
- *   validity_duration → validity_duration
+ *   'hotspot'   parent=DOCUMENT_TYPE  child=PICTURE_HOTSPOT
+ *               relation_extra = { picture_id: string, x: number, y: number }
+ *               sort_order = hotspot display order
  *
- * ── Actor stamp ──────────────────────────────────────────────────────────────
+ *   'validator' parent=DOCUMENT_TYPE  child=TENANT
+ *               relation_extra = {}
+ *               sort_order = 0
  *
- *   Every write method calls buildActorStamp(this.currentUser) and writes the
- *   result to content_item.created_by / updated_by and content_revision.created_by
- *   / approved_by / published_by.  The stamp shape is { sub, username, name, realm }.
+ * ── Pictures ─────────────────────────────────────────────────────────────────
  *
- * ── Scope ────────────────────────────────────────────────────────────────────
- *
- *   TRANSIENT — a new instance per HTTP request so each instance holds its own
- *   currentUser. SINGLETON would share state across concurrent requests.
+ *   Stored as data_extra.pictures[] — pure JSONB, no DB rows.
+ *   Each picture has a stable UUID generated once by the facade.
+ *   This UUID is used as picture_id in hotspot relation_extra entries.
+ *   The facade validates that every hotspot.pictureId references an id
+ *   present in data_extra.pictures[] at write time.
  */
 
 import { inject, injectable, BindingScope } from '@loopback/core';
 import { Filter, repository } from '@loopback/repository';
 import { HttpErrors } from '@loopback/rest';
 import { SecurityBindings, UserProfile } from '@loopback/security';
+import { WinstonLogger, LoggingBindings } from '@loopback/logging';
+import { v4 as uuidv4 } from 'uuid';
 import {
     ContentItem,
     ContentRevision,
     ContentRevisionTranslation,
 } from '../models';
 import { DocumentTypeLegacy } from '../models/document-type-legacy.model';
-import { DocumentTypeFull, RevisionSummary } from '../models/document-type-full.model';
+import {
+    DocumentTypeFull,
+    DocumentHotspot,
+    HotspotTranslationEntry,
+    RevisionSummary,
+} from '../models/document-type-full.model';
 import {
     ContentItemRepository,
     ContentRevisionRepository,
     ContentRevisionTranslationRepository,
+    ContentItemRelationRepository,
 } from '../repositories';
 import { buildActorStamp, ActorStamp } from '../auth/actor-stamp';
 import { TranslationWorkflowOrchestratorService } from './translation-workflow-orchestrator.service';
 
 const DOCUMENT_TYPE_CODE = 'DOCUMENT_TYPE';
+const PICTURE_HOTSPOT_CODE = 'PICTURE_HOTSPOT';
+const RELATION_HOTSPOT = 'hotspot';
+const RELATION_VALIDATOR = 'validator';
 
-/**
- * Fallback stamp for background jobs / CLI contexts where no JWT is present.
- * Distinguishable from real users by sub='system'.
- */
 const SYSTEM_STAMP: ActorStamp = {
     sub: 'system',
     username: 'system',
@@ -90,22 +85,21 @@ export class DocumentTypeFacadeService {
         @repository(ContentRevisionTranslationRepository)
         protected contentRevisionTranslationRepository: ContentRevisionTranslationRepository,
 
-        // Optional: facade still works in background contexts without a JWT.
+        @repository(ContentItemRelationRepository)
+        protected contentItemRelationRepository: ContentItemRelationRepository,
+
         @inject(SecurityBindings.USER, { optional: true })
         protected currentUser: UserProfile | undefined,
 
-        // Optional: the facade still works in test environments where DBOS is
-        // not running.
+        @inject(LoggingBindings.WINSTON_LOGGER)
+        protected logger: WinstonLogger,
+
         @inject(TranslationWorkflowOrchestratorService.BINDING, { optional: true })
         protected translationOrchestrator: TranslationWorkflowOrchestratorService | undefined,
     ) { }
 
-    // ── List (lean) ───────────────────────────────────────────────────────────
+    // ── List ──────────────────────────────────────────────────────────────────
 
-    /**
-     * Returns DocumentTypeLegacy[] ordered by externalKey (legacy id).
-     * Each item carries only the sourceLang translation — no per-language overhead.
-     */
     async find(_filter?: Filter<DocumentTypeLegacy>): Promise<DocumentTypeLegacy[]> {
         const items = await this.contentItemRepository.find({
             where: { typeCode: DOCUMENT_TYPE_CODE },
@@ -113,19 +107,14 @@ export class DocumentTypeFacadeService {
         });
 
         const result: DocumentTypeLegacy[] = [];
-
         for (const item of items) {
             const revision = await this.findPreferredRevision(item.id!);
             if (!revision) continue;
-
-            const sourceTranslation =
-                await this.contentRevisionTranslationRepository.findOne({
-                    where: { revisionId: revision.id, lang: revision.sourceLang },
-                });
-
-            result.push(this.toLegacyDto(item, revision, sourceTranslation ?? undefined));
+            const sourceTr = await this.contentRevisionTranslationRepository.findOne({
+                where: { revisionId: revision.id, lang: revision.sourceLang },
+            });
+            result.push(this.toLegacyDto(item, revision, sourceTr ?? undefined));
         }
-
         return result;
     }
 
@@ -136,60 +125,86 @@ export class DocumentTypeFacadeService {
         return { count: result.count };
     }
 
-    // ── Single item (rich — form open) ────────────────────────────────────────
+    // ── Single item (rich) ────────────────────────────────────────────────────
 
     /**
-     * Returns DocumentTypeFull with ALL per-language translations embedded
-     * and the full version history panel data. One round-trip — the PA form
-     * needs no second call.
+     * Assembles DocumentTypeFull in parallel:
+     *   1. content_revision + translations (document-level)
+     *   2. content_item_relation 'hotspot' rows → PICTURE_HOTSPOT items + their translations
+     *   3. content_item_relation 'validator' rows → validatorIds[]
+     *   4. all revision summaries for version history panel
      */
     async findById(id: number): Promise<DocumentTypeFull> {
         const item = await this.findItemByLegacyIdOrFail(id);
         const revision = await this.findPreferredRevision(item.id!);
-
         if (!revision) {
             throw new HttpErrors.NotFound(`No revision found for DOCUMENT_TYPE ${id}`);
         }
 
-        const [translationRows, allRevisions] = await Promise.all([
-            this.contentRevisionTranslationRepository.find({
-                where: { revisionId: revision.id! },
-            }),
-            // All revisions for the version history panel — metadata only, no
-            // translation content. Ascending so the UI shows v1, v2, v3…
-            this.contentRevisionRepository.find({
-                where: { itemId: item.id! },
-                order: ['revisionNo ASC'],
-                fields: {
-                    id: true,
-                    revisionNo: true,
-                    status: true,
-                    createdAt: true,
-                    createdBy: true,
-                    publishedAt: true,
-                },
-            }),
-        ]);
+        const [translationRows, hotspotRelations, validatorRelations, allRevisions] =
+            await Promise.all([
+                this.contentRevisionTranslationRepository.find({
+                    where: { revisionId: revision.id! },
+                }),
+                this.contentItemRelationRepository.find({
+                    where: { parentItemId: item.id!, relationType: RELATION_HOTSPOT },
+                    order: ['sortOrder ASC'],
+                }),
+                this.contentItemRelationRepository.find({
+                    where: { parentItemId: item.id!, relationType: RELATION_VALIDATOR },
+                }),
+                this.contentRevisionRepository.find({
+                    where: { itemId: item.id! },
+                    order: ['revisionNo ASC'],
+                    fields: { id: true, revisionNo: true, status: true, createdAt: true, createdBy: true, publishedAt: true },
+                }),
+            ]);
 
-        return this.toFullDto(item, revision, translationRows, allRevisions);
+        // Load each hotspot's preferred revision + translations
+        const hotspots: DocumentHotspot[] = [];
+        for (const rel of hotspotRelations) {
+            const hotspotItem = await this.contentItemRepository.findById(rel.childItemId);
+            const hotspotRevision = await this.findPreferredRevision(hotspotItem.id!);
+            if (!hotspotRevision) continue;
+
+            const hotspotTrs = await this.contentRevisionTranslationRepository.find({
+                where: { revisionId: hotspotRevision.id! },
+            });
+
+            const translations: DocumentHotspot['translations'] = {};
+            for (const tr of hotspotTrs) {
+                translations[tr.lang] = Object.assign(new HotspotTranslationEntry(), {
+                    title: tr.title,
+                    message: (tr.i18nExtra as { message?: string })?.message ?? '',
+                    tStatus: tr.tStatus,
+                });
+            }
+
+            const extra = rel.relationExtra as { picture_id?: string; x?: number; y?: number };
+            hotspots.push(
+                Object.assign(new DocumentHotspot(), {
+                    id: hotspotItem.id,
+                    pictureId: extra.picture_id ?? '',
+                    x: extra.x ?? 0,
+                    y: extra.y ?? 0,
+                    sortOrder: rel.sortOrder,
+                    translations,
+                }),
+            );
+        }
+
+        const validatorIds = validatorRelations.map(r => r.childItemId);
+
+        return this.toFullDto(item, revision, translationRows, hotspots, validatorIds, allRevisions);
     }
 
     // ── Create ────────────────────────────────────────────────────────────────
 
     /**
-     * Creates item + revision + translations in one sequence.
-     *
-     * Accepts an optional `translations` map so the PA form can send all
-     * language content in the initial POST — no follow-up PUT needed for
-     * new records.
-     *
-     * The `dataExtra` bag carries all non-translatable metadata
-     * (icon, issuer, model_template, validable, validity_duration).
-     *
-     * Actor stamp written to:
-     *   content_item.created_by     ← stamp
-     *   content_item.updated_by     ← stamp (same at creation time)
-     *   content_revision.created_by ← stamp
+     * Creates item + revision + source translation.
+     * pictures[] in dataExtra are stored as-is; each must already have
+     * a stable UUID (the frontend generates them, or the facade can assign them).
+     * Hotspots are not accepted at create time — use PUT after creation.
      */
     async create(
         input: Omit<DocumentTypeLegacy, 'id' | 'status'> & {
@@ -199,6 +214,12 @@ export class DocumentTypeFacadeService {
         const stamp = buildActorStamp(this.currentUser);
         const externalKey = String(await this.nextExternalKey());
         const sourceLang = input.sourceLang ?? 'it';
+
+        // Ensure every picture in the incoming array has a stable UUID
+        const rawDataExtra = (input.dataExtra ?? {}) as Record<string, unknown>;
+        const pictures = this.ensurePictureIds(
+            (rawDataExtra.pictures as Array<Record<string, unknown>> | undefined) ?? [],
+        );
 
         const item = await this.contentItemRepository.create({
             typeCode: DOCUMENT_TYPE_CODE,
@@ -211,11 +232,7 @@ export class DocumentTypeFacadeService {
             revisionNo: 1,
             status: 'DRAFT',
             sourceLang,
-            // Ensure validable always has a value (required in legacy schema).
-            dataExtra: {
-                validable: false,
-                ...input.dataExtra,
-            },
+            dataExtra: { validable: false, ...rawDataExtra, pictures },
             ...(stamp && { createdBy: stamp }),
         });
 
@@ -234,7 +251,6 @@ export class DocumentTypeFacadeService {
                 });
             }
         } else {
-            // Fallback: single sourceLang row from the flat `document` field.
             await this.contentRevisionTranslationRepository.create({
                 revisionId: revision.id!,
                 lang: sourceLang,
@@ -259,68 +275,80 @@ export class DocumentTypeFacadeService {
     // ── Full replace (form save) ──────────────────────────────────────────────
 
     /**
-     * Replaces the full document type — metadata (dataExtra) + all translations
-     * — in one call. Used by PUT /document-types/:id (the PA form Save button).
+     * Full replace: metadata, document translations, hotspots, validators.
      *
-     * Languages absent from body.translations are NOT deleted — only upserted.
-     * Concurrent translator work on other languages is always preserved.
+     * Hotspot diff:
+     *   - id present in payload + in DB  → update relation_extra + translations
+     *   - id absent from payload         → delete relation + content_item
+     *   - id missing (new pin)           → create PICTURE_HOTSPOT content_item + relation
      *
-     * Handles DRAFT → APPROVED transition ("Send to translation" toggle):
-     *   - revision.status      → APPROVED
-     *   - revision.approved_at → now()
-     *   - revision.approved_by → actor stamp
-     *   - Non-source DRAFT translation rows → tStatus = 'STALE'
-     *   - Translation workflow started via orchestrator
+     * Validator diff: full replace (delete all existing, insert from validatorIds).
      *
-     * Actor stamp written to:
-     *   content_item.updated_by      ← stamp (every save)
-     *   content_revision.approved_by ← stamp (only on DRAFT → APPROVED)
-     *   content_revision.approved_at ← now() (same condition)
+     * DRAFT→APPROVED transition:
+     *   - revision.status → APPROVED
+     *   - non-source translations (document + all hotspots) → STALE
+     *   - translation workflow started
      */
     async replaceById(id: number, body: DocumentTypeFull): Promise<void> {
         const stamp = buildActorStamp(this.currentUser);
         const item = await this.findItemByLegacyIdOrFail(id);
         const draft = await this.findOrCreateDraft(item);
-
         const sourceLang = body.sourceLang ?? draft.sourceLang;
+
+        this.logger.info('[DocumentTypeFacadeService.replaceById] entry', {
+            id,
+            itemId: item.id,
+            draftId: draft.id,
+            status: body.status,
+            sourceLang,
+            langCount: Object.keys(body.translations ?? {}).length,
+            hotspotCount: (body.hotspots ?? []).length,
+            validatorCount: (body.validatorIds ?? []).length,
+            pictureCount: ((body.dataExtra?.pictures ?? []) as unknown[]).length,
+        });
 
         await this.contentItemRepository.updateById(item.id!, {
             ...(stamp && { updatedBy: stamp }),
         });
 
+        // ── data_extra: ensure picture UUIDs are stable ────────────────────
+        const rawDataExtra = (body.dataExtra ?? {}) as Record<string, unknown>;
+        const pictures = this.ensurePictureIds(
+            (rawDataExtra.pictures as Array<Record<string, unknown>> | undefined) ?? [],
+        );
+
         await this.contentRevisionRepository.updateById(draft.id!, {
             sourceLang,
-            dataExtra: {
-                validable: false,           // safe default — body always overrides
-                ...(body.dataExtra ?? {}),
-            },
+            dataExtra: { validable: false, ...rawDataExtra, pictures },
         });
 
-        // Upsert all translations from the body
+        // ── Document-level translations ────────────────────────────────────
         for (const [lang, entry] of Object.entries(body.translations ?? {})) {
-            const existing = await this.contentRevisionTranslationRepository.findOne({
-                where: { revisionId: draft.id!, lang },
+            await this.upsertTranslation(draft.id!, lang, {
+                title: entry.title,
+                description: entry.description ?? '',
+                i18nExtra: {},
             });
-
-            if (existing) {
-                await this.contentRevisionTranslationRepository.updateById(existing.id!, {
-                    title: entry.title,
-                    description: entry.description ?? '',
-                    tStatus: 'DRAFT',
-                });
-            } else {
-                await this.contentRevisionTranslationRepository.create({
-                    revisionId: draft.id!,
-                    lang,
-                    title: entry.title,
-                    description: entry.description ?? '',
-                    i18nExtra: {},
-                    tStatus: 'DRAFT',
-                });
-            }
         }
 
-        // Handle DRAFT → APPROVED transition
+        // ── Hotspot diff ───────────────────────────────────────────────────
+        this.logger.info('[DocumentTypeFacadeService.replaceById] calling syncHotspots', {
+            id,
+            incomingHotspots: (body.hotspots ?? []).map(h => ({
+                id: h.id ?? null,
+                pictureId: h.pictureId,
+                x: h.x,
+                y: h.y,
+                langs: Object.keys(h.translations ?? {}),
+            })),
+        });
+        await this.syncHotspots(item, draft, sourceLang, body.hotspots ?? [], stamp);
+        this.logger.info('[DocumentTypeFacadeService.replaceById] syncHotspots complete', { id });
+
+        // ── Validator diff ─────────────────────────────────────────────────
+        await this.syncValidators(item, body.validatorIds ?? [], stamp);
+
+        // ── DRAFT → APPROVED transition ────────────────────────────────────
         if (body.status === 'APPROVED' && draft.status !== 'APPROVED') {
             await this.contentRevisionRepository.updateById(draft.id!, {
                 status: 'APPROVED',
@@ -328,22 +356,13 @@ export class DocumentTypeFacadeService {
                 ...(stamp && { approvedBy: stamp }),
             });
             await this.markNonSourceTranslationsStale(draft.id!, sourceLang);
+            await this.markHotspotTranslationsStale(item.id!, sourceLang);
             await this.startTranslationWorkflow(item, draft, sourceLang);
         }
     }
 
-    // ── Partial update (status toggle, icon-only, etc.) ───────────────────────
+    // ── Partial update ────────────────────────────────────────────────────────
 
-    /**
-     * Partial update — handles list-row status toggle and single-field patches
-     * (e.g. icon update without re-sending all translations).
-     * Does NOT touch translations.
-     *
-     * Actor stamp written to:
-     *   content_item.updated_by      ← stamp (always)
-     *   content_revision.approved_by ← stamp (only on DRAFT → APPROVED)
-     *   content_revision.approved_at ← now() (same condition)
-     */
     async updateById(id: number, patch: Partial<DocumentTypeLegacy>): Promise<void> {
         const stamp = buildActorStamp(this.currentUser);
         const item = await this.findItemByLegacyIdOrFail(id);
@@ -353,54 +372,46 @@ export class DocumentTypeFacadeService {
             ...(stamp && { updatedBy: stamp }),
         });
 
-        // Merge dataExtra patch (e.g. icon change, validable toggle)
         if (patch.dataExtra !== undefined) {
-            await this.contentRevisionRepository.updateById(draft.id!, {
-                dataExtra: { ...(draft.dataExtra ?? {}), ...patch.dataExtra },
-            });
+            const merged = { ...(draft.dataExtra ?? {}), ...patch.dataExtra } as Record<string, unknown>;
+            // Preserve existing pictures if patch doesn't include them
+            if (!patch.dataExtra.pictures && draft.dataExtra?.pictures) {
+                merged.pictures = (draft.dataExtra as Record<string, unknown>).pictures;
+            }
+            await this.contentRevisionRepository.updateById(draft.id!, { dataExtra: merged });
         }
 
-        // Patch the source-language translation if flat text fields are sent
         if (patch.document !== undefined || patch.description !== undefined) {
             const lang = patch.sourceLang ?? draft.sourceLang;
             const existing = await this.contentRevisionTranslationRepository.findOne({
                 where: { revisionId: draft.id!, lang },
             });
-
             if (existing) {
                 await this.contentRevisionTranslationRepository.updateById(existing.id!, {
                     title: patch.document !== undefined ? patch.document : existing.title,
-                    description: patch.description !== undefined
-                        ? patch.description
-                        : existing.description,
+                    description: patch.description !== undefined ? patch.description : existing.description,
                 });
             } else {
                 await this.contentRevisionTranslationRepository.create({
-                    revisionId: draft.id!,
-                    lang,
-                    title: patch.document ?? '',
-                    description: patch.description ?? '',
-                    i18nExtra: {},
-                    tStatus: 'DRAFT',
+                    revisionId: draft.id!, lang,
+                    title: patch.document ?? '', description: patch.description ?? '',
+                    i18nExtra: {}, tStatus: 'DRAFT',
                 });
             }
         }
 
-        // Handle status transition
         if (patch.status !== undefined && patch.status !== draft.status) {
-            const revisionUpdate: Parameters<
-                typeof this.contentRevisionRepository.updateById
-            >[1] = { status: patch.status };
-
+            const revisionUpdate: Parameters<typeof this.contentRevisionRepository.updateById>[1] = {
+                status: patch.status,
+            };
             if (patch.status === 'APPROVED') {
                 revisionUpdate.approvedAt = new Date().toISOString();
                 if (stamp) revisionUpdate.approvedBy = stamp;
             }
-
             await this.contentRevisionRepository.updateById(draft.id!, revisionUpdate);
-
             if (patch.status === 'APPROVED') {
                 await this.markNonSourceTranslationsStale(draft.id!, draft.sourceLang);
+                await this.markHotspotTranslationsStale(item.id!, draft.sourceLang);
                 await this.startTranslationWorkflow(item, draft, draft.sourceLang);
             }
         }
@@ -408,87 +419,60 @@ export class DocumentTypeFacadeService {
 
     async deleteById(id: number): Promise<void> {
         const item = await this.findItemByLegacyIdOrFail(id);
+        // Cascade: delete hotspot content_items linked to this document
+        const hotspotRelations = await this.contentItemRelationRepository.find({
+            where: { parentItemId: item.id!, relationType: RELATION_HOTSPOT },
+        });
+        for (const rel of hotspotRelations) {
+            await this.contentItemRepository.deleteById(rel.childItemId);
+        }
         await this.contentItemRepository.deleteById(item.id!);
     }
 
     // ── Migrant frontend ──────────────────────────────────────────────────────
 
-    /**
-     * Returns published document types in the best available language for the
-     * migrant frontend. Language resolution: currentLang → defaultLang.
-     * Mirrors the legacy double-UNION SQL query with an in-process fallback.
-     *
-     * Response shape matches the legacy `document_type + document_type_translation_prod`
-     * JOIN so the migrant frontend does not need changes.
-     */
     async getTranslatedForFrontend(
         defaultLang = 'it',
         currentLang = 'it',
     ): Promise<Array<Record<string, unknown>>> {
         const items = await this.contentItemRepository.find({
-            where: {
-                typeCode: DOCUMENT_TYPE_CODE,
-                publishedRevisionId: { neq: undefined },
-            },
+            where: { typeCode: DOCUMENT_TYPE_CODE, publishedRevisionId: { neq: undefined } },
         });
 
         const result: Array<Record<string, unknown>> = [];
-
         for (const item of items) {
             if (!item.publishedRevisionId) continue;
 
-            const revision = await this.contentRevisionRepository.findById(
-                item.publishedRevisionId,
-            );
+            const revision = await this.contentRevisionRepository.findById(item.publishedRevisionId);
 
             const tr =
                 (await this.contentRevisionTranslationRepository.findOne({
-                    where: {
-                        revisionId: item.publishedRevisionId,
-                        lang: currentLang,
-                        tStatus: 'PUBLISHED',
-                    },
+                    where: { revisionId: item.publishedRevisionId, lang: currentLang, tStatus: 'PUBLISHED' },
                 })) ??
                 (await this.contentRevisionTranslationRepository.findOne({
-                    where: {
-                        revisionId: item.publishedRevisionId,
-                        lang: defaultLang,
-                        tStatus: 'PUBLISHED',
-                    },
+                    where: { revisionId: item.publishedRevisionId, lang: defaultLang, tStatus: 'PUBLISHED' },
                 }));
 
             if (!tr) continue;
 
-            // Return the flat shape the migrant frontend expects, including all
-            // non-translatable metadata from data_extra.
+            // Spread data_extra so icon/issuer/validable/validity_duration are
+            // at the root level — matching the legacy flat JOIN shape.
+            // Strip pictures[] from the list response (images are heavy).
+            const { pictures: _pics, ...dataExtraWithoutPictures } = (revision.dataExtra ?? {}) as Record<string, unknown>;
+
             result.push({
                 id: Number(item.externalKey),
                 document: tr.title,
                 description: tr.description,
                 lang: tr.lang,
-                // Spread data_extra fields so legacy consumers that read
-                // icon / issuer / validable / validity_duration directly still work.
-                ...(revision.dataExtra ?? {}),
+                ...dataExtraWithoutPictures,
             });
         }
-
         return result;
     }
 
     // ── Publish ───────────────────────────────────────────────────────────────
 
-    /**
-     * Promotes the APPROVED revision to PUBLISHED and sets it as the live
-     * revision on content_item.published_revision_id.
-     *
-     * Enforces "only one PUBLISHED revision per item" by archiving any
-     * previously PUBLISHED revision before promoting the new one.
-     *
-     * Actor stamp written to:
-     *   content_revision.published_by ← stamp (or SYSTEM_STAMP)
-     *   content_revision.published_at ← now()
-     *   content_item.updated_by       ← stamp
-     */
     async publish(id: number): Promise<void> {
         const stamp = buildActorStamp(this.currentUser) ?? SYSTEM_STAMP;
         const item = await this.findItemByLegacyIdOrFail(id);
@@ -497,126 +481,374 @@ export class DocumentTypeFacadeService {
             where: { itemId: item.id!, status: 'APPROVED' },
             order: ['revisionNo DESC'],
         });
-
         if (!approved) {
             throw new HttpErrors.BadRequest(
                 `No APPROVED revision available for DOCUMENT_TYPE ${id}`,
             );
         }
 
-        // Promote to PUBLISHED
         await this.contentRevisionRepository.updateById(approved.id!, {
             status: 'PUBLISHED',
             publishedAt: new Date().toISOString(),
             publishedBy: stamp,
         });
 
-        // Point content_item to the newly published revision
         await this.contentItemRepository.updateById(item.id!, {
             publishedRevisionId: approved.id!,
             updatedBy: stamp,
         });
 
-        // Archive the previously PUBLISHED revision so only one is ever PUBLISHED
+        // Archive all previously PUBLISHED revisions
         const previouslyPublished = await this.contentRevisionRepository.find({
-            where: {
-                itemId: item.id!,
-                status: 'PUBLISHED',
-                id: { neq: approved.id! },
-            },
+            where: { itemId: item.id!, status: 'PUBLISHED', id: { neq: approved.id! } },
         });
         for (const old of previouslyPublished) {
-            await this.contentRevisionRepository.updateById(old.id!, {
-                status: 'ARCHIVED',
-            });
+            await this.contentRevisionRepository.updateById(old.id!, { status: 'ARCHIVED' });
         }
 
-        // Mark all APPROVED translation rows as PUBLISHED
-        const translations = await this.contentRevisionTranslationRepository.find({
+        // Promote APPROVED translation rows to PUBLISHED
+        const trs = await this.contentRevisionTranslationRepository.find({
             where: { revisionId: approved.id!, tStatus: 'APPROVED' },
         });
-        for (const tr of translations) {
-            await this.contentRevisionTranslationRepository.updateById(tr.id!, {
-                tStatus: 'PUBLISHED',
+        for (const tr of trs) {
+            await this.contentRevisionTranslationRepository.updateById(tr.id!, { tStatus: 'PUBLISHED' });
+        }
+
+        // Publish hotspot translations as well
+        const hotspotRelations = await this.contentItemRelationRepository.find({
+            where: { parentItemId: item.id!, relationType: RELATION_HOTSPOT },
+        });
+        for (const rel of hotspotRelations) {
+            const hotspotItem = await this.contentItemRepository.findById(rel.childItemId);
+            if (!hotspotItem.publishedRevisionId) continue;
+            const hotspotTrs = await this.contentRevisionTranslationRepository.find({
+                where: { revisionId: hotspotItem.publishedRevisionId, tStatus: 'APPROVED' },
+            });
+            for (const htr of hotspotTrs) {
+                await this.contentRevisionTranslationRepository.updateById(htr.id!, { tStatus: 'PUBLISHED' });
+            }
+        }
+    }
+
+    // ── Hotspot sync ──────────────────────────────────────────────────────────
+
+    /**
+     * Full diff between incoming hotspots[] and existing relation rows.
+     *
+     * Strategy:
+     *   1. Load all existing 'hotspot' relations for this document item.
+     *   2. Build a set of incoming ids (those that already have a UUID).
+     *   3. Delete relations (and their child content_items) not in the set.
+     *   4. For each incoming hotspot:
+     *      - id present → update relation_extra + upsert translations
+     *      - id absent  → create PICTURE_HOTSPOT content_item + relation + translations
+     */
+    protected async syncHotspots(
+        docItem: ContentItem,
+        docDraft: ContentRevision,
+        sourceLang: string,
+        incoming: DocumentHotspot[],
+        stamp: ActorStamp | undefined,
+    ): Promise<void> {
+        const existingRelations = await this.contentItemRelationRepository.find({
+            where: { parentItemId: docItem.id!, relationType: RELATION_HOTSPOT },
+        });
+
+        this.logger.info('[DocumentTypeFacadeService.syncHotspots] diff start', {
+            docItemId: docItem.id,
+            draftId: docDraft.id,
+            existingCount: existingRelations.length,
+            incomingCount: incoming.length,
+            existingIds: existingRelations.map(r => r.childItemId),
+            incomingIds: incoming.map(h => h.id ?? '(new)'),
+        });
+
+        const incomingIds = new Set(incoming.map(h => h.id).filter(Boolean));
+
+        // Delete removed hotspots
+        for (const rel of existingRelations) {
+            if (!incomingIds.has(rel.childItemId)) {
+                this.logger.info('[DocumentTypeFacadeService.syncHotspots] deleting removed hotspot', {
+                    relationId: rel.id,
+                    childItemId: rel.childItemId,
+                });
+                await this.contentItemRelationRepository.deleteById(rel.id!);
+                await this.contentItemRepository.deleteById(rel.childItemId);
+            }
+        }
+
+        // Create or update each incoming hotspot
+        for (const hotspot of incoming) {
+            const relationExtra = {
+                picture_id: hotspot.pictureId,
+                x: hotspot.x,
+                y: hotspot.y,
+            };
+
+            if (hotspot.id) {
+                // Existing hotspot — update relation_extra and sort_order
+                const existingRel = existingRelations.find(r => r.childItemId === hotspot.id);
+                if (existingRel) {
+                    this.logger.info('[DocumentTypeFacadeService.syncHotspots] updating existing hotspot', {
+                        hotspotId: hotspot.id,
+                        relationId: existingRel.id,
+                        x: hotspot.x, y: hotspot.y,
+                        pictureId: hotspot.pictureId,
+                        langs: Object.keys(hotspot.translations ?? {}),
+                    });
+                    await this.contentItemRelationRepository.updateById(existingRel.id!, {
+                        relationExtra,
+                        sortOrder: hotspot.sortOrder ?? existingRel.sortOrder,
+                    });
+                } else {
+                    this.logger.warn('[DocumentTypeFacadeService.syncHotspots] hotspot.id present but no matching relation found — treating as orphan, skipping update', {
+                        hotspotId: hotspot.id,
+                    });
+                }
+
+                // Upsert translations on the hotspot's draft revision
+                const hotspotItem = await this.contentItemRepository.findById(hotspot.id);
+                const hotspotDraft = await this.findOrCreateHotspotDraft(hotspotItem, stamp);
+                this.logger.info('[DocumentTypeFacadeService.syncHotspots] upserting translations for existing hotspot', {
+                    hotspotId: hotspot.id,
+                    hotspotDraftId: hotspotDraft.id,
+                    langs: Object.keys(hotspot.translations ?? {}),
+                    titles: Object.fromEntries(Object.entries(hotspot.translations ?? {}).map(([l, t]) => [l, t.title])),
+                });
+                await this.upsertHotspotTranslations(hotspotDraft.id!, hotspot.translations ?? {});
+            } else {
+                // New hotspot — create content_item + revision + translations + relation
+                this.logger.info('[DocumentTypeFacadeService.syncHotspots] creating new hotspot', {
+                    pictureId: hotspot.pictureId,
+                    x: hotspot.x, y: hotspot.y,
+                    langs: Object.keys(hotspot.translations ?? {}),
+                });
+
+                const hotspotItem = await this.contentItemRepository.create({
+                    typeCode: PICTURE_HOTSPOT_CODE,
+                    externalKey: String(await this.nextHotspotExternalKey()),
+                    ...(stamp && { createdBy: stamp, updatedBy: stamp }),
+                });
+
+                const hotspotRevision = await this.contentRevisionRepository.create({
+                    itemId: hotspotItem.id!,
+                    revisionNo: 1,
+                    status: 'DRAFT',
+                    sourceLang,
+                    dataExtra: {},
+                    ...(stamp && { createdBy: stamp }),
+                });
+
+                this.logger.info('[DocumentTypeFacadeService.syncHotspots] hotspot content_item created', {
+                    hotspotItemId: hotspotItem.id,
+                    hotspotRevisionId: hotspotRevision.id,
+                    langs: Object.keys(hotspot.translations ?? {}),
+                });
+
+                await this.upsertHotspotTranslations(hotspotRevision.id!, hotspot.translations ?? {});
+
+                await this.contentItemRelationRepository.create({
+                    parentItemId: docItem.id!,
+                    childItemId: hotspotItem.id!,
+                    relationType: RELATION_HOTSPOT,
+                    sortOrder: hotspot.sortOrder ?? 0,
+                    relationExtra,
+                    ...(stamp && { createdBy: stamp }),
+                });
+
+                this.logger.info('[DocumentTypeFacadeService.syncHotspots] relation created', {
+                    parentItemId: docItem.id,
+                    childItemId: hotspotItem.id,
+                    relationExtra,
+                });
+            }
+        }
+
+        this.logger.info('[DocumentTypeFacadeService.syncHotspots] diff complete', {
+            docItemId: docItem.id,
+            processedCount: incoming.length,
+        });
+    }
+
+    /**
+     * Upsert per-language translations for a hotspot revision.
+     * title → title column.
+     * message → i18n_extra.message (declared in PICTURE_HOTSPOT translation_schema).
+     */
+    protected async upsertHotspotTranslations(
+        revisionId: string,
+        translations: Record<string, { title: string; message?: string; tStatus?: string }>,
+    ): Promise<void> {
+        this.logger.debug('[DocumentTypeFacadeService.upsertHotspotTranslations]', {
+            revisionId,
+            langs: Object.keys(translations),
+            entries: Object.fromEntries(
+                Object.entries(translations).map(([l, t]) => [l, { title: t.title, message: t.message ?? '' }]),
+            ),
+        });
+        for (const [lang, entry] of Object.entries(translations)) {
+            await this.upsertTranslation(revisionId, lang, {
+                title: entry.title,
+                description: '',
+                i18nExtra: { message: entry.message ?? '' },
             });
         }
     }
 
-    // ── Internal helpers ──────────────────────────────────────────────────────
+    // ── Validator sync ────────────────────────────────────────────────────────
 
     /**
-     * Starts the DBOS translation workflow for a newly approved revision.
-     * Reads the source translation row to extract title + description.
-     * If the orchestrator is not injected (test env / DBOS not running), returns silently.
-     * If the source translation row is missing or empty, returns silently.
-     * Errors do NOT propagate — workflow failure must not fail the approval request.
+     * Full replace of 'validator' relations for this document item.
+     * Deletes all existing validator relations and re-creates from validatorIds.
+     * Simple full-replace is safe here — validator assignment is a PA admin
+     * action, not concurrent work like translations.
      */
+    protected async syncValidators(
+        docItem: ContentItem,
+        validatorIds: string[],
+        stamp: ActorStamp | undefined,
+    ): Promise<void> {
+        const existing = await this.contentItemRelationRepository.find({
+            where: { parentItemId: docItem.id!, relationType: RELATION_VALIDATOR },
+        });
+        for (const rel of existing) {
+            await this.contentItemRelationRepository.deleteById(rel.id!);
+        }
+        for (const tenantItemId of validatorIds) {
+            await this.contentItemRelationRepository.create({
+                parentItemId: docItem.id!,
+                childItemId: tenantItemId,
+                relationType: RELATION_VALIDATOR,
+                sortOrder: 0,
+                relationExtra: {},
+                ...(stamp && { createdBy: stamp }),
+            });
+        }
+    }
+
+    // ── Translation workflow ──────────────────────────────────────────────────
+
     protected async startTranslationWorkflow(
         item: ContentItem,
         revision: ContentRevision,
         sourceLang: string,
     ): Promise<void> {
         if (!this.translationOrchestrator) return;
-
         try {
             const sourceTr = await this.contentRevisionTranslationRepository.findOne({
                 where: { revisionId: revision.id!, lang: sourceLang },
             });
-
             if (!sourceTr) return;
 
             const fields: Record<string, string> = {};
             if (sourceTr.title?.trim()) fields['title'] = sourceTr.title;
             if (sourceTr.description?.trim()) fields['description'] = sourceTr.description;
-
-            if (Object.keys(fields).length === 0) return;
+            if (!Object.keys(fields).length) return;
 
             await this.translationOrchestrator.startRevisionFlow({
-                revision,
-                item,
-                category: 'document-types',  // matches weblate_namespace in content_type seed
+                revision, item,
+                category: 'document-types',
                 fields,
             });
         } catch (err) {
-            // Log but do not re-throw: workflow start failure must not surface
-            // to the PA operator as an HTTP 500.
-            console.error('[DocumentTypeFacadeService] startTranslationWorkflow failed', err);
+            this.logger.error('[DocumentTypeFacadeService] startTranslationWorkflow failed', { err });
         }
     }
 
-    /**
-     * When a revision moves to APPROVED, all non-source DRAFT translation rows
-     * are set to STALE to signal that the source text has been frozen.
-     * Already APPROVED or PUBLISHED translation rows are left untouched.
-     */
     protected async markNonSourceTranslationsStale(
         revisionId: string,
         sourceLang: string,
     ): Promise<void> {
-        const rows = await this.contentRevisionTranslationRepository.find({
-            where: { revisionId },
-        });
+        const rows = await this.contentRevisionTranslationRepository.find({ where: { revisionId } });
         for (const row of rows) {
             if (row.lang !== sourceLang && row.tStatus === 'DRAFT') {
-                await this.contentRevisionTranslationRepository.updateById(row.id!, {
-                    tStatus: 'STALE',
-                });
+                await this.contentRevisionTranslationRepository.updateById(row.id!, { tStatus: 'STALE' });
             }
         }
     }
 
-    /** Derives the next external key by finding the current max and incrementing. */
+    /**
+     * When the document is approved, also mark non-source hotspot translations
+     * as STALE — they depend on the same source content being frozen.
+     */
+    protected async markHotspotTranslationsStale(
+        docItemId: string,
+        sourceLang: string,
+    ): Promise<void> {
+        const hotspotRelations = await this.contentItemRelationRepository.find({
+            where: { parentItemId: docItemId, relationType: RELATION_HOTSPOT },
+        });
+        for (const rel of hotspotRelations) {
+            const hotspotItem = await this.contentItemRepository.findById(rel.childItemId);
+            const hotspotDraft = await this.contentRevisionRepository.findOne({
+                where: { itemId: hotspotItem.id!, status: 'DRAFT' },
+            });
+            if (!hotspotDraft) continue;
+            await this.markNonSourceTranslationsStale(hotspotDraft.id!, sourceLang);
+        }
+    }
+
+    // ── Internal helpers ──────────────────────────────────────────────────────
+
+    protected async upsertTranslation(
+        revisionId: string,
+        lang: string,
+        data: { title: string; description: string; i18nExtra: Record<string, unknown> },
+    ): Promise<void> {
+        const existing = await this.contentRevisionTranslationRepository.findOne({
+            where: { revisionId, lang },
+        });
+        if (existing) {
+            await this.contentRevisionTranslationRepository.updateById(existing.id!, {
+                title: data.title,
+                description: data.description,
+                i18nExtra: { ...(existing.i18nExtra ?? {}), ...data.i18nExtra },
+                tStatus: 'DRAFT',
+            });
+        } else {
+            await this.contentRevisionTranslationRepository.create({
+                revisionId, lang,
+                title: data.title,
+                description: data.description,
+                i18nExtra: data.i18nExtra,
+                tStatus: 'DRAFT',
+            });
+        }
+    }
+
+    /**
+     * Ensures every picture in the array has a stable UUID.
+     * Assigns a new uuid4 to any entry missing one.
+     */
+    protected ensurePictureIds(
+        pictures: Array<Record<string, unknown>>,
+    ): Array<Record<string, unknown>> {
+        return pictures.map(p => ({
+            ...p,
+            id: (p.id as string | undefined) ?? uuidv4(),
+        }));
+    }
+
     protected async nextExternalKey(): Promise<number> {
         const items = await this.contentItemRepository.find({
             where: { typeCode: DOCUMENT_TYPE_CODE },
             fields: { externalKey: true },
         });
-        return (
-            items.reduce((acc, item) => {
-                const n = Number(item.externalKey);
-                return Number.isFinite(n) && n > acc ? n : acc;
-            }, 0) + 1
-        );
+        return items.reduce((acc, item) => {
+            const n = Number(item.externalKey);
+            return Number.isFinite(n) && n > acc ? n : acc;
+        }, 0) + 1;
+    }
+
+    protected async nextHotspotExternalKey(): Promise<number> {
+        const items = await this.contentItemRepository.find({
+            where: { typeCode: PICTURE_HOTSPOT_CODE },
+            fields: { externalKey: true },
+        });
+        return items.reduce((acc, item) => {
+            const n = Number(item.externalKey);
+            return Number.isFinite(n) && n > acc ? n : acc;
+        }, 0) + 1;
     }
 
     protected async findItemByLegacyIdOrFail(id: number): Promise<ContentItem> {
@@ -627,13 +859,7 @@ export class DocumentTypeFacadeService {
         return item;
     }
 
-    /**
-     * Priority: DRAFT > PUBLISHED > APPROVED > ARCHIVED.
-     * The PA editor always sees the most recent work in progress.
-     */
-    protected async findPreferredRevision(
-        itemId: string,
-    ): Promise<ContentRevision | null> {
+    protected async findPreferredRevision(itemId: string): Promise<ContentRevision | null> {
         for (const status of ['DRAFT', 'PUBLISHED', 'APPROVED'] as const) {
             const rev = await this.contentRevisionRepository.findOne({
                 where: { itemId, status },
@@ -644,12 +870,6 @@ export class DocumentTypeFacadeService {
         return null;
     }
 
-    /**
-     * Returns the existing DRAFT revision, or creates a new one forked from
-     * the latest revision (copying all translation rows into the new draft).
-     * Ensures the "max one DRAFT per item" invariant: if a DRAFT already exists,
-     * it is returned as-is without creating a duplicate.
-     */
     protected async findOrCreateDraft(item: ContentItem): Promise<ContentRevision> {
         const existing = await this.contentRevisionRepository.findOne({
             where: { itemId: item.id!, status: 'DRAFT' },
@@ -660,7 +880,6 @@ export class DocumentTypeFacadeService {
             where: { itemId: item.id! },
             order: ['revisionNo DESC'],
         });
-
         const stamp = buildActorStamp(this.currentUser);
 
         const draft = await this.contentRevisionRepository.create({
@@ -672,7 +891,6 @@ export class DocumentTypeFacadeService {
             ...(stamp && { createdBy: stamp }),
         });
 
-        // Fork all translation rows from the latest revision into the new draft
         if (latest) {
             const rows = await this.contentRevisionTranslationRepository.find({
                 where: { revisionId: latest.id! },
@@ -684,14 +902,36 @@ export class DocumentTypeFacadeService {
                     title: row.title,
                     description: row.description,
                     i18nExtra: row.i18nExtra ?? {},
-                    // Source lang stays DRAFT; other langs keep their tStatus
-                    // (may already be STALE from a previous approval cycle)
                     tStatus: row.lang === draft.sourceLang ? 'DRAFT' : row.tStatus,
                 });
             }
         }
-
         return draft;
+    }
+
+    /** Returns or creates a DRAFT revision for a PICTURE_HOTSPOT content_item. */
+    protected async findOrCreateHotspotDraft(
+        hotspotItem: ContentItem,
+        stamp: ActorStamp | undefined,
+    ): Promise<ContentRevision> {
+        const existing = await this.contentRevisionRepository.findOne({
+            where: { itemId: hotspotItem.id!, status: 'DRAFT' },
+        });
+        if (existing) return existing;
+
+        const latest = await this.contentRevisionRepository.findOne({
+            where: { itemId: hotspotItem.id! },
+            order: ['revisionNo DESC'],
+        });
+
+        return this.contentRevisionRepository.create({
+            itemId: hotspotItem.id!,
+            revisionNo: latest ? latest.revisionNo + 1 : 1,
+            status: 'DRAFT',
+            sourceLang: latest?.sourceLang ?? 'it',
+            dataExtra: {},
+            ...(stamp && { createdBy: stamp }),
+        });
     }
 
     // ── DTO mappers ───────────────────────────────────────────────────────────
@@ -715,13 +955,11 @@ export class DocumentTypeFacadeService {
         item: ContentItem,
         revision: ContentRevision,
         translationRows: ContentRevisionTranslation[],
+        hotspots: DocumentHotspot[],
+        validatorIds: string[],
         allRevisions: ContentRevision[] = [],
     ): DocumentTypeFull {
-        const translations: Record<
-            string,
-            { title: string; description: string; tStatus: 'DRAFT' | 'APPROVED' | 'PUBLISHED' | 'STALE' }
-        > = {};
-
+        const translations: Record<string, { title: string; description: string; tStatus: 'DRAFT' | 'APPROVED' | 'PUBLISHED' | 'STALE' }> = {};
         for (const row of translationRows) {
             translations[row.lang] = {
                 title: row.title,
@@ -746,6 +984,8 @@ export class DocumentTypeFacadeService {
             sourceLang: revision.sourceLang,
             dataExtra: revision.dataExtra ?? {},
             translations,
+            hotspots,
+            validatorIds,
             revisions,
         });
     }
