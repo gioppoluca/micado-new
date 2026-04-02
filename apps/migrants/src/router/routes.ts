@@ -5,30 +5,56 @@ const routes: RouteRecordRaw[] = [
     path: '/',
     component: () => import('layouts/MainLayout.vue'),
     children: [
-      // public home
-      { path: '', component: () => import('pages/IndexPage.vue') },
+      // Public site root — remains accessible without authentication
+      { path: '', name: 'home', component: () => import('pages/IndexPage.vue') },
 
-      // landing page: post-login language selection (auth required)
-      { path: 'languages', component: () => import('pages/LandingPage.vue'), meta: { requiresAuth: true } },
+      // Post-login home page
+      {
+        path: 'home',
+        name: 'authenticated-home',
+        component: () => import('pages/HomePage.vue'),
+        meta: { requiresAuth: true },
+      },
 
-      // protected profile
-      { path: 'profile', component: () => import('pages/ProfilePage.vue'), meta: { requiresAuth: true } },
+      // Protected language selection / bootstrap area
+      {
+        path: 'languages',
+        name: 'languages',
+        component: () => import('pages/LandingPage.vue'),
+        meta: { requiresAuth: true },
+      },
 
-      // public settings bootstrap example
-      { path: 'settings', component: () => import('pages/SettingsPage.vue') },
+      // Protected profile area
+      {
+        path: 'profile',
+        name: 'profile',
+        component: () => import('pages/ProfilePage.vue'),
+        meta: { requiresAuth: true },
+      },
+
+      // Protected bootstrap/debug page for settings visibility
+      {
+        path: 'settings',
+        name: 'settings',
+        component: () => import('pages/SettingsPage.vue'),
+        meta: { requiresAuth: true },
+      },
+      {
+        path: '/login',
+        name: 'login',
+        component: () => import('pages/LoginPage.vue'),
+      },
+
     ],
   },
 
-  // login route (optional; protected pages auto-redirect to Keycloak)
-  {
-    path: '/login',
-    component: () => import('pages/LoginPage.vue'),
-  },
 
   {
     path: '/:catchAll(.*)*',
+    name: 'not-found',
     component: () => import('pages/ErrorNotFound.vue'),
   },
 ];
 
 export default routes;
+

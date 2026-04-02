@@ -16,6 +16,6 @@ import {useAuthStore} from 'src/stores/auth-store';
 const auth = useAuthStore();
 
 async function doLogin() {
-  await auth.login(window.location.origin + '/');
+  await auth.login(window.location.origin + '/home');
 }
 </script>

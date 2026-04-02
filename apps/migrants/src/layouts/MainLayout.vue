@@ -24,10 +24,14 @@ async function doLogout() {
       <q-list>
 
         <q-item clickable v-ripple to="/">
+          <q-item-section>Public site</q-item-section>
+        </q-item>
+
+        <q-item v-if="isAuth" clickable v-ripple to="/home">
           <q-item-section>Home</q-item-section>
         </q-item>
 
-        <q-item clickable v-ripple to="/settings">
+        <q-item v-if="isAuth" clickable v-ripple to="/settings">
           <q-item-section>Settings</q-item-section>
         </q-item>
 
