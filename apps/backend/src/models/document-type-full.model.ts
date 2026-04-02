@@ -44,34 +44,8 @@
  */
 
 import { Model, model, property } from '@loopback/repository';
-
-// ─── Revision summary (version history panel) ─────────────────────────────────
-
-@model()
-export class RevisionSummary extends Model {
-    @property({ type: 'number' })
-    revisionNo: number;
-
-    @property({
-        type: 'string',
-        jsonSchema: { enum: ['DRAFT', 'APPROVED', 'PUBLISHED', 'ARCHIVED'] },
-    })
-    status: 'DRAFT' | 'APPROVED' | 'PUBLISHED' | 'ARCHIVED';
-
-    @property({ type: 'string' })
-    createdAt?: string;
-
-    /** Unpacked from createdBy.name — frontend never drills into the JSONB. */
-    @property({ type: 'string' })
-    createdByName?: string;
-
-    @property({ type: 'string' })
-    publishedAt?: string;
-
-    constructor(data?: Partial<RevisionSummary>) {
-        super(data);
-    }
-}
+import { RevisionSummary } from './revision-summary.model';
+export { RevisionSummary } from './revision-summary.model';
 
 // ─── Picture (binary asset, no translations) ──────────────────────────────────
 

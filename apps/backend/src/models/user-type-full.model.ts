@@ -33,45 +33,8 @@
  */
 
 import { Model, model, property } from '@loopback/repository';
-
-/**
- * Lightweight revision summary — included in UserTypeFull.revisions[].
- * Contains no translation content; just enough for the version history panel.
- * Read-only on PUT (ignored by the backend if sent back).
- */
-@model()
-export class RevisionSummary extends Model {
-    /** Monotonic revision number (1, 2, 3, …). */
-    @property({ type: 'number' })
-    revisionNo: number;
-
-    /** Workflow state of this revision. */
-    @property({
-        type: 'string',
-        jsonSchema: { enum: ['DRAFT', 'APPROVED', 'PUBLISHED', 'ARCHIVED'] },
-    })
-    status: 'DRAFT' | 'APPROVED' | 'PUBLISHED' | 'ARCHIVED';
-
-    /** ISO timestamp when this revision was created. */
-    @property({ type: 'string' })
-    createdAt?: string;
-
-    /**
-     * Display name of the actor who created this revision.
-     * Derived from createdBy.name — the JSONB is unpacked in the facade
-     * so the frontend never has to drill into a nested object.
-     */
-    @property({ type: 'string' })
-    createdByName?: string;
-
-    /** ISO timestamp when this revision was published (undefined if not yet published). */
-    @property({ type: 'string' })
-    publishedAt?: string;
-
-    constructor(data?: Partial<RevisionSummary>) {
-        super(data);
-    }
-}
+import { RevisionSummary } from './revision-summary.model';
+export { RevisionSummary } from './revision-summary.model';
 
 /** Single per-language entry within the translations map. */
 @model()
