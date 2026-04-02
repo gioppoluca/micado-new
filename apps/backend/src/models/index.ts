@@ -14,3 +14,7 @@ export * from './document-type-legacy.model';
 export * from './document-type-full.model';
 export * from './topic-legacy.model';
 export * from './topic-full.model';
+export * from './user-type-legacy.model';
+export * from './user-type-full.model';
+export * from './glossary-legacy.model';
+export * from './glossary-full.model';
