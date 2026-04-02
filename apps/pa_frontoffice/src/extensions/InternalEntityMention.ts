@@ -83,23 +83,25 @@ const InternalEntityMention = Mark.create({
         return ['span', { class: 'micado-mention', ...HTMLAttributes }, 0];
     },
 
-    /** tiptap-markdown: serialize @[type,id](text) instead of HTML span. */
+    /** tiptap-markdown: serialize @[type,id](text) — open writes prefix, close writes suffix. */
     addStorage() {
         return {
             markdown: {
-                serialize(
-                    state: { write: (s: string) => void },
-                    mark: { attrs: Record<string, unknown> },
-                    node: { textContent: string },
-                ) {
-                    const type = mark.attrs['entityType'] as EntityTypeCode;
-                    const id = mark.attrs['entityId'] as number;
-                    const syntax = buildMentionSyntax(type, id, node.textContent);
-                    logger.debug('[InternalEntityMention] serialize', { type, id });
-                    state.write(syntax);
+                serialize: {
+                    /**
+                     * Called before the mark's text content.
+                     * Writes "@[type,id](" — the text node fills in between.
+                     */
+                    open(_state: unknown, mark: { attrs: Record<string, unknown> }) {
+                        const type = mark.attrs['entityType'] as string;
+                        const id = mark.attrs['entityId'] as number;
+                        logger.debug('[InternalEntityMention] serialize open', { type, id });
+                        return `@[${type},${id}](`;
+                    },
+                    /** Called after the mark's text content. Closes the syntax. */
+                    close: ')',
+                    expelEnclosingWhitespace: false,
                 },
-                open: '',
-                close: '',
             },
         };
     },

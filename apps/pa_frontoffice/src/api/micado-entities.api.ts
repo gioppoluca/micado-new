@@ -65,14 +65,24 @@ export const micadoEntitiesApi = {
 
     /**
      * Lista tutti i Glossary items (bozze + pubblicati).
-     * Auth: pa_editor, admin
+     * Auth: public (@authenticate.skip) — necessario per il mention picker
+     * nell'editor anche prima dell'autenticazione Keycloak.
      *
-     * TODO: adattare path e params al reale endpoint LoopBack 4.
-     *   Esempio atteso: GET /glossary-items?filter[include]=translations&includeDraft=true
+     * Endpoint: GET /glossary-items?defaultlang=&currentlang=&includeDraft=true
+     * Implementato in GlossariesController.mentionPickerList().
+     *
+     * Il backend restituisce { id, title, lang, published }[] — mappiamo
+     * a MicadoEntity[] qui per mantenere compatibilità con il mention system.
      */
     async listGlossary(params?: EntityListParams): Promise<MicadoEntity[]> {
         logger.info('[micado-entities.api] listGlossary', params);
-        return apiGet<MicadoEntity[]>('/glossary-items', { params });
+        const raw = await apiGet<Array<{ id: number; title: string; lang: string; published: boolean }>>('/glossary-items', { params });
+        return raw.map(item => ({
+            id: item.id,
+            title: item.title,
+            published: item.published,
+            translations: [{ lang: item.lang, title: item.title, description: '' }],
+        }));
     },
 
     /**

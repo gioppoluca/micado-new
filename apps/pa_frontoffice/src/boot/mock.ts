@@ -32,6 +32,7 @@ export default defineBoot(async () => {
     const { registerUserTypeMocks } = await import('src/api/user-type.api');
     const { registerDocumentTypeMocks } = await import('src/api/document-type.api');
     const { registerTopicMocks } = await import('src/api/topic.api');
+    const { registerGlossaryMocks } = await import('src/api/glossary.api');
 
     registerLanguageMocks(adapter);
     registerSettingsMocks(adapter);
@@ -39,6 +40,7 @@ export default defineBoot(async () => {
     registerUserTypeMocks(adapter);
     registerDocumentTypeMocks(adapter);
     registerTopicMocks(adapter);
+    registerGlossaryMocks(adapter);
 
     logger.warn('[boot:mock] all mock handlers registered');
 });

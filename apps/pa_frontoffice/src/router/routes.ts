@@ -24,6 +24,15 @@ const routes: RouteRecordRaw[] = [
         meta: { requiresAuth: true },
       },
 
+      // ── Glossary ─────────────────────────────────────────────────────────
+      // Sidebar entry: menu.glossary → /glossary (MainLayout, not SettingsLayout)
+      {
+        path: 'glossary',
+        name: 'glossary',
+        component: () => import('pages/GlossaryPage.vue'),
+        meta: { requiresAuth: true, roles: ['pa_admin', 'micado_admin'] },
+      },
+
       // ── Settings section ─────────────────────────────────────────────────
       // SettingsLayout renders the secondary settings drawer + <router-view>.
       // Every child route is rendered inside that layout's page container.

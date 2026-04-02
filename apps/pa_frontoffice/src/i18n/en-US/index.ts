@@ -185,6 +185,7 @@ export default {
     "delete_steplink": "Delete step link",
     "save_changes": "Save changes",
     "cancel": "Cancel",
+    "close": "Close",
     "upload": "Upload",
     "back": "Back",
     "go_back": "Go back",
@@ -472,7 +473,18 @@ export default {
   "glossary": {
     "list_title": "Glossary",
     "add_new": "Add New Glossary Term",
-    "edit": "Edit Glossary Term"
+    "edit": "Edit Glossary Term",
+    "csv_import_title": "Import terms from CSV",
+    "csv_import_preview": "{count} valid rows ready to import",
+    "csv_parse_errors": "{count} rows with parsing errors (will be skipped)",
+    "csv_import_start": "Import {count} terms",
+    "csv_importing": "Importing {current} of {total}…",
+    "csv_report_title": "Import complete",
+    "csv_report_success": "✓ {count} terms imported successfully",
+    "csv_report_parse_errors": "{count} rows skipped (invalid format)",
+    "csv_report_failures": "✗ {count} rows failed",
+    "csv_report_row": "Row {row}: {title}",
+    "csv_row_error": "Row {row}: {error}"
   },
   "tags": {
     "duplicate_error": "Duplicates are not allowed.",

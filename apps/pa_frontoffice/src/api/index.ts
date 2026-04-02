@@ -52,3 +52,15 @@ export type {
     CreateTopicPayload,
     PatchTopicPayload,
 } from './topic.api';
+
+// ── Glossary ──────────────────────────────────────────────────────────────────
+export { glossaryApi, parseCsvRows, glossaryStatusKey } from './glossary.api';
+export type {
+    GlossaryTerm,
+    GlossaryFull,
+    GlossaryTranslation,
+    GlossaryStatus,
+    CreateGlossaryPayload,
+    PatchGlossaryPayload,
+    CsvParseResult,
+} from './glossary.api';

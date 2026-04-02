@@ -71,7 +71,7 @@ interface MicadoEntitiesStoreSetup {
     fetchAllEntities(params?: { defaultLang?: string; userLang?: string; force?: boolean }): Promise<void>;
     invalidateCache(): void;
     getEntityTitle(entity: MicadoEntity): string;
-    findEntityById(type: EntityTypeCode, id: number): MicadoEntity | undefined;
+    findEntityById(type: EntityTypeCode, id: number): ReturnType<MicadoEntity[]['find']>;
     getEntityRoute(type: EntityTypeCode, id: number): string;
     clearError(): void;
 }
@@ -161,12 +161,36 @@ export const useMicadoEntitiesStore = defineStore('micadoEntities', (): MicadoEn
                 includeDraft: true,
             };
 
-            // Fetch parallela — stessa strategia del legacy Promise.all
+            /**
+             * Fetch indipendenti — ogni endpoint può fallire senza bloccare gli altri.
+             * Questo è necessario durante la migrazione progressiva: gli endpoint
+             * information/processes/events non esistono ancora nel backend LB4
+             * e restituiscono 404. Con Promise.allSettled + fallback a [] ogni
+             * endpoint migrato contribuisce comunque al mention picker.
+             *
+             * Quando tutti gli endpoint saranno implementati il comportamento
+             * è identico al Promise.all originale.
+             */
+            const settle = async (p: Promise<MicadoEntity[]>, name: string): Promise<MicadoEntity[]> => {
+                try {
+                    return await p;
+                } catch (e) {
+                    // 404 = endpoint non ancora migrato — atteso durante la migrazione progressiva
+                    const status = (e as { status?: number }).status;
+                    if (status === 404) {
+                        logger.debug(`[micado-entities-store] ${name}: endpoint non ancora implementato (404) — skip`);
+                    } else {
+                        logger.warn(`[micado-entities-store] ${name}: errore inatteso`, e);
+                    }
+                    return [];
+                }
+            };
+
             const [glossary, information, processes, events] = await Promise.all([
-                micadoEntitiesApi.listGlossary(apiParams),
-                micadoEntitiesApi.listInformation(apiParams),
-                micadoEntitiesApi.listProcesses(apiParams),
-                micadoEntitiesApi.listEvents(apiParams),
+                settle(micadoEntitiesApi.listGlossary(apiParams), 'listGlossary'),
+                settle(micadoEntitiesApi.listInformation(apiParams), 'listInformation'),
+                settle(micadoEntitiesApi.listProcesses(apiParams), 'listProcesses'),
+                settle(micadoEntitiesApi.listEvents(apiParams), 'listEvents'),
             ]);
 
             glossaryEntities.value = glossary;
@@ -209,7 +233,7 @@ export const useMicadoEntitiesStore = defineStore('micadoEntities', (): MicadoEn
     /**
      * Cerca un'entità per tipo e ID. Usato dal viewer per il dialog di preview.
      */
-    function findEntityById(type: EntityTypeCode, id: number): MicadoEntity | undefined {
+    function findEntityById(type: EntityTypeCode, id: number) {
         const map: Record<EntityTypeCode, MicadoEntity[]> = {
             g: glossaryEntities.value,
             i: informationEntities.value,

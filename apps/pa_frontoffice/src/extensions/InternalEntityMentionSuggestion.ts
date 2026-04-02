@@ -129,6 +129,15 @@ const InternalEntityMentionSuggestion = Extension.create({
                 // ── Item query ───────────────────────────────────────────────
                 items({ query }: { query: string }): MentionSuggestionItem[] {
                     const store = useMicadoEntitiesStore();
+
+                    // Lazy-fetch: trigger load if entities not yet in cache.
+                    // items() is synchronous so we fire-and-forget here — the
+                    // Suggestion plugin will call items() again on the next
+                    // keystroke once the fetch completes.
+                    if (!store.allEntitiesFetched && !store.loading) {
+                        void store.fetchAllEntities({ includeDraft: true } as Parameters<typeof store.fetchAllEntities>[0]);
+                    }
+
                     const lq = query.toLowerCase().trim();
                     const out: MentionSuggestionItem[] = [];
                     const order: EntityTypeCode[] = ['g', 'p', 'i', 'e'];
