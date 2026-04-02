@@ -8,6 +8,7 @@
       <ActiveLanguageSelector />
       <LanguageManager />
       <SettingsSectionFeatures />
+      <SettingsSectionTopics />
       <SettingsSectionSurvey />
       <SettingsSectionHelpdesk />
       <!--
@@ -29,6 +30,7 @@ import LanguageManager from 'src/components/settings/LanguageManager.vue';
 import SettingsSectionFeatures from 'src/pages/settings/SettingsSectionFeatures.vue';
 import SettingsSectionSurvey from 'src/pages/settings/SettingsSectionSurvey.vue';
 import SettingsSectionHelpdesk from 'src/pages/settings/SettingsSectionHelpdesk.vue';
+import SettingsSectionTopics from 'src/pages/settings/SettingsSectionTopics.vue';
 
 const { t } = useI18n();
 const langStore = useLanguageStore();

@@ -152,7 +152,11 @@ export default {
     "events_description": "Events and courses are information sheets that have the possibility to add a date and location. It can be used to give information about certain events or about courses that will be organised soon. Once published, they are accessible for all visitors on Micado for migrants until the end date of the event. ",
     "usage_description": "Here you can check statistics about the use of Micado app for migrants.",
     "glossary_description": "The glossary is part of the Micado for migrants app. The glossary gives you the chance to explain certain words in a way that is easy to understand for migrants. Once a glossary item has been published, it will appear in the glossary list and when the word is used somewhere in the content of Micado, it will be highlighted and users can see the extra explanation about this word immediately while reading.",
-    "setting_description": "In the settings, the PA administrator can manage all settings for Micado for Migrants. Here you can also send content to the translation platform."
+    "setting_description": "In the settings, the PA administrator can manage all settings for Micado for Migrants. Here you can also send content to the translation platform.",
+    "topic_settings": "Configure how deep editors can nest topics. The full tree is always visible; this setting controls which nodes are selectable as a parent.",
+    "topic_max_depth": "0-based level limit. 0 = only root topics are selectable as a parent. 1 = roots and their direct children are selectable. Higher values allow deeper nesting.",
+    "topic_max_depth_unit": "maximum selectable depth (0 = root only)",
+    "topic_max_depth_hint": "Topics deeper than level {depth} are shown but cannot be selected as a parent."
   },
   "button": {
     "import": "Import",
@@ -264,7 +268,9 @@ export default {
     "content": "Migrant app features' descriptions",
     "privacy_policy": "Privacy policy",
     "privacy_pa": "Privacy policy for the PA app",
-    "privacy_cso": "Privacy policy for the CSO app"
+    "privacy_cso": "Privacy policy for the CSO app",
+    "topic_settings": "Topic hierarchy configuration",
+    "topic_max_depth": "Maximum selectable depth for parent topics"
   },
   "input_labels": {
     "import": "Do you want to import this file?",
@@ -359,6 +365,7 @@ export default {
     "link": "Link",
     "required": "Required",
     "transl_state": "Translation state",
+    "actions": "Actions",
     "no_consent": "Migrant has not yet given consent",
     "link_name": "Step link name",
     "event_cost": "Cost of the event",
@@ -594,7 +601,17 @@ export default {
     "published_edit": "You can't edit published content. In order to edit you have to unpublish first.",
     "icon_too_large": "Image too large ({fileSize} KB). Maximum allowed: {maxSize} KB. Please choose a smaller file.",
     "icon_read_error": "Could not read the selected file. Please try again with a different image.",
-    "translations_save_failed": "Content saved, but some translations could not be saved. Please try again."
+    "translations_save_failed": "Content saved, but some translations could not be saved. Please try again.",
+    "topic_max_depth_invalid": "Maximum depth must be 0 or greater.",
+    "topic_has_children": "This topic cannot be deleted because it still has child topics. Reassign or delete the children first."
+  },
+  "notification": {
+    "settings_saved": "Settings saved.",
+    "import_success": "Content imported successfully."
+  },
+  "error": {
+    "generic": "An unexpected error occurred. Please try again.",
+    "invalid_json": "The file is not valid JSON. Please check the file and try again."
   },
   "text_editor": {
     "word_count": "Word count"

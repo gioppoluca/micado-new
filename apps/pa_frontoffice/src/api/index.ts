@@ -39,3 +39,16 @@ export type {
     EntityTranslation,
     EntityListParams,
 } from './micado-entities.api';
+
+// ── Topics ────────────────────────────────────────────────────────────────────
+export { topicApi, toTreeNodes, topicStatusKey } from './topic.api';
+export type {
+    Topic,
+    TopicFull,
+    TopicTranslation,
+    TopicDataExtra,
+    TopicStatus,
+    TopicTreeNode,
+    CreateTopicPayload,
+    PatchTopicPayload,
+} from './topic.api';
