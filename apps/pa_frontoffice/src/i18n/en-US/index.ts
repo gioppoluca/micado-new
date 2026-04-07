@@ -482,7 +482,8 @@ export default {
     "categories_title": "Events and courses - Categories",
     "categories_error": "Cannot delete or unpublish a category when an item has this category",
     "empty": "No events yet. Click 'Add Event' to create the first one.",
-    "no_results": "No events match the current filters."
+    "no_results": "No events match the current filters.",
+    "import_not_implemented": "CSV import is not yet available in this version."
   },
   "glossary": {
     "list_title": "Glossary",

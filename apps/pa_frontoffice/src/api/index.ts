@@ -76,3 +76,16 @@ export type {
     CreateCategoryPayload,
     PatchCategoryPayload,
 } from './category.api';
+
+// ── Event ─────────────────────────────────────────────────────────────────────
+export { eventApi, eventStatusKey } from './event.api';
+export type {
+    Event,
+    EventFull,
+    EventTranslation,
+    EventDataExtra,
+    EventStatus,
+    EventListFilter,
+    CreateEventPayload,
+    PatchEventPayload,
+} from './event.api';
