@@ -64,3 +64,15 @@ export type {
     PatchGlossaryPayload,
     CsvParseResult,
 } from './glossary.api';
+
+// ── Category ──────────────────────────────────────────────────────────────────
+export { categoryApi, categoryStatusKey } from './category.api';
+export type {
+    Category,
+    CategoryFull,
+    CategoryTranslation,
+    CategoryStatus,
+    CategorySubtype,
+    CreateCategoryPayload,
+    PatchCategoryPayload,
+} from './category.api';

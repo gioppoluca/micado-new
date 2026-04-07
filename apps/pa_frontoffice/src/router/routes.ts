@@ -101,6 +101,12 @@ const routes: RouteRecordRaw[] = [
             meta: { roles: ['pa_admin', 'micado_admin'] },
           },
           {
+            path: 'event_categories',
+            name: 'settings-event-categories',
+            component: () => import('pages/settings/EventCategoriesPage.vue'),
+            meta: { roles: ['pa_admin', 'micado_admin'] },
+          },
+          {
             path: 'intervention_categories',
             name: 'settings-intervention-categories',
             component: () => import('pages/settings/InterventionCategoriesPage.vue'),

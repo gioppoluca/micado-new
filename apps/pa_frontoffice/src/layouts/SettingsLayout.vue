@@ -101,6 +101,7 @@ interface SettingsNavItem {
 
 const dataManagementItems: SettingsNavItem[] = [
     { labelKey: 'data_settings.document_types',          path: '/document_types' },
+    { labelKey: 'data_settings.event_categories',        path: '/event_categories' },
     { labelKey: 'data_settings.intervention_categories', path: '/intervention_categories' },
     { labelKey: 'data_settings.intervention_types',      path: '/intervention_types' },
     { labelKey: 'data_settings.topics',                  path: '/topics' },
