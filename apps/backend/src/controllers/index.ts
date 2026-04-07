@@ -8,6 +8,7 @@ export * from './document-types.controller';
 export * from './topics.controller';
 export * from './glossaries.controller';
 export * from './categories.controller';
+export * from './events.controller';
 
 
 // DEV

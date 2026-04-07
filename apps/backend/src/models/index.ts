@@ -20,3 +20,5 @@ export * from './glossary-legacy.model';
 export * from './glossary-full.model';
 export * from './category-legacy.model';
 export * from './category-full.model';
+export * from './event-legacy.model';
+export * from './event-full.model';
