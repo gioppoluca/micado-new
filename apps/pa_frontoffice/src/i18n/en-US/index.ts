@@ -45,6 +45,7 @@ export default {
     "element_tags": "Write new tags",
     "element_category": "Select a category",
     "element_topic": "Select a topic",
+    "element_topics": "Select one or more topics. Use the picker to add each topic.",
     "element_user_type": "Select an user type",
     "element_start_date": "Select the starting date",
     "element_end_date": "Select the ending date. Warning: When the end date passes, the content will be unpublished.",
@@ -192,6 +193,7 @@ export default {
     "go_back": "Go back",
     "edit": "Edit",
     "download": "Download",
+    "show_less": "Show less",
     "add_intervention": "Add intervention",
     "manage_steps": "Manage steps",
     "edit_action": "Edit action",
@@ -328,6 +330,12 @@ export default {
     "title": "Title",
     "tags": "Tags",
     "select_category": "Select category",
+    "select_topics": "Select topics",
+    "start_time": "Start time",
+    "end_time": "End time",
+    "event_is_free": "The event is free",
+    "validate_publish": "Validate & Publish",
+    "title_description": "Title & Description",
     "type": "Type",
     "required_documents": "Required documents",
     "manage": "Manage",
@@ -472,7 +480,9 @@ export default {
     "add_new": "Add New Event or Course to the Event and courses List",
     "edit": "Edit Event or Course from the Event List",
     "categories_title": "Events and courses - Categories",
-    "categories_error": "Cannot delete or unpublish a category when an item has this category"
+    "categories_error": "Cannot delete or unpublish a category when an item has this category",
+    "empty": "No events yet. Click 'Add Event' to create the first one.",
+    "no_results": "No events match the current filters."
   },
   "glossary": {
     "list_title": "Glossary",
@@ -496,6 +506,7 @@ export default {
   },
   "filters": {
     "title": "Filter by",
+    "filter_by": "Filter by...",
     "clear_all": "Clear all filters",
     "tags_title": "Tags",
     "category_title": "Category",
@@ -521,7 +532,9 @@ export default {
     "yes": "Yes",
     "no": "No",
     "edit": "Edit",
-    "delete": "Delete"
+    "delete": "Delete",
+    "read_more": "Read more",
+    "read_less": "Read less"
   },
   "upload_modal": {
     "upload_label": "Upload",

@@ -33,6 +33,15 @@ const routes: RouteRecordRaw[] = [
         meta: { requiresAuth: true, roles: ['pa_admin', 'micado_admin'] },
       },
 
+      // ── Events ───────────────────────────────────────────────────────────
+      // Sidebar entry: menu.events → /events (MainLayout, not SettingsLayout)
+      {
+        path: 'events',
+        name: 'events',
+        component: () => import('pages/EventsPage.vue'),
+        meta: { requiresAuth: true, roles: ['pa_admin', 'pa_operator', 'pa_viewer', 'micado_admin'] },
+      },
+
       // ── Settings section ─────────────────────────────────────────────────
       // SettingsLayout renders the secondary settings drawer + <router-view>.
       // Every child route is rendered inside that layout's page container.
