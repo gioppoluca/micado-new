@@ -18,3 +18,5 @@ export * from './user-type-legacy.model';
 export * from './user-type-full.model';
 export * from './glossary-legacy.model';
 export * from './glossary-full.model';
+export * from './category-legacy.model';
+export * from './category-full.model';

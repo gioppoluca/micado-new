@@ -7,6 +7,8 @@ export * from './webhooks/weblate.controller';
 export * from './document-types.controller';
 export * from './topics.controller';
 export * from './glossaries.controller';
+export * from './categories.controller';
+
 
 // DEV
 export * from './dev/translation-workflow-test.controller';
