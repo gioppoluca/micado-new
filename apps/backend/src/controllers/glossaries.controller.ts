@@ -337,6 +337,7 @@ export class GlossariesController {
                                 properties: {
                                     id: { type: 'number' },
                                     title: { type: 'string' },
+                                    description: { type: 'string' },
                                     lang: { type: 'string' },
                                     published: { type: 'boolean' },
                                 },
@@ -351,7 +352,7 @@ export class GlossariesController {
         @param.query.string('defaultlang') defaultlang = 'it',
         @param.query.string('currentlang') currentlang = 'it',
         @param.query.boolean('includeDraft') includeDraft = true,
-    ): Promise<Array<{ id: number; title: string; lang: string; published: boolean }>> {
+    ): Promise<Array<{ id: number; title: string; description: string; lang: string; published: boolean }>> {
         return this.glossaryFacadeService.getForMentionPicker(defaultlang, currentlang, includeDraft);
     }
 }

@@ -384,13 +384,13 @@ export class GlossaryFacadeService {
         defaultLang = 'it',
         currentLang = 'it',
         includeDraft = true,
-    ): Promise<Array<{ id: number; title: string; lang: string; published: boolean }>> {
+    ): Promise<Array<{ id: number; title: string; description: string; lang: string; published: boolean }>> {
         const items = await this.contentItemRepository.find({
             where: { typeCode: GLOSSARY_CODE },
             order: ['externalKey ASC'],
         });
 
-        const result: Array<{ id: number; title: string; lang: string; published: boolean }> = [];
+        const result: Array<{ id: number; title: string; description: string; lang: string; published: boolean }> = [];
         for (const item of items) {
             // Prefer published revision; fall back to draft if includeDraft
             const publishedRev = item.publishedRevisionId
@@ -419,6 +419,7 @@ export class GlossaryFacadeService {
             result.push({
                 id: Number(item.externalKey),
                 title: tr.title,
+                description: tr.description ?? '',
                 lang: tr.lang,
                 published: item.publishedRevisionId != null,
             });
