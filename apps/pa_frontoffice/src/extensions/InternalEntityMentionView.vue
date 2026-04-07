@@ -72,7 +72,24 @@ const tooltipText = computed((): string => {
         });
         return `${entityType.value}:${entityId.value} (non trovata)`;
     }
-    return entitiesStore.getEntityTitle(entity.value);
+    const title = entitiesStore.getEntityTitle(entity.value);
+    const rawDesc = entity.value.description ?? '';
+    if (!rawDesc) return title;
+
+    // Strip Markdown for plain-text tooltip — no library needed for a preview
+    const plain = rawDesc
+        .replace(/!\[.*?\]\(.*?\)/g, '')          // images
+        .replace(/\[([^\]]+)\]\(.*?\)/g, '$1')    // links → label only
+        .replace(/#{1,6}\s+/g, '')                 // headings
+        .replace(/(\*\*|__)(.*?)\1/g, '$2')        // bold
+        .replace(/(\*|_)(.*?)\1/g, '$2')           // italic
+        .replace(/`{1,3}[^`]*`{1,3}/g, '')         // code
+        .replace(/^[-*+]\s+/gm, '')               // list markers
+        .replace(/\n+/g, ' ')
+        .trim();
+
+    const preview = plain.length > 120 ? plain.slice(0, 120) + '…' : plain;
+    return `${title}\n${preview}`;
 });
 
 // ─── Click handler ────────────────────────────────────────────────────────────

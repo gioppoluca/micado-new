@@ -76,12 +76,13 @@ export const micadoEntitiesApi = {
      */
     async listGlossary(params?: EntityListParams): Promise<MicadoEntity[]> {
         logger.info('[micado-entities.api] listGlossary', params);
-        const raw = await apiGet<Array<{ id: number; title: string; lang: string; published: boolean }>>('/glossary-items', { params });
+        const raw = await apiGet<Array<{ id: number; title: string; description: string; lang: string; published: boolean }>>('/glossary-items', { params });
         return raw.map(item => ({
             id: item.id,
             title: item.title,
+            description: item.description,
             published: item.published,
-            translations: [{ lang: item.lang, title: item.title, description: '' }],
+            translations: [{ lang: item.lang, title: item.title, description: item.description }],
         }));
     },
 
@@ -181,7 +182,14 @@ const MOCK_EVENTS: MicadoEntity[] = [
 export function registerMicadoEntitiesMocks(mock: MockRegistry): void {
     mock.onGet('/glossary-items').reply((_config: MockRequestConfig): MockReplyTuple => {
         logger.debug('[mock] GET /glossary-items', _config);
-        return [200, MOCK_GLOSSARY];
+        // Return raw backend shape — listGlossary() maps this to MicadoEntity[]
+        return [200, MOCK_GLOSSARY.map(g => ({
+            id: g.id,
+            title: g.title ?? '',
+            description: g.description ?? '',
+            lang: g.translations[0]?.lang ?? 'it',
+            published: g.published,
+        }))];
     });
 
     mock.onGet('/information-items').reply((_config: MockRequestConfig): MockReplyTuple => {

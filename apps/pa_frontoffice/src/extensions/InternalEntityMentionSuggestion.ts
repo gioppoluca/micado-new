@@ -26,7 +26,7 @@
 import { Extension } from '@tiptap/core';
 import { Suggestion, type SuggestionProps } from '@tiptap/suggestion';
 import { PluginKey } from '@tiptap/pm/state';
-import { createApp, defineComponent, ref, h, type App } from 'vue';
+import { createApp, defineComponent, ref, watch, h, type App } from 'vue';
 import { logger } from 'src/services/Logger';
 import { useMicadoEntitiesStore } from 'src/stores/micado-entities-store';
 import type { EntityTypeCode } from 'src/stores/micado-entities-store';
@@ -50,14 +50,21 @@ const TYPE_LABELS: Record<EntityTypeCode, string> = {
 
 function mountPopup(
     items: MentionSuggestionItem[],
+    isLoading: boolean,
     onSelect: (item: MentionSuggestionItem) => void,
-): { el: HTMLElement; update(items: MentionSuggestionItem[], active: number): void; destroy(): void } {
+): { el: HTMLElement; update(items: MentionSuggestionItem[], active: number, loading: boolean): void; destroy(): void } {
     const reactiveItems = ref<MentionSuggestionItem[]>(items);
     const reactiveActive = ref<number>(0);
+    const reactiveLoading = ref<boolean>(isLoading);
     let app: App | null = null;
 
     const PopupComponent = defineComponent({
         render() {
+            if (reactiveLoading.value) {
+                return h('ul', { class: 'mention-suggestion-list' }, [
+                    h('li', { class: 'mention-suggestion-empty' }, '⏳ Caricamento…'),
+                ]);
+            }
             return h('ul', { class: 'mention-suggestion-list' },
                 reactiveItems.value.length === 0
                     ? [h('li', { class: 'mention-suggestion-empty' }, 'No results')]
@@ -86,9 +93,10 @@ function mountPopup(
 
     return {
         el,
-        update(newItems: MentionSuggestionItem[], active: number) {
+        update(newItems: MentionSuggestionItem[], active: number, loading: boolean) {
             reactiveItems.value = newItems;
             reactiveActive.value = active;
+            reactiveLoading.value = loading;
         },
         destroy() {
             app?.unmount();
@@ -129,15 +137,6 @@ const InternalEntityMentionSuggestion = Extension.create({
                 // ── Item query ───────────────────────────────────────────────
                 items({ query }: { query: string }): MentionSuggestionItem[] {
                     const store = useMicadoEntitiesStore();
-
-                    // Lazy-fetch: trigger load if entities not yet in cache.
-                    // items() is synchronous so we fire-and-forget here — the
-                    // Suggestion plugin will call items() again on the next
-                    // keystroke once the fetch completes.
-                    if (!store.allEntitiesFetched && !store.loading) {
-                        void store.fetchAllEntities({ includeDraft: true } as Parameters<typeof store.fetchAllEntities>[0]);
-                    }
-
                     const lq = query.toLowerCase().trim();
                     const out: MentionSuggestionItem[] = [];
                     const order: EntityTypeCode[] = ['g', 'p', 'i', 'e'];
@@ -166,28 +165,82 @@ const InternalEntityMentionSuggestion = Extension.create({
                     let currentItems: MentionSuggestionItem[] = [];
                     let selectedIndex = 0;
                     let selectCommand: ((item: MentionSuggestionItem) => void) | null = null;
+                    let currentQuery = '';
+                    let stopWatch: (() => void) | null = null;
+
+                    /**
+                     * Rebuilds item list from store with currentQuery and pushes
+                     * result into the already-open popup. Called by the watcher
+                     * when fetchAllEntities completes while popup is open.
+                     */
+                    function refreshItems(): void {
+                        if (!popup) return;
+                        const store = useMicadoEntitiesStore();
+                        const lq = currentQuery.toLowerCase().trim();
+                        const out: MentionSuggestionItem[] = [];
+                        const order: EntityTypeCode[] = ['g', 'p', 'i', 'e'];
+                        for (const entityType of order) {
+                            for (const entity of store.allEntitiesByType[entityType] ?? []) {
+                                const label = entity.process ?? entity.title ?? '';
+                                if (label && (lq === '' || label.toLowerCase().includes(lq))) {
+                                    out.push({ entityType, entityId: entity.id, label });
+                                }
+                                if (out.length >= 10) break;
+                            }
+                            if (out.length >= 10) break;
+                        }
+                        currentItems = out;
+                        popup.update(currentItems, selectedIndex, store.loading);
+                        logger.debug('[InternalEntityMentionSuggestion] refreshItems after fetch', {
+                            count: out.length,
+                        });
+                    }
 
                     return {
                         onStart(props: SuggestionProps<MentionSuggestionItem>) {
                             selectCommand = props.command;
                             currentItems = props.items;
+                            currentQuery = (props as unknown as { query?: string }).query ?? '';
                             selectedIndex = 0;
 
-                            logger.debug('[InternalEntityMentionSuggestion] onStart', { count: currentItems.length });
+                            const store = useMicadoEntitiesStore();
+                            const isLoading = store.loading && currentItems.length === 0;
 
-                            popup = mountPopup(currentItems, (item) => selectCommand?.(item));
+                            logger.debug('[InternalEntityMentionSuggestion] onStart', {
+                                count: currentItems.length, loading: isLoading,
+                            });
+
+                            popup = mountPopup(currentItems, isLoading, (item) => selectCommand?.(item));
                             positionPopup(popup.el, props.clientRect);
+
+                            // When store is still loading, watch for completion then refresh
+                            if (isLoading) {
+                                stopWatch = watch(
+                                    () => store.loading,
+                                    (loading) => {
+                                        if (!loading) {
+                                            refreshItems();
+                                            stopWatch?.();
+                                            stopWatch = null;
+                                        }
+                                    },
+                                );
+                            }
                         },
 
                         onUpdate(props: SuggestionProps<MentionSuggestionItem>) {
                             selectCommand = props.command;
                             currentItems = props.items;
+                            currentQuery = (props as unknown as { query?: string }).query ?? '';
                             selectedIndex = 0;
 
+                            const store = useMicadoEntitiesStore();
+                            const isLoading = store.loading && currentItems.length === 0;
+
                             if (!popup) {
-                                popup = mountPopup(currentItems, (item) => selectCommand?.(item));
+                                popup = mountPopup(currentItems, isLoading, (item) => selectCommand?.(item));
                             } else {
-                                popup.update(currentItems, selectedIndex);
+                                popup.update(currentItems, selectedIndex, isLoading);
                             }
                             positionPopup(popup.el, props.clientRect);
                         },
@@ -197,12 +250,14 @@ const InternalEntityMentionSuggestion = Extension.create({
 
                             if (event.key === 'ArrowDown') {
                                 selectedIndex = (selectedIndex + 1) % Math.max(1, currentItems.length);
-                                popup.update(currentItems, selectedIndex);
+                                const store = useMicadoEntitiesStore();
+                                popup.update(currentItems, selectedIndex, store.loading);
                                 return true;
                             }
                             if (event.key === 'ArrowUp') {
                                 selectedIndex = (selectedIndex - 1 + Math.max(1, currentItems.length)) % Math.max(1, currentItems.length);
-                                popup.update(currentItems, selectedIndex);
+                                const store = useMicadoEntitiesStore();
+                                popup.update(currentItems, selectedIndex, store.loading);
                                 return true;
                             }
                             if (event.key === 'Enter' || event.key === 'Tab') {
@@ -220,6 +275,8 @@ const InternalEntityMentionSuggestion = Extension.create({
 
                         onExit() {
                             logger.debug('[InternalEntityMentionSuggestion] onExit');
+                            stopWatch?.();
+                            stopWatch = null;
                             popup?.destroy();
                             popup = null;
                         },

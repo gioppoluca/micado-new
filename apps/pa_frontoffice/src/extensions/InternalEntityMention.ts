@@ -102,6 +102,81 @@ const InternalEntityMention = Mark.create({
                     close: ')',
                     expelEnclosingWhitespace: false,
                 },
+
+                /**
+                 * parse.setup: registers a markdown-it inline rule that fires
+                 * BEFORE the built-in 'link' rule, preventing markdown-it from
+                 * interpreting @[g,1](test) as the markdown link [g,1](test)
+                 * preceded by the literal character @.
+                 *
+                 * ── Why ruler.before('link') ─────────────────────────────────
+                 * markdown-it parses `[label](url)` as a link. Our syntax
+                 * `@[type,id](text)` matches that pattern — markdown-it produces
+                 * `@<a href="text">type,id</a>` for single-word text values,
+                 * causing the visible `@g,1` artefact.
+                 * Registering before the 'link' rule gives us first pick.
+                 *
+                 * ── Why html_inline tokens work with html:false ───────────────
+                 * Markdown.configure({ html: false }) blocks user-authored HTML
+                 * in the source text, but does NOT filter html_inline tokens
+                 * emitted by internal inline rules — those always pass through.
+                 * Verified with markdown-it source and confirmed by runtime test.
+                 *
+                 * ── Full pipeline ─────────────────────────────────────────────
+                 *   @[g,1](Permesso di soggiorno)     ← Markdown from DB
+                 *   → parse.setup inline rule fires first
+                 *   → emits html_inline token:
+                 *       <span data-entity-type="g" data-entity-id="1">
+                 *         Permesso di soggiorno
+                 *       </span>
+                 *   → ProseMirror parseHTML() matches span[data-entity-type]
+                 *   → creates internalmention mark node with attrs + text content
+                 *   → VueMarkViewRenderer mounts InternalEntityMentionView.vue
+                 *   → <mark-view-content /> renders "Permesso di soggiorno"
+                 *   → displayed as styled clickable link
+                 */
+                parse: {
+                    setup(md: {
+                        inline: {
+                            ruler: {
+                                before(
+                                    beforeRule: string,
+                                    ruleName: string,
+                                    fn: (
+                                        state: {
+                                            src: string;
+                                            pos: number;
+                                            push(type: string, tag: string, nesting: number): { content: string };
+                                        },
+                                        silent: boolean,
+                                    ) => boolean,
+                                ): void;
+                            };
+                        };
+                    }) {
+                        // Must match exactly at state.pos — anchored via slice
+                        const MENTION_RE = /^@\[([^\],]+),(\d+)\]\(([^)]+)\)/;
+
+                        md.inline.ruler.before('link', 'internalmention', (state, silent) => {
+                            const src = state.src.slice(state.pos);
+                            const m = MENTION_RE.exec(src);
+                            if (!m) return false;
+
+                            if (!silent) {
+                                // Emit raw HTML span — passes through even with html:false
+                                // because it is produced by an internal rule, not user input.
+                                const token = state.push('html_inline', '', 0);
+                                token.content = `<span data-entity-type="${m[1]}" data-entity-id="${m[2]}">${m[3]}</span>`;
+                                logger.debug('[InternalEntityMention] parse: mention → span', {
+                                    type: m[1], id: m[2], text: m[3],
+                                });
+                            }
+
+                            state.pos += m[0].length;
+                            return true;
+                        });
+                    },
+                },
             },
         };
     },

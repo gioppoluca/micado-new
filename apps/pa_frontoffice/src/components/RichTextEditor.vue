@@ -142,7 +142,7 @@
  * RichTextEditor — versione completa con Markdown, mention MICADO, BubbleMenu.
  * Sostituisce il precedente stub src/components/RichTextEditor.vue.
  */
-import { ref, computed, watch, onBeforeUnmount, nextTick } from 'vue';
+import { ref, computed, watch, onBeforeMount, onBeforeUnmount, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useEditor, EditorContent } from '@tiptap/vue-3';
 import { BubbleMenu } from '@tiptap/extension-bubble-menu';
@@ -156,6 +156,8 @@ import { Markdown } from 'tiptap-markdown';
 import { logger } from 'src/services/Logger';
 import InternalEntityMention from 'src/extensions/InternalEntityMention';
 import InternalEntityMentionSuggestion from 'src/extensions/InternalEntityMentionSuggestion';
+import { useMicadoEntitiesStore } from 'src/stores/micado-entities-store';
+import { useAppStore } from 'src/stores/app-store';
 
 const { t } = useI18n();
 
@@ -435,6 +437,25 @@ function hasError(): boolean {
 }
 
 defineExpose({ getMarkdown, setMarkdown, hasError, editor });
+
+const entitiesStore = useMicadoEntitiesStore();
+const appStore = useAppStore();
+
+// ── Lifecycle ───────────────────────────────────────────────────────────────
+
+onBeforeMount(() => {
+    /**
+     * Pre-warm entity cache as early as possible so that mention suggestions
+     * are ready by the time the user types '@'.
+     * Fire-and-forget — the suggestion popup watches store.loading reactively.
+     */
+    if (!entitiesStore.allEntitiesFetched) {
+        void entitiesStore.fetchAllEntities({
+            defaultLang: appStore.defaultLang,
+            userLang: appStore.userLang,
+        });
+    }
+});
 
 // ── Cleanup ────────────────────────────────────────────────────────────────
 

@@ -75,7 +75,7 @@ const editor = useEditor({
         StarterKit,
         Link.configure({ openOnClick: true, HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' } }),
         Image.configure({ inline: true }),
-        Markdown.configure({ html: false }),
+        Markdown.configure({ html: true }),
         InternalEntityMention,
     ],
 });
