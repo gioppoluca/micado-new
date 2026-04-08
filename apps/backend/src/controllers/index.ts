@@ -10,6 +10,7 @@ export * from './glossaries.controller';
 export * from './categories.controller';
 export * from './events.controller';
 export * from './information.controller';
+export * from './processes.controller';
 
 
 // DEV

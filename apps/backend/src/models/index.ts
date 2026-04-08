@@ -24,3 +24,8 @@ export * from './event-legacy.model';
 export * from './event-full.model';
 export * from './information-legacy.model';
 export * from './information-full.model';
+export * from './process-legacy.model';
+export * from './process-full.model';
+export * from './step-full.model';
+export * from './step-link-full.model';
+export * from './process-graph.model';
