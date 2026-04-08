@@ -22,3 +22,5 @@ export * from './category-legacy.model';
 export * from './category-full.model';
 export * from './event-legacy.model';
 export * from './event-full.model';
+export * from './information-legacy.model';
+export * from './information-full.model';

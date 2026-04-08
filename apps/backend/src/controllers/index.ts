@@ -9,6 +9,7 @@ export * from './topics.controller';
 export * from './glossaries.controller';
 export * from './categories.controller';
 export * from './events.controller';
+export * from './information.controller';
 
 
 // DEV
