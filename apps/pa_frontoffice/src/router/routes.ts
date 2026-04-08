@@ -42,6 +42,15 @@ const routes: RouteRecordRaw[] = [
         meta: { requiresAuth: true, roles: ['pa_admin', 'pa_operator', 'pa_viewer', 'micado_admin'] },
       },
 
+      // ── Useful Information ────────────────────────────────────────────────
+      // Sidebar entry: menu.information_centre → /information
+      {
+        path: 'information',
+        name: 'information',
+        component: () => import('pages/InformationPage.vue'),
+        meta: { requiresAuth: true, roles: ['pa_admin', 'pa_operator', 'pa_viewer', 'micado_admin'] },
+      },
+
       // ── Settings section ─────────────────────────────────────────────────
       // SettingsLayout renders the secondary settings drawer + <router-view>.
       // Every child route is rendered inside that layout's page container.

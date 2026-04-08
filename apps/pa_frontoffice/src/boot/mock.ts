@@ -35,6 +35,7 @@ export default defineBoot(async () => {
     const { registerGlossaryMocks } = await import('src/api/glossary.api');
     const { registerCategoryMocks } = await import('src/api/category.api');
     const { registerEventMocks } = await import('src/api/event.api');
+    const { registerInformationMocks } = await import('src/api/information.api');
 
     registerLanguageMocks(adapter);
     registerSettingsMocks(adapter);
@@ -45,6 +46,7 @@ export default defineBoot(async () => {
     registerGlossaryMocks(adapter);
     registerCategoryMocks(adapter);
     registerEventMocks(adapter);
+    registerInformationMocks(adapter);
 
     logger.warn('[boot:mock] all mock handlers registered');
 });

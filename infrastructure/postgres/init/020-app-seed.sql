@@ -137,8 +137,8 @@ VALUES
 --     created_by actor stamp ({ sub, username, name, realm }).
 -- ---------------------------------------------------------------------------
 (
-    'NEWS',
-    'News',
+    'INFORMATION',
+    'Information',
     '{
       "type": "object",
       "properties": {

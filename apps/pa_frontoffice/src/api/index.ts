@@ -89,3 +89,15 @@ export type {
     CreateEventPayload,
     PatchEventPayload,
 } from './event.api';
+
+// ── Information ───────────────────────────────────────────────────────────────
+export { informationApi, informationStatusKey } from './information.api';
+export type {
+    Information,
+    InformationFull,
+    InformationTranslation,
+    InformationStatus,
+    InformationListFilter,
+    CreateInformationPayload,
+    PatchInformationPayload,
+} from './information.api';

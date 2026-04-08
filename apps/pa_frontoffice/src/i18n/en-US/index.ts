@@ -473,7 +473,9 @@ export default {
     "add_new": "Add New Information to the Useful information",
     "edit": "Edit Information from the Useful information",
     "categories_title": "Useful information - Categories",
-    "categories_error": "Cannot delete or unpublish a category when an item has this category"
+    "categories_error": "Cannot delete or unpublish a category when an item has this category",
+    "empty": "No information items yet. Click 'Add Information' to create the first one.",
+    "no_results": "No information items match the current filters."
   },
   "events": {
     "list_title": "Events and courses",
