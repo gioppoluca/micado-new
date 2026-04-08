@@ -65,27 +65,22 @@ export class EventTranslationEntry extends Model {
     }
 }
 
-/** Non-translatable event metadata stored in data_extra. */
-@model()
-export class EventDataExtra extends Model {
-    @property({ type: 'string' })
+/**
+ * Non-translatable event metadata stored in content_revision.data_extra.
+ *
+ * Defined as a plain TypeScript interface — NOT a LoopBack @model class.
+ * LoopBack @model classes inherit toJSON()/toObject() from Model, making them
+ * incompatible with Record<string,unknown> (the dataExtra column type).
+ * Using a plain interface allows both:
+ *   - casting when reading:  revision.dataExtra as EventDataExtra
+ *   - plain literal writing: { startDate, endDate, ... } as Record<string,unknown>
+ */
+export interface EventDataExtra {
     startDate?: string;
-
-    @property({ type: 'string' })
     endDate?: string;
-
-    @property({ type: 'string' })
     location?: string;
-
-    @property({ type: 'string' })
     cost?: string | null;
-
-    @property({ type: 'boolean' })
     isFree?: boolean;
-
-    constructor(data?: Partial<EventDataExtra>) {
-        super(data);
-    }
 }
 
 @model({ description: 'Full Event DTO with all per-language translations and relations' })
@@ -103,9 +98,25 @@ export class EventFull extends Model {
     @property({ type: 'string' })
     sourceLang?: string;
 
-    /** Non-translatable metadata. On PUT: merged with existing data_extra. */
-    @property({ type: 'object' })
-    dataExtra?: EventDataExtra;
+    /**
+     * Non-translatable metadata. On PUT: merged with existing data_extra.
+     * Typed as Record<string,unknown> for LoopBack compatibility — cast to
+     * EventDataExtra when accessing specific fields.
+     */
+    @property({
+        type: 'object',
+        jsonSchema: {
+            type: 'object',
+            properties: {
+                startDate: { type: 'string' },
+                endDate: { type: 'string' },
+                location: { type: 'string' },
+                cost: { type: ['string', 'null'] },
+                isFree: { type: 'boolean' },
+            },
+        },
+    })
+    dataExtra?: Record<string, unknown>;
 
     /**
      * ID of the linked CATEGORY (event subtype). Null = uncategorised.

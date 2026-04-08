@@ -242,7 +242,7 @@ export class EventFacadeService {
         const stamp = buildActorStamp(this.currentUser);
         const externalKey = String(await this.nextExternalKey());
         const sourceLang = input.sourceLang ?? 'it';
-        const dataExtra: EventDataExtra = {
+        const dataExtra: Record<string, unknown> = {
             startDate: input.dataExtra?.startDate,
             endDate: input.dataExtra?.endDate,
             location: input.dataExtra?.location,
@@ -331,7 +331,7 @@ export class EventFacadeService {
 
         // Merge dataExtra (preserve existing fields if not provided)
         const existingExtra = draft.dataExtra as Partial<EventDataExtra> | undefined;
-        const newExtra: EventDataExtra = {
+        const newExtra: Record<string, unknown> = {
             startDate: body.dataExtra?.startDate ?? existingExtra?.startDate,
             endDate: body.dataExtra?.endDate ?? existingExtra?.endDate,
             location: body.dataExtra?.location ?? existingExtra?.location,
@@ -399,7 +399,7 @@ export class EventFacadeService {
         if (patch.dataExtra) {
             const existing = draft.dataExtra as Partial<EventDataExtra> | undefined;
             await this.contentRevisionRepository.updateById(draft.id!, {
-                dataExtra: { ...existing, ...patch.dataExtra },
+                dataExtra: { ...existing, ...patch.dataExtra } as Record<string, unknown>,
             });
         }
 
