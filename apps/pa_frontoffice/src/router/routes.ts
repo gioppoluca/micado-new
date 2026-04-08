@@ -51,6 +51,22 @@ const routes: RouteRecordRaw[] = [
         meta: { requiresAuth: true, roles: ['pa_admin', 'pa_operator', 'pa_viewer', 'micado_admin'] },
       },
 
+      // ── Step-by-Step Guides (Processes) ───────────────────────────────────
+      // Sidebar entry: menu.process → /guided_process_editor
+      {
+        path: 'guided_process_editor',
+        name: 'processes',
+        component: () => import('pages/ProcessesPage.vue'),
+        meta: { requiresAuth: true, roles: ['pa_admin', 'pa_operator', 'pa_viewer', 'micado_admin'] },
+      },
+      // Graph editor — full-page, receives process id as route param
+      {
+        path: 'guided_process_editor/:id/graph',
+        name: 'process-graph',
+        component: () => import('pages/ProcessGraphPage.vue'),
+        meta: { requiresAuth: true, roles: ['pa_admin', 'pa_operator', 'micado_admin'] },
+      },
+
       // ── Settings section ─────────────────────────────────────────────────
       // SettingsLayout renders the secondary settings drawer + <router-view>.
       // Every child route is rendered inside that layout's page container.

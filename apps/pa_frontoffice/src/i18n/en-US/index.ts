@@ -468,6 +468,18 @@ export default {
     "activationDate": "Date of activation of the survey",
     "expiryDate": "Expiration date"
   },
+  "processes": {
+    "add_new": "Add New Step-by-Step Guide",
+    "edit": "Edit Step-by-Step Guide",
+    "empty": "No processes yet. Click 'Add Process' to create the first one.",
+    "no_results": "No processes match the current search.",
+    "import_not_implemented": "Process import is not yet available in this version.",
+    "graph_saved": "Graph saved successfully.",
+    "graph_canvas_placeholder": "Graph canvas — coming soon",
+    "graph_editor_coming_soon": "Full graph editor will be available in the next release.",
+    "select_step_to_edit": "Select a step on the canvas to edit its details.",
+    "steps_loaded": "steps loaded"
+  },
   "information_centre": {
     "list_title": "Useful information",
     "add_new": "Add New Information to the Useful information",

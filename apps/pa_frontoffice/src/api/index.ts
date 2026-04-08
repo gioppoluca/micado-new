@@ -90,7 +90,23 @@ export type {
     PatchEventPayload,
 } from './event.api';
 
-// ── Information ───────────────────────────────────────────────────────────────
+// ── Process ───────────────────────────────────────────────────────────────────
+export { processApi, processStatusKey } from './process.api';
+export type {
+    Process,
+    ProcessFull,
+    ProcessTranslation,
+    ProcessStatus,
+    ProcessListFilter,
+    CreateProcessPayload,
+    PatchProcessPayload,
+    ProcessGraph,
+    GraphNode,
+    GraphEdge,
+    GraphNodeData,
+    GraphEdgeData,
+    RequiredDocument,
+} from './process.api';
 export { informationApi, informationStatusKey } from './information.api';
 export type {
     Information,
