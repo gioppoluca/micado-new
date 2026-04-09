@@ -1,26 +1,26 @@
 services:
-traefik:
-  image: traefik:v3.6.8
-  command:
-    - --providers.docker=true
-    - --providers.docker.exposedbydefault=false
-    - --providers.file.directory=/etc/traefik/dynamic
-    - --entrypoints.web.address=:80
-    - --entrypoints.web.http.redirections.entrypoint.to=websecure
-    - --entrypoints.web.http.redirections.entrypoint.scheme=https
-    - --entrypoints.websecure.address=:443
-    - --certificatesresolvers.le.acme.email=${TRAEFIK_EMAIL}
-    - --certificatesresolvers.le.acme.storage=/acme/acme.json
-    - --certificatesresolvers.le.acme.httpchallenge=true
-    - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
-    - --log.level=INFO
-  ports:
-    - "80:80"
-    - "443:443"
-  volumes:
-    - /var/run/docker.sock:/var/run/docker.sock:ro
-    - ./infrastructure/traefik/dynamic:/etc/traefik/dynamic:ro
-    - traefik_acme:/acme
+  traefik:
+    image: traefik:v3.6.8
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.le.acme.email=${TRAEFIK_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/acme/acme.json
+      - --certificatesresolvers.le.acme.httpchallenge=true
+      - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
+      - --log.level=INFO
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./infrastructure/traefik/dynamic:/etc/traefik/dynamic:ro
+      - traefik_acme:/acme
 
 
   db:
@@ -222,6 +222,16 @@ traefik:
       - traefik.http.routers.weblate.tls=true
       - traefik.http.routers.weblate.tls.certresolver=le
       - traefik.http.services.weblate.loadbalancer.server.port=8080
+
+  umami:
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.umami.rule=Host(`analytics.${BASE_DOMAIN}`)
+      - traefik.http.routers.umami.entrypoints=websecure
+      - traefik.http.routers.umami.tls=true
+      - traefik.http.routers.umami.tls.certresolver=le
+      - traefik.http.routers.umami.middlewares=sec-headers@file
+      - traefik.http.services.umami.loadbalancer.server.port=3000
 
 volumes:
   db_data:

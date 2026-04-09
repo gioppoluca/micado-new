@@ -30,6 +30,8 @@ services:
       GITEA_DB_PASSWORD: ${GITEA_DB_PASSWORD}
       MICADO_APP_PASSWORD: ${MICADO_APP_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+      UMAMI_DB_USER: ${UMAMI_DB_USER:-umami}
+      UMAMI_DB_PASSWORD: ${UMAMI_DB_PASSWORD}
     volumes:
       - db_data:/var/lib/postgresql/data
       - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d:ro
@@ -374,6 +376,60 @@ services:
       timeout: 5s
       retries: 12
       start_period: 15s
+
+  umami:
+    image: docker.umami.is/umami-software/umami:postgresql-latest
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${UMAMI_DB_USER:-umami}:${UMAMI_DB_PASSWORD}@db:5432/${POSTGRES_DB}?schema=umami
+      APP_SECRET: ${UMAMI_APP_SECRET}
+      DISABLE_TELEMETRY: "1"
+      DISABLE_UPDATES: "1"
+      PRIVATE_MODE: "1"
+      HOSTNAME: 0.0.0.0
+      PORT: 3000
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.umami.rule=Host(`analytics.${BASE_DOMAIN}`)
+      - traefik.http.routers.umami.entrypoints=web
+      - traefik.http.routers.umami.middlewares=sec-headers@file
+      - traefik.http.services.umami.loadbalancer.server.port=3000
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/heartbeat >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  umami-init:
+    image: alpine:3.21
+    depends_on:
+      umami:
+        condition: service_healthy
+    environment:
+      UMAMI_URL: http://umami:3000
+      UMAMI_ADMIN_USERNAME: ${UMAMI_ADMIN_USERNAME:-admin}
+      UMAMI_ADMIN_PASSWORD: ${UMAMI_ADMIN_PASSWORD:-umami}
+
+      UMAMI_MIGRANTS_WEBSITE_ID: ${UMAMI_MIGRANTS_WEBSITE_ID:-11111111-1111-4111-8111-111111111111}
+      UMAMI_PA_WEBSITE_ID: ${UMAMI_PA_WEBSITE_ID:-22222222-2222-4222-8222-222222222222}
+      UMAMI_NGO_WEBSITE_ID: ${UMAMI_NGO_WEBSITE_ID:-33333333-3333-4333-8333-333333333333}
+
+      UMAMI_MIGRANTS_NAME: ${UMAMI_MIGRANTS_NAME:-Migrants}
+      UMAMI_PA_NAME: ${UMAMI_PA_NAME:-PA}
+      UMAMI_NGO_NAME: ${UMAMI_NGO_NAME:-NGO}
+
+      UMAMI_MIGRANTS_DOMAIN: migrants.${BASE_DOMAIN}
+      UMAMI_PA_DOMAIN: pa.${BASE_DOMAIN}
+      UMAMI_NGO_DOMAIN: ngo.${BASE_DOMAIN}
+    volumes:
+      - ./infrastructure/umami/init:/init:ro
+    entrypoint: ["sh", "/init/umami-init.sh"]
+    restart: "no"
+    labels:
+      - traefik.enable=false
 
 volumes:
   db_data:

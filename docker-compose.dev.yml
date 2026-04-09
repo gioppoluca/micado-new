@@ -125,3 +125,7 @@ services:
       WEBLATE_RATELIMIT_ENABLED: "false"
     labels:
       - traefik.http.routers.weblate.tls=false
+
+  umami:
+    labels:
+      - traefik.http.routers.umami.tls=false
