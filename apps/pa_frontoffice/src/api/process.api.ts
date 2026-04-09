@@ -148,16 +148,22 @@ export interface GraphEdgeData {
     translations: Record<string, GraphEdgeTranslation>;
 }
 
-/** VueFlow-compatible node. */
-export interface GraphNode {
+/**
+ * Domain node shape — compatible with VueFlow's Node<GraphNodeData>.
+ * Named ProcessNode to avoid clash with VueFlow's internal GraphNode type.
+ */
+export interface ProcessNode {
     id: string;
     type?: string;
     position: { x: number; y: number };
     data: GraphNodeData;
 }
 
-/** VueFlow-compatible edge. */
-export interface GraphEdge {
+/**
+ * Domain edge shape — compatible with VueFlow's Edge<GraphEdgeData>.
+ * Named ProcessEdge to avoid clash with VueFlow's internal GraphEdge type.
+ */
+export interface ProcessEdge {
     id: string;
     source: string;
     target: string;
@@ -167,8 +173,8 @@ export interface GraphEdge {
 }
 
 export interface ProcessGraph {
-    nodes: GraphNode[];
-    edges: GraphEdge[];
+    nodes: ProcessNode[];
+    edges: ProcessEdge[];
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

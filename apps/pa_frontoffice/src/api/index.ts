@@ -101,10 +101,12 @@ export type {
     CreateProcessPayload,
     PatchProcessPayload,
     ProcessGraph,
-    GraphNode,
-    GraphEdge,
+    ProcessNode,
+    ProcessEdge,
     GraphNodeData,
     GraphEdgeData,
+    GraphNodeTranslation,
+    GraphEdgeTranslation,
     RequiredDocument,
 } from './process.api';
 export { informationApi, informationStatusKey } from './information.api';
