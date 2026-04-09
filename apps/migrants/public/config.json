@@ -2,9 +2,12 @@
   "_comment": "DEVELOPMENT DEFAULTS — override in production via docker-entrypoint.sh",
   "apiUrl": "http://api.localhost",
   "keycloakUrl": "http://auth.localhost",
-  "keycloakRealm": "pa_frontoffice",
-  "keycloakClientId": "pa_frontoffice",
+  "keycloakRealm": "migrants",
+  "keycloakClientId": "migrants",
   "paUrl": "http://pa.localhost",
   "migrantDomain": "localhost",
-  "titleLimit": 30
+  "titleLimit": 30,
+  "umamiUrl": "http://analytics.localhost",
+  "umamiWebsiteId": "11111111-1111-4111-8111-111111111111",
+  "umamiDomains": "migrants.localhost"
 }

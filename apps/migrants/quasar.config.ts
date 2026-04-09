@@ -13,15 +13,36 @@ export default defineConfig((ctx) => {
     // --> boot files are part of "main.js"
     // https://v2.quasar.dev/quasar-cli-vite/boot-files
     boot: [
+      // 1. envvar   — MUST be first: fetches /config.json from the server at
+      //               runtime and populates the RuntimeConfig singleton.
+      //               Every subsequent boot reads its URLs from that singleton.
       'envvar',
+
+      // 2. umami    — injects the Umami analytics script early so that the
+      //               initial page view (including anonymous public routes) is
+      //               tracked before any Keycloak redirect happens.
+      'umami',
+
+      // 3. mock     — wires the axios interceptor before any API call is made;
+      //               no-op when VITE_API_MOCK != 'true'
       'mock',
+      // 4. i18n     — installs the vue-i18n plugin with the en-US fallback locale
       'i18n',
+      // 5. axios    — registers $api / $axios globals on the Vue app instance
       'axios',
+      // 6. loadData — calls GET /languages and GET /public/settings (public,
+      //               no auth needed); populates language-store and app-store
       'loadData',
+      // 7. featureflag — loads active feature flags
       'featureflag',
+      // 8. keycloak — initialises Keycloak PKCE using URLs from RuntimeConfig;
+      //               runs in check-sso mode so anonymous users are NOT forced
+      //               to log in — only requiresAuth routes redirect to login
       'keycloak',
+      // 9. router-guard — enforces requiresAuth / roles meta on each navigation
       'router-guard',
     ],
+
 
     // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#css
     css: ['app.scss'],

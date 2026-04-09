@@ -51,6 +51,15 @@ export interface RuntimeConfig {
 
   /** Optional: title character limit for content editors */
   titleLimit?: number;
+
+  /** Base URL of Umami analytics, e.g. "https://analytics.micado.example.com" */
+  umamiUrl?: string;
+
+  /** Umami website id for the migrants frontend */
+  umamiWebsiteId?: string;
+
+  /** Optional: only track analytics on these comma-separated domains */
+  umamiDomains?: string;
 }
 
 // ─── Defaults (used in dev when config.json is not present) ───────────────────
@@ -60,11 +69,14 @@ export interface RuntimeConfig {
 const DEV_DEFAULTS: RuntimeConfig = {
   apiUrl: 'http://api.localhost',
   keycloakUrl: 'http://auth.localhost',
-  keycloakRealm: 'pa_frontoffice',
-  keycloakClientId: 'pa_frontoffice',
+  keycloakRealm: 'migrants',
+  keycloakClientId: 'migrants',
   paUrl: 'http://pa.localhost',
   migrantDomain: 'localhost',
   titleLimit: 30,
+  umamiUrl: 'http://analytics.localhost',
+  umamiWebsiteId: '11111111-1111-4111-8111-111111111111',
+  umamiDomains: 'migrants.localhost',
 };
 
 // ─── Singleton ────────────────────────────────────────────────────────────────
