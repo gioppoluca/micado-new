@@ -35,7 +35,10 @@ cat > "${CONFIG_FILE}" << EOF
   "keycloakClientId": "${KEYCLOAK_CLIENT_ID:?KEYCLOAK_CLIENT_ID is required}",
   "paUrl":            "${PA_URL:-}",
   "migrantDomain":    "${MIGRANT_DOMAIN:-}",
-  "titleLimit":       ${TITLE_LIMIT:-30}
+  "titleLimit":       ${TITLE_LIMIT:-30},
+  "umamiUrl":         "${UMAMI_URL:-}",
+  "umamiWebsiteId":   "${UMAMI_WEBSITE_ID:-}",
+  "umamiDomains":     "${UMAMI_DOMAINS:-}"
 }
 EOF
 

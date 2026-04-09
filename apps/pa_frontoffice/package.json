@@ -29,6 +29,7 @@
     "@tiptap/suggestion": "^3.20.2",
     "@tiptap/vue-3": "^3.20.2",
     "@types/uuid": "^10.0.0",
+    "@vue-flow/core": "^1.48.2",
     "axios": "^1.2.1",
     "consola": "^3.4.0",
     "keycloak-js": "^26.2.3",

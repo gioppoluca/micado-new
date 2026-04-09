@@ -31,6 +31,8 @@ import SettingsSectionFeatures from 'src/pages/settings/SettingsSectionFeatures.
 import SettingsSectionSurvey from 'src/pages/settings/SettingsSectionSurvey.vue';
 import SettingsSectionHelpdesk from 'src/pages/settings/SettingsSectionHelpdesk.vue';
 import SettingsSectionTopics from 'src/pages/settings/SettingsSectionTopics.vue';
+import { trackEvent } from 'src/services/analytics';
+
 
 const { t } = useI18n();
 const langStore = useLanguageStore();
@@ -47,5 +49,8 @@ onMounted(async () => {
     featuresStore.fetchAll(appStore.userLang),
   ]);
   loading.value = false;
+  trackEvent('settings-open-section', {
+    section: 'translation-management',
+  });
 });
 </script>

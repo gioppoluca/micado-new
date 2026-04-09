@@ -18,6 +18,8 @@ export default defineConfig((ctx) => {
       //               apiUrl, keycloakUrl, keycloakRealm, keycloakClientId.
       //               Every subsequent boot reads its URLs from that singleton.
       'envvar',
+      'umami',
+
       // 2. mock     — wires the axios interceptor before any API call is made;
       //               no-op when VITE_API_MOCK != 'true'
       'mock',

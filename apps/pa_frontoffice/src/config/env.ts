@@ -51,6 +51,15 @@ export interface RuntimeConfig {
 
   /** Optional: title character limit for content editors */
   titleLimit?: number;
+
+  /** Base URL of Umami, e.g. "https://analytics.micado.example.com" */
+  umamiUrl?: string;
+
+  /** Umami website id for the PA frontend */
+  umamiWebsiteId?: string;
+
+  /** Optional: only track on these domains */
+  umamiDomains?: string;
 }
 
 // ─── Defaults (used in dev when config.json is not present) ───────────────────
@@ -65,6 +74,9 @@ const DEV_DEFAULTS: RuntimeConfig = {
   paUrl: 'http://pa.localhost',
   migrantDomain: 'localhost',
   titleLimit: 30,
+  umamiUrl: 'http://umami.localhost',
+  umamiWebsiteId: '22222222-2222-4222-8222-222222222222',
+  umamiDomains: 'pa.localhost',
 };
 
 // ─── Singleton ────────────────────────────────────────────────────────────────
