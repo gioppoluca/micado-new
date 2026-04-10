@@ -347,7 +347,7 @@ export class GlossaryFacadeService {
         currentLang = 'it',
     ): Promise<Array<Record<string, unknown>>> {
         const items = await this.contentItemRepository.find({
-            where: { typeCode: GLOSSARY_CODE, publishedRevisionId: { neq: undefined } },
+            where: { typeCode: GLOSSARY_CODE, publishedRevisionId: { neq: null as unknown as string } },
         });
 
         const result: Array<Record<string, unknown>> = [];

@@ -481,7 +481,7 @@ export class EventFacadeService {
         const { page = 1, pageSize = 20 } = filter;
 
         const items = await this.contentItemRepository.find({
-            where: { typeCode: EVENT_CODE, publishedRevisionId: { neq: undefined } },
+            where: { typeCode: EVENT_CODE, publishedRevisionId: { neq: null as unknown as string } },
         });
 
         const result: Array<Record<string, unknown>> = [];

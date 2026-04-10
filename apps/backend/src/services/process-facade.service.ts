@@ -437,7 +437,7 @@ export class ProcessFacadeService {
     ): Promise<Array<Record<string, unknown>>> {
         const { page = 1, pageSize = 20 } = filter;
         const items = await this.contentItemRepository.find({
-            where: { typeCode: PROCESS_CODE, publishedRevisionId: { neq: undefined } },
+            where: { typeCode: PROCESS_CODE, publishedRevisionId: { neq: null as unknown as string } },
         });
 
         const result: Array<Record<string, unknown>> = [];

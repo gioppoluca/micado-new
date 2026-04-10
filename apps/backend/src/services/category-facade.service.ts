@@ -352,7 +352,7 @@ export class CategoryFacadeService {
         currentLang = 'it',
     ): Promise<Array<{ id: number; title: string; lang: string; subtype: string }>> {
         const items = await this.contentItemRepository.find({
-            where: { typeCode: CATEGORY_CODE, publishedRevisionId: { neq: undefined } },
+            where: { typeCode: CATEGORY_CODE, publishedRevisionId: { neq: null as unknown as string } },
         });
 
         const result: Array<{ id: number; title: string; lang: string; subtype: string }> = [];

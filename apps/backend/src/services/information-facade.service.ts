@@ -399,7 +399,7 @@ export class InformationFacadeService {
         const { page = 1, pageSize = 20 } = filter;
 
         const items = await this.contentItemRepository.find({
-            where: { typeCode: INFORMATION_CODE, publishedRevisionId: { neq: undefined } },
+            where: { typeCode: INFORMATION_CODE, publishedRevisionId: { neq: null as unknown as string } },
         });
 
         const result: Array<Record<string, unknown>> = [];

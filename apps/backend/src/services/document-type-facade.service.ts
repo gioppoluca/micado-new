@@ -436,7 +436,7 @@ export class DocumentTypeFacadeService {
         currentLang = 'it',
     ): Promise<Array<Record<string, unknown>>> {
         const items = await this.contentItemRepository.find({
-            where: { typeCode: DOCUMENT_TYPE_CODE, publishedRevisionId: { neq: undefined } },
+            where: { typeCode: DOCUMENT_TYPE_CODE, publishedRevisionId: { neq: null as unknown as string } },
         });
 
         const result: Array<Record<string, unknown>> = [];
