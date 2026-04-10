@@ -39,6 +39,8 @@ export default defineConfig((ctx) => {
       //               runs in check-sso mode so anonymous users are NOT forced
       //               to log in — only requiresAuth routes redirect to login
       'keycloak',
+      'consent',
+
       // 9. router-guard — enforces requiresAuth / roles meta on each navigation
       'router-guard',
     ],

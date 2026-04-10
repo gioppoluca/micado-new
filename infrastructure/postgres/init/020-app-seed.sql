@@ -1,11 +1,6 @@
 SET search_path TO micado;
 
 
-INSERT INTO languages (lang, iso_code, name, active, is_default, sort_order, voice_string, voice_active)
-VALUES
-  ('it', 'it',    'Italiano', true,  true,  10, NULL, false),
-  ('en', 'en-US', 'English',  true,  false, 20, NULL, false)
-ON CONFLICT (lang) DO NOTHING;
 
 
 -- Seed: application settings
@@ -31,36 +26,51 @@ INSERT INTO app_settings (key, value, description) VALUES
 ON CONFLICT (key) DO NOTHING;
 
 -- Seed flags
-INSERT INTO features_flags (flag_key, enabled) VALUES
-    ('CHATBOT',        false),
-    ('APPOINTMENTS',   false),
-    ('DOCUMENTS',      false),
-    ('NOTIFICATIONS',  false)
+INSERT INTO features_flags (id, flag_key, enabled) VALUES
+  (1,  'FEAT_DOCUMENTS',     true),
+  (2,  'FEAT_GLOSSARY',      true),
+  (3,  'FEAT_ASSISTANT',     true),
+  (4,  'FEAT_PROCESSES',     true),
+  (5,  'FEAT_TASKS',         true),
+  (6,  'FEAT_EVENTS',        true),
+  (7,  'FEAT_GEOPORTAL',     true),
+  (8,  'FEAT_DEFAULT',       true),
+  (9,  'FEAT_INFO',          true),
+  (10, 'FEAT_MIGRANT_LOGIN', true)
 ON CONFLICT (flag_key) DO NOTHING;
 
--- Seed Italian labels
-INSERT INTO features_flags_i18n (flag_id, lang, label)
-SELECT f.id, 'it', v.label
-FROM (VALUES
-    ('CHATBOT',       'Chatbot'),
-    ('APPOINTMENTS',  'Appuntamenti'),
-    ('DOCUMENTS',     'Documenti'),
-    ('NOTIFICATIONS', 'Notifiche')
-) AS v(flag_key, label)
-JOIN features_flags f USING (flag_key)
-ON CONFLICT (flag_id, lang) DO NOTHING;
 
--- Seed English labels
-INSERT INTO features_flags_i18n (flag_id, lang, label)
-SELECT f.id, 'en', v.label
-FROM (VALUES
-    ('CHATBOT',       'Chatbot'),
-    ('APPOINTMENTS',  'Appointments'),
-    ('DOCUMENTS',     'Documents'),
-    ('NOTIFICATIONS', 'Notifications')
-) AS v(flag_key, label)
-JOIN features_flags f USING (flag_key)
-ON CONFLICT (flag_id, lang) DO NOTHING;
+INSERT INTO features_flags_i18n (flag_id, lang, label) VALUES
+  (1,  'it', 'Portafoglio documenti'),
+  (1,  'en', 'Document wallet'),
+  (2,  'en', 'Glossary'),
+  (2,  'it', 'Glossario'),
+  (3,  'en', 'Chatbot assistant'),
+  (4,  'it', 'Gestione processi'),
+  (4,  'en', 'Process management'),
+  (5,  'it', 'Piano individuale integrazione'),
+  (5,  'en', 'Individual integration plan'),
+  (6,  'it', 'Gestione eventi'),
+  (6,  'en', 'Event management'),
+  (7,  'it', 'GeoPortale'),
+  (7,  'en', 'GeoPortal'),
+  (8,  'it', 'Funzionalità standard'),
+  (8,  'en', 'Core features'),
+  (9,  'it', 'Area notizie'),
+  (9,  'en', 'Information portal'),
+  (10, 'it', 'Il migrante può fare login'),
+  (10, 'en', 'Migrant can login')
+ON CONFLICT (flag_id, lang) DO UPDATE
+SET label = EXCLUDED.label;
+
+-- keep serial aligned
+SELECT setval(
+  pg_get_serial_sequence('features_flags', 'id'),
+  GREATEST((SELECT COALESCE(MAX(id), 1) FROM features_flags), 1),
+  true
+);
+
+
 
 
 
@@ -677,3 +687,238 @@ SELECT
 FROM   content_type,
        LATERAL (SELECT 1) AS x  -- unfold for readability
 ORDER  BY code, revision_field;
+
+
+-- -----------------------------------------------------------------------------
+-- 1) LANGUAGES
+-- Legacy source: languages
+-- New target: languages
+-- -----------------------------------------------------------------------------
+INSERT INTO languages (
+  lang, iso_code, name, active, is_default, sort_order, voice_string, voice_active
+) VALUES
+  ('en',    'en-us', 'english',    true,  true,  10, 'UK English Female', true),
+  ('it',    'it',    'italiano',   true,  false, 20, 'Italian Female',    true),
+  ('es',    'es',    'español',    true,  false, 30, 'Spanish Female',    true),
+  ('de',    'de',    'deutsch',    true,  false, 40, 'Deutsch Female',    true),
+  ('nl',    'nl',    'nederlands', true,  false, 50, 'Dutch Female',      true),
+  ('fa_IR', 'fa-IR', 'Darii',      true,  false, 60, NULL,                false),
+  ('ur',    'he',    'urdu',       true,  false, 70, NULL,                false),
+  ('uk',    'uk',    'ukrainian',  true,  false, 80, NULL,                false),
+  ('ru',    'ru',    'russian',    true,  false, 90, NULL,                false)
+ON CONFLICT (lang) DO UPDATE
+SET
+  iso_code     = EXCLUDED.iso_code,
+  name         = EXCLUDED.name,
+  active       = EXCLUDED.active,
+  is_default   = EXCLUDED.is_default,
+  sort_order   = EXCLUDED.sort_order,
+  voice_string = EXCLUDED.voice_string,
+  voice_active = EXCLUDED.voice_active;
+
+
+
+-- -----------------------------------------------------------------------------
+-- 5) TOPICS
+-- Legacy source: topic + topic_translation
+-- New target: content_item/content_revision/content_revision_translation
+-- Notes:
+-- - published=true -> revision status PUBLISHED
+-- - icon mapped into content_revision.data_extra.icon
+-- - father mapped via content_item_relation relation_type='PARENT_CHILD'
+-- -----------------------------------------------------------------------------
+
+WITH seed_topic AS (
+  SELECT *
+  FROM (
+    VALUES
+      (1,  {'icon': 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTE3LjA0ODggMTFWM0g3VjdIM1YyMUgxMVYxN0gxM1YyMUgyMVYxMUgxNy4wNDg4Wk03IDE5LjA0ODhINVYxNy4wNDg4SDdWMTkuMDQ4OFpNNyAxNS4wNDg4SDVWMTMuMDQ4OEg3VjE1LjA0ODhaTTcgMTFINVY5SDdWMTFaTTExIDE1LjA0ODhIOVYxMy4wNDg4SDExVjE1LjA0ODhaTTExIDExSDlWOUgxMVYxMVpNMTEgN0g5VjVIMTFWN1pNMTUuMDQ4OCAxNS4wNDg4SDEzLjA0ODhWMTMuMDQ4OEgxNS4wNDg4VjE1LjA0ODhaTTE1LjA0ODggMTFIMTMuMDQ4OFY5SDE1LjA0ODhWMTFaTTE1LjA0ODggN0gxMy4wNDg4VjVIMTUuMDQ4OFY3Wk0xOS4wNDg4IDE5LjA0ODhIMTcuMDQ4OFYxNy4wNDg4SDE5LjA0ODhWMTkuMDQ4OFpNMTkuMDQ4OCAxNS4wNDg4SDE3LjA0ODhWMTMuMDQ4OEgxOS4wNDg4VjE1LjA0ODhaIiBmaWxsPSIjNUM4MUEyIi8+Cjwvc3ZnPgo='}, 13),
+      (2,  {'icon': 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEyLjU2NDIgMTQuOTI4NkgxMS4yNzQ2QzEwLjYyOTkgMTQuOTI4NiAxMC4xNDYzIDE0LjQ0NSAxMC4wOTI1IDEzLjg1MzlMMyAxMi43NzkzVjE4LjM2NzRDMyAxOS40OTU3IDMuOTEzNDMgMjAuMzU1NCA0Ljk4ODA2IDIwLjM1NTRIMTguOTU4MkMyMC4wODY2IDIwLjM1NTQgMjAuOTQ2MyAxOS40NDIgMjAuOTQ2MyAxOC4zNjc0VjEyLjc3OTNMMTMuNzQ2MyAxMy44NTM5QzEzLjY5MjUgMTQuNDk4NyAxMy4yMDkgMTQuOTI4NiAxMi41NjQyIDE0LjkyODZaIiBmaWxsPSIjNUM4MUEyIi8+CjxwYXRoIGQ9Ik0xOC45NTgyIDcuMDgzNThIMTUuOTQ5M1Y1Ljc5NDAzQzE1Ljk0OTMgNC4yMzU4MiAxNC43MTM0IDMgMTMuMTU1MiAzSDEwLjczNzNDOS4xNzkxMSAzIDcuOTQzMjggNC4yMzU4MiA3Ljk0MzI4IDUuNzk0MDNWNy4wODM1OEg0Ljk4ODA2QzMuODU5NyA3LjA4MzU4IDMgNy45OTcwMiAzIDkuMDcxNjRWMTEuOTczMUwxMC4zMDc1IDEzLjA0NzhDMTAuNTIyNCAxMi43MjU0IDEwLjg5ODUgMTIuNTEwNCAxMS4zMjg0IDEyLjUxMDRIMTIuNjE3OUMxMy4wNDc4IDEyLjUxMDQgMTMuNDIzOSAxMi43MjU0IDEzLjYzODggMTMuMTAxNUwyMSAxMS45NzMxVjkuMDcxNjRDMjAuOTQ2MyA3Ljk5NzAyIDIwLjAzMjggNy4wODM1OCAxOC45NTgyIDcuMDgzNThaTTkuNTAxNDkgNS43OTQwM0M5LjUwMTQ5IDUuMTQ5MjUgMTAuMDM4OCA0LjYxMTk0IDEwLjY4MzYgNC42MTE5NEgxMy4xMDE1QzEzLjc0NjMgNC42MTE5NCAxNC4yODM2IDUuMTQ5MjUgMTQuMjgzNiA1Ljc5NDAzVjcuMDgzNThIOS40NDc3NlY1Ljc5NDAzSDkuNTAxNDlaIiBmaWxsPSIjNUM4MUEyIi8+Cjwvc3ZnPgo='}, NULL),
+      (3,  {'icon': 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEyIDIwLjczNjFDMTEuODA4IDIwLjczNjEgMTEuNjY0IDIwLjY4ODEgMTEuNTIgMjAuNTkyMUM3LjgyNDA1IDE4LjA0ODEgNS4xODQwNSAxNS40NTYxIDMuNjk2MDUgMTIuOTEyMUg2LjcyMDA1QzcuMDU2MDUgMTIuOTEyMSA3LjM0NDA1IDEyLjcyMDEgNy40NDAwNSAxMi40MzIxTDguMzA0MDUgMTAuMTc2MUw5Ljc0NDA1IDE1Ljg4ODFDOS44NDAwNSAxNi4yMjQxIDEwLjA4IDE2LjQ2NDEgMTAuNDE2IDE2LjQ2NDFDMTAuNDY0IDE2LjQ2NDEgMTAuNDY0IDE2LjQ2NDEgMTAuNTEyIDE2LjQ2NDFDMTAuOCAxNi40NjQxIDExLjA4OCAxNi4zMjAxIDExLjIzMiAxNi4wMzIxTDEyLjgxNiAxMi45MTIxSDE1Ljg4OEMxNi4wOCAxMi45MTIxIDE2LjMyIDEyLjgxNjEgMTYuNDY0IDEyLjY3MjFDMTYuNjA4IDEyLjUyODEgMTYuNzA0IDEyLjMzNjEgMTYuNzA0IDEyLjA5NjFDMTYuNzA0IDExLjY2NDEgMTYuMzIgMTEuMzI4MSAxNS44ODggMTEuMzI4MUgxMi4zMzZDMTIuMDQ4IDExLjMyODEgMTEuNzYgMTEuNDcyMSAxMS42MTYgMTEuNzYwMUwxMC43NTIgMTMuNDQwMUw5LjI2NDA1IDcuMzkyMDdDOS4xNjgwNSA3LjEwNDA2IDguOTI4MDUgNi44NjQwNyA4LjY0MDA1IDYuNzY4MDdDOC41OTIwNSA2Ljc2ODA3IDguNTQ0MDUgNi43NjgwNyA4LjQ5NjA1IDYuNzY4MDdDOC4xNjAwNSA2Ljc2ODA3IDcuODcyMDUgNi45NjAwNyA3Ljc3NjA1IDcuMjQ4MDdMNi4xOTIwNSAxMS4zMjgxSDIuOTI4MDVDMi4wNjQwNSA5LjEyMDA3IDIuMTYwMDUgNy4wNTYwNyAzLjIxNjA1IDUuNDcyMDZDNC4xNzYwNSA0LjAzMjA2IDUuODA4MDUgMy4yMTYwNiA3LjYzMjA1IDMuMjE2MDZDOS4xNjgwNSAzLjIxNjA2IDEwLjY1NiAzLjg0MDA2IDExLjg1NiA0Ljk0NDA2TDEyLjA0OCA1LjA4ODA3TDEyLjI0IDQuOTQ0MDZDMTMuMzkyIDMuODQwMDYgMTQuODggMy4yNjQwNi ১৬LjQxNiAzLjI2NDA2QzE4Ljc2OCAzLjI2NDA2IDIwLjc4NCA0LjcwNDA2IDIxLjQwOCA2LjgxNjA3QzIyLjY1NiAxMC44MDAxIDE5LjI5NiAxNS45MzYxIDEyLjQ4IDIwLjU5MjFDMTIuMzM2IDIwLjY4ODEgMTIuMTkyIDIwLjczNjEgMTIgMjAuNzM2MVoiIGZpbGw9IiM1QzgxQTIiLz4KPC9zdmc+Cg=='}, 25),
+      (4,  {'icon': 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZmlsbC1ydWxlPSJldmVub2RkIiBjbGlwLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik0xLjIwODU4IDkuMjk1NDRDMC45MzA1MjggOS4xNDM5IDAuOTMwNDU4IDguNzQ0NyAxLjIwODQ2IDguNTkzMDZMMTEuMzcyOSAzLjA0ODg0QzExLjQ5MjMgMi45ODM3MiAxMS42MzY2IDIuOTgzNzIgMTEuNzU1OSAzLjA0ODg0TDIyLjM1NTkgOC44MzA2NkMyMi40ODQ0IDguOTAwNzUgMjIuNTY0NCA5LjAzNTQ0IDIyLjU2NDQgOS4xODE4MlYxNi41NDQ0QzIyLjU2NDQgMTYuNzY1MyAyMi4zODUzIDE2Ljk0NDQgMjIuMTY0NCAxNi45NDQ0SDIwLjk2NDRDMjAuNzQzNSAxNi45NDQ0IDIwLjU2NDQgMTYuNzY1MyAyMC41NjQ0IDE2LjU0NDRWMTAuNzA3OUMyMC41NjQ0IDEwLjQwNDQgMjAuMjM5NSAxMC4yMTE0IDE5Ljk3MyAxMC4zNTY3TDE4Ljc3MyAxMS4wMTA3QzE4LjY0NDQgMTEuMDgwOCAxOC41NjQ0IDExLjIxNTUgMTguNTY0NCAxMS4zNjE5VjE2Ljg4N0MxOC41NjQ0IDE3LjAzMzMgMTguNDg0NSAxNy4xNjggMTguMzU2IDE3LjIzODFMMTEuNzU2IDIwLjgzOThDMTEuNjM2NiAyMC45MDUgMTEuNDkyMiAyMC45MDUgMTEuMzcyOCAyMC44Mzk4TDQuNzcyNzkgMTcuMjM4MUM0LjY0NDMyIDE3LjE2OCA0LjU2NDQgMTcuMDMzMyA0LjU2NDQgMTYuODg3VjExLjM2MTlDNC41NjQ0IDExLjIxNTUgNC40ODQzOSAxMS4wODA4IDQuMzU1ODIgMTEuMDEwN0wxLjIwODU4IDkuMjk1NDRaTTExLjM3MjcgMTguNTU5N0MxMS40OTIyIDE4LjYyNDkgMTEuNjM2NiAxOC42MjQ5IDExLjc1NjEgMTguNTU5N0wxNi4zNTYxIDE2LjA0ODFDMTYuNDg0NSAxNS45NzggMTYuNTY0NCAxNS44NDMzIDE2LjU2NDQgMTUuNjk3VjEyLjg4ODVDMTYuNTY0NCAxMi41ODQ4IDE2LjIzOTMgMTIuMzkxOSAxNS45NzI3IDEyLjUzNzRMMTEuNzU2MSAxNC44Mzk3QzExLjYzNjYgMTQuOTA0OSAxMS40OTIyIDE0LjkwNDkgMTEuMzcyNyAxNC44Mzk3TDcuMTU2MDkgMTIuNTM3NEM2Ljg4OTU0IDEyLjM5MTkgNi41NjQ0IDEyLjU4NDggNi41NjQ0IDEyLjg4ODVWMTUuNjk3QzYuNTY0NCAxNS44NDMzIDYuNjQ0MjkgMTUuOTc4IDYuNzcyNzEgMTYuMDQ4MUwxMS4zNzI3IDE4LjU1OTdaIiBmaWxsPSIjNUM4MUEyIi8+Cjwvc3ZnPgo='}, 25),
+      (7,  {'icon': 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTIxLjg3MjYgMTAuNDQ1OUMyMS4zMjQxIDEwLjUzNzMgMjAuNjg0MiAxMC41MzczIDIwLjEzNTcgMTAuNTM3M0MxOC45NDc0IDEwLjUzNzMgMTcuNjY3NiAxMC40NDU5IDE2LjM4NzggMTAuMjYzMUMxNS42NTY1IDEzLjQ2MjUgMTMuNzM2OSAxNi4wMjIxIDExLjA4NTkgMTYuOTM2MkMxMC43MjAyIDE3LjAyNzYgMTAuMzU0NiAxNy4xMTkgOS45ODg5MiAxNy4yMTA0QzkuODA2MSAxNy4yMTA0IDkuNzE0NjkgMTcuMjEwNCA5LjUzMTg2IDE3LjIxMDRDMTAuMjYzMiAxOS41ODcyIDExLjkwODYgMjEuNDE1NCAxNC4wMTExIDIxLjc4MTFDMTQuMjg1MyAyMS43ODExIDE0LjU1OTYgMjEuODcyNSAxNC44MzM4IDIxLjg3MjVDMTguMDMzMyAyMS44NzI1IDIxLjA0OTkgMTguNTgxNiAyMS43ODEyIDE0LjI4NTJDMjIuMDU1NCAxMy4wMDU0IDIyLjA1NTQgMTEuNjM0MyAyMS44NzI2IDEwLjQ0NTlaTTE3LjQ4NDggMjAuMjI3MUMxNy40ODQ4IDIwLjIyNzEgMTYuNzUzNSAxOS4wMzg3IDE1LjEwOCAxOC43NjQ1QzEzLjczNjkgMTguNDkwMiAxMy4yNzk4IDE4Ljc2NDUgMTIuMjc0MiAxOS4xMzAxQzEyLjI3NDIgMTkuMTMwMSAxMi4xODI4IDE2LjkzNjIgMTQuNjUxIDE2Ljg0NDhDMTYuOTM2MyAxNi44NDQ4IDE4LjMwNzUgMTguOTQ3MyAxNy40ODQ4IDIwLjIyNzFaTTE4LjEyNDcgMTUuNzQ3OEMxNy4zMDIgMTUuNzQ3OCAxNi42NjIxIDE1LjEwNzkgMTYuNjYyMSAxNC4yODUyQzE2LjY2MjEgMTMuNDYyNSAxNy4zMDIgMTIuODIyNiAxOC4xMjQ3IDEyLjgyMjZDMTguOTQ3NCAxMi44MjI2IDE5LjU4NzMgMTMuNDYyNSAxOS41ODczIDE0LjI4NTJDMTkuNTg3MyAxNS4xMDc5IDE4Ljk0NzQgMTUuNzQ3OCAxOC4xMjQ3IDE1Ljc0NzhaIiBmaWxsPSIjNUM4MUEyIi8+Cjwvc3ZnPgo='}, 25),
+      (13, {'icon': 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZmlsbC1ydWxlPSJldmVub2RkIiBjbGlwLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik0xMiAyMkMxNy41MjI4IDIyIDIyIDE3LjUyMjggMjIgMTJDMjIgNi40NzcxNSAxNy41MjI4IDIgMTIgMkM2LjQ3NzE1IDIgMiA2LjQ3NzE1IDIgMTJDMiAxNy41MjI4IDYuNDc3MTUgMjIgMTIgMjJaTTE0LjA1MjQgMTYuMTE1OEMxMy42NjAyIDE2LjIxNTEgMTMuMTkyMSAxNi4yNjQ4IDEyLjY0ODIgMTYuMjY0OEMxMS45MjcxIDE2LjI2NDggMTEuMjc1NiAxNi4wODQ3IDEwLjY5MzcgMTUuNzI0N0MxMC4xMjQ1IDE1LjM1MjIgOS43MzIzMSAxNC43MzE0IDkuNTE3MjUgMTMuODYyM0gxNC4xODUyVjEyLjcyNjNIOS4yODk1NUM5LjI3NjkgMTIuNTQwMSA5LjI3MDU3IDEyLjM5MTEgOS4yNzA1NyAxMi4yNzkzVjExLjkyNTVWMTEuNzAySDE0LjE4NTJWMTAuNTY2SDkuNDIyMzhDOS40OTgyOCAxMC4wNjkzIDkuNjM3NDMgOS42NDcyMSA5LjgzOTgzIDkuMjk5NTdDMTAuMDU0OSA4LjkzOTUyIDEwLjMwNzkgOC42NDc3NSAxMC41OTg4IDguNDI0MjdDMTAuOTAyNSA4LjE4ODM3IDExLjIzMTQgOC4wMTQ1NSAxMS41ODU2IDcuOTAyODFDMTEuOTUyNCA3Ljc5MTA3IDEyLjMzMTkgNy43MzUyIDEyLjcyNDEgNy43MzUyQzEzLjE5MjEgNy43MzUyIDEzLjYxNTkgNy43OTEwNyAxMy45OTU0IDcuOTAyODFDMTQuMzg3NiA4LjAxNDU1IDE0Ljc3MzQgOC4xNjM1NCAxNS4xNTI5IDguMzQ5NzhMMTUuNjg0MiA2LjYzNjQyQzE1LjMxNzQgNi40NTAxOCAxNC44ODczIDYuMjg4NzggMTQuMzkzOSA2LjE1MjIxQzEzLjkxMzIgNi4wMTU2MyAxMy4yNjggNS45NDczNSAxMi40NTg0IDUuOTQ3MzVDMTAuOTQwNCA1Ljk0NzM1IDkuNzEzMzMgNi4zNTA4NiA4Ljc3NzIxIDcuMTU3ODdDNy44NDExIDcuOTY0ODkgNy4yNDY1NCA5LjEwMDkyIDYuOTkzNTMgMTAuNTY2SDUuNjg0MjNWMTEuNzAySDYuODQxNzNWMTEuOTgxNFYxMi4zMTY2QzYuODQxNzMgMTIuNDE1OSA2Ljg0ODA1IDEyLjU1MjUgNi44NjA3MSAxMi43MjYzSDUuNjg0MjNWMTMuODYyM0g3LjAzMTQ4QzcuMTgzMjkgMTQuNTU3NiA3LjQxNzMyIDE1LjE2NiA3LjczMzU3IDE1LjY4NzRDOC4wNjI0OCAxNi4yMDg5IDguNDYwOTYgMTYuNjQzNCA4LjkyOTAyIDE2Ljk5MTFDOS4zOTcwOCAxNy4zMzg3IDkuOTIyMDYgMTcuNjA1NiAxMC41MDQgMTcuNzkxOUMxMS4wOTg1IDE3Ljk2NTcgMTEuNzMxIDE4LjA1MjYgMTIuNDAxNSAxOC4wNTI2QzEzLjE4NTggMTguMDUyNiAxMy44MzEgMTcuOTkwNSAxNC4zMzcgMTcuODY2NEMxNC44NTU2IDE3Ljc0MjIgMTUuMjkyMSAxNy41OTMyIDE1LjY0NjMgMTcuNDE5NEwxNS4xNTI5IDE1LjcwNjFDMTQuODI0IDE1Ljg3OTkgMTQuNDU3MiAxNi4wMTY0IDE0LjA1MjQgMTYuMTE1OFoiIGZpbGw9IiM1QzgxQTIiLz4KPC9zdmc+Cg=='}, 7),
+      (25, {'icon': 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTkuODAwMDUgMTYuM0M5LjYwMDA1IDEyLjYgMTIuNiA5LjQgMTYuMiA5LjJDMTcuMyA5LjIgMTguMyA5LjQgMTkuMiA5LjhWNC42QzE5LjIgMy4yIDE4IDIgMTYuNiAySDYuMzAwMDVDNC45MDAwNSAyIDMuODAwMDUgMy4yIDMuODAwMDUgNC42VjE5LjRDMy44MDAwNSAyMC44IDUuMDAwMDUgMjIgNi40MDAwNSAyMkgxMy41QzExLjQgMjAuOSA5LjkwMDA1IDE4LjggOS44MDAwNSAxNi4zWiIgZmlsbD0iIzVDODFBMiIvPgo8L3N2Zz4K'}, NULL)
+  ) AS t(legacy_id, icon, father_legacy_id)
+),
+topic_items AS (
+  INSERT INTO content_item (type_code, external_key)
+  SELECT 'TOPIC', legacy_id::text
+  FROM seed_topic
+  ON CONFLICT (type_code, external_key) DO UPDATE
+    SET updated_at = NOW()
+  RETURNING id, external_key
+),
+topic_item_map AS (
+  SELECT ti.id AS item_id, st.legacy_id, st.icon, st.father_legacy_id
+  FROM topic_items ti
+  JOIN seed_topic st ON st.legacy_id::text = ti.external_key
+),
+topic_revisions AS (
+  INSERT INTO content_revision (
+    item_id, revision_no, status, source_lang, data_extra, published_at
+  )
+  SELECT
+    tim.item_id,
+    1,
+    'PUBLISHED',
+    'en',
+    jsonb_build_object('icon', tim.icon),
+    NOW()
+  FROM topic_item_map tim
+  ON CONFLICT (item_id, revision_no) DO UPDATE
+    SET status = EXCLUDED.status,
+        source_lang = EXCLUDED.source_lang,
+        data_extra = EXCLUDED.data_extra
+  RETURNING id, item_id
+)
+INSERT INTO content_revision_translation (
+  revision_id, lang, title, description, t_status
+)
+SELECT
+  tr.id,
+  x.lang,
+  x.title,
+  x.description,
+  'PUBLISHED'
+FROM topic_revisions tr
+JOIN topic_item_map tim ON tim.item_id = tr.item_id
+JOIN (
+  VALUES
+    (7,  'en', 'Cultural',       NULL),
+    (13, 'en', 'Finance',        NULL),
+    (1,  'en', 'House',          NULL),
+    (4,  'en', 'Education',      NULL),
+    (3,  'en', 'Health',         NULL),
+    (2,  'en', 'Employment',     NULL),
+    (25, 'en', 'Administration', NULL),
+    (1,  'de', 'aggiornato',     NULL),
+    (1,  'it', 'Casa',           NULL),
+    (2,  'de', 'Werk',           NULL),
+    (2,  'it', 'Lavoro',         NULL)
+) AS x(legacy_id, lang, title, description)
+  ON x.legacy_id = tim.legacy_id
+ON CONFLICT (revision_id, lang) DO UPDATE
+SET
+  title       = EXCLUDED.title,
+  description = EXCLUDED.description,
+  t_status    = EXCLUDED.t_status;
+
+-- update published_revision_id for TOPIC items
+UPDATE content_item ci
+SET published_revision_id = cr.id
+FROM content_revision cr
+WHERE ci.id = cr.item_id
+  AND ci.type_code = 'TOPIC'
+  AND cr.revision_no = 1;
+
+-- parent-child topic relations
+WITH topic_lookup AS (
+  SELECT id, external_key::int AS legacy_id
+  FROM content_item
+  WHERE type_code = 'TOPIC'
+)
+INSERT INTO content_item_relation (
+  relation_type, parent_item_id, child_item_id, sort_order
+)
+SELECT
+  'PARENT_CHILD',
+  p.id,
+  c.id,
+  0
+FROM (
+  VALUES
+    (13, 7),
+    (1, 13),
+    (3, 25),
+    (4, 25),
+    (7, 25)
+) AS rel(child_legacy_id, parent_legacy_id)
+JOIN topic_lookup c ON c.legacy_id = rel.child_legacy_id
+JOIN topic_lookup p ON p.legacy_id = rel.parent_legacy_id
+ON CONFLICT (relation_type, parent_item_id, child_item_id) DO NOTHING;
+
+-- -----------------------------------------------------------------------------
+-- 6) USER TYPES
+-- Legacy source: user_types + user_types_translation
+-- New target: content_item/content_revision/content_revision_translation
+-- -----------------------------------------------------------------------------
+WITH seed_user_type AS (
+  SELECT *
+  FROM (
+    VALUES
+      (1, {'icon': 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTExLjcxMiAxNC4yNTU5SDkuNjk2VjE5LjY3OTlINlY0LjMxOTk1SDEyLjA0OEMxMy44NzIgNC4zMTk5NSAxNS4zMTIgNC43MDM5NSAxNi4zMiA1LjUxOTk1QzE3LjMyOCA2LjMzNTk1IDE3Ljg1NiA3LjQ4Nzk1IDE3Ljg1NiA4LjkyNzk1QzE3Ljg1NiA5Ljk4Mzk1IDE3LjYxNiAxMC44OTU5IDE3LjE4NCAxMS41Njc5QzE2Ljc1MiAxMi4yMzk5IDE2LjA4IDEyLjgxNTkgMTUuMTY4IDEzLjI5NTlMMTguMzg0IDE5LjQ4NzlWMTkuNjc5OUgxNC40TDExLjcxMiAxNC4yNTU5Wk05LjY5NiAxMS4zNzU5SDEyLjA0OEMxMi43NjggMTEuMzc1OSAxMy4yOTYgMTEuMTgzOSAxMy42MzIgMTAuNzk5OUMxMy45NjggMTAuNDE1OSAxNC4xNiA5LjkzNTk1IDE0LjE2IDkuMjYzOTVDMTQuMTYgOC41OTE5NSAxMy45NjggOC4wNjM5NSAxMy42MzIgNy.7Mjc5NUMxMy4yOTYgNy.3OTE5NSAxMi.3NjggNy.1NTE5NSAxMi.0NDggNy.1NTE5NUg5.696Vjk.3NzU5WiIgZmlsbD0iI0ZCQTU1QSIvPgo8L3N2Zz4K'}),
+      (7, {'icon': 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTguODk2IDRMMTIuMzA0IDE0LjcwNEwxN.3MTIgNEgyM.2MDhWMTkuMzZIMTYuOTEyVjE1.76TDE3.20OCA4.416TDEz.5MDQgMTkuMzZIMTEuMDU2TDcuMzEyIDguNDE2TDcuNjQ4IDE1.76Vjk.36SDRWNEg4.896WiIgZmlsbD0iI0ZCQTU1QSIvPgo8L3N2Zz4K'}),
+      (9, {'icon': 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTguODk2IDRMMTIuMzA0IDE0LjcwNEwxN.3MTIgNEgyM.2MDhWMTkuMzZIMTYuOTEyVjE1.76TDE3.20OCA4.416TDEz.5MDQgMTkuMzZIMTEuMDU2TDcuMzEyIDguNDE2TDcuNjQ4IDE1.76Vjk.36SDRWNEg4.896WiIgZmlsbD0iI0ZCQTU1QSIvPgo8L3N2Zz4K'}),
+  ) AS t(legacy_id, icon)
+),
+ut_items AS (
+  INSERT INTO content_item (type_code, external_key)
+  SELECT 'USER_TYPE', legacy_id::text
+  FROM seed_user_type
+  ON CONFLICT (type_code, external_key) DO UPDATE
+    SET updated_at = NOW()
+  RETURNING id, external_key
+),
+ut_item_map AS (
+  SELECT ui.id AS item_id, su.legacy_id, su.icon
+  FROM ut_items ui
+  JOIN seed_user_type su ON su.legacy_id::text = ui.external_key
+),
+ut_revisions AS (
+  INSERT INTO content_revision (
+    item_id, revision_no, status, source_lang, data_extra, published_at
+  )
+  SELECT
+    uim.item_id,
+    1,
+    'PUBLISHED',
+    'en',
+    jsonb_build_object('icon', uim.icon),
+    NOW()
+  FROM ut_item_map uim
+  ON CONFLICT (item_id, revision_no) DO UPDATE
+    SET status = EXCLUDED.status,
+        source_lang = EXCLUDED.source_lang,
+        data_extra = EXCLUDED.data_extra
+  RETURNING id, item_id
+)
+INSERT INTO content_revision_translation (
+  revision_id, lang, title, description, t_status
+)
+SELECT
+  ur.id,
+  x.lang,
+  x.title,
+  x.description,
+  'PUBLISHED'
+FROM ut_revisions ur
+JOIN ut_item_map uim ON uim.item_id = ur.item_id
+JOIN (
+  VALUES
+    (7, 'en', 'Migrant ',       ''),
+    (1, 'en', 'Refugee',        '<p>Refugee</p>'),
+    (9, 'en', 'Asylum Seeker',  '<p>Asylum Seeker</p>'),
+    (1, 'nl', 'Vluchteling',    '<p>Vluchteling</p>'),
+    (1, 'it', 'Rifugiato',      ' '),
+    (7, 'it', 'Migrante ',      ''),
+    (9, 'nl', 'Asielzoeker',    '<p>Asielzoeker</p>'),
+    (1, 'de', 'Flüchtling',     '<p>Flüchtling</p>'),
+    (9, 'de', 'Asylsuchender',  '<p>Asylsuchender</p>')
+) AS x(legacy_id, lang, title, description)
+  ON x.legacy_id = uim.legacy_id
+ON CONFLICT (revision_id, lang) DO UPDATE
+SET
+  title       = EXCLUDED.title,
+  description = EXCLUDED.description,
+  t_status    = EXCLUDED.t_status;
+
+UPDATE content_item ci
+SET published_revision_id = cr.id
+FROM content_revision cr
+WHERE ci.id = cr.item_id
+  AND ci.type_code = 'USER_TYPE'
+  AND cr.revision_no = 1;
+
+COMMIT;
+

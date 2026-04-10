@@ -1,0 +1,33 @@
+/* Keep Klaro above Quasar footer/header */
+#klaro,
+.klaro,
+.cm-root,
+.cm-modal,
+.cm-notice {
+    z-index: 6000 !important;
+}
+
+/* Bottom banner / notice should sit above the fixed footer */
+.cm-notice {
+    bottom: 72px !important;
+}
+
+/* On small screens leave a bit more room */
+@media (max-width: 599px) {
+    .cm-notice {
+        left: 8px !important;
+        right: 8px !important;
+        bottom: 88px !important;
+        max-width: none !important;
+    }
+}
+
+/* Modal should stay centered and above everything */
+.cm-modal {
+    z-index: 7000 !important;
+}
+
+/* Overlay too */
+.cm-backdrop {
+    z-index: 6500 !important;
+}

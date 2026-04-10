@@ -12,7 +12,11 @@ const routes: RouteRecordRaw[] = [
       { path: 'profile', component: () => import('pages/ProfilePage.vue'), meta: { requiresAuth: true } },
       { path: 'settings', component: () => import('pages/SettingsPage.vue'), meta: { requiresAuth: true } },
       { path: 'about', component: () => import('pages/AboutPage.vue') },
-      { path: 'privacy', component: () => import('pages/PrivacyPage.vue') },
+      {
+        path: '/privacy',
+        name: 'privacy',
+        component: () => import('pages/PrivacyPage.vue'),
+      }
     ],
   },
   {

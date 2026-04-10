@@ -17,13 +17,14 @@
   "dependencies": {
     "@quasar/extras": "^1.16.4",
     "axios": "^1.2.1",
+    "consola": "^3.4.0",
     "keycloak-js": "^26.2.3",
+    "klaro": "^0.7.21",
     "pinia": "^3.0.1",
     "quasar": "^2.16.0",
     "vue": "^3.5.22",
     "vue-i18n": "^11.0.0",
-    "vue-router": "^5.0.0",
-    "consola": "^3.4.0"
+    "vue-router": "^5.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.14.0",

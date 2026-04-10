@@ -1,17 +1,25 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
+import { useI18n } from 'vue-i18n';
+import ConsentPreferencesButton from 'src/components/privacy/ConsentPreferencesButton.vue';
 import { useAuthStore } from 'src/stores/auth-store';
 import { useLanguageStore } from 'src/stores/language-store';
 
 const router = useRouter();
 const route = useRoute();
+const { t } = useI18n();
 const auth = useAuthStore();
 const languageStore = useLanguageStore();
 const languageDialog = ref(false);
 
 const isAuth = computed(() => auth.authenticated);
-const currentLang = computed(() => languageStore.selected?.lang?.toUpperCase() ?? languageStore.defaultLanguage?.lang?.toUpperCase() ?? 'EN');
+const currentLang = computed(
+  () =>
+    languageStore.selected?.lang?.toUpperCase() ??
+    languageStore.defaultLanguage?.lang?.toUpperCase() ??
+    'EN',
+);
 
 const navOptions = computed(() => {
   const base = [
@@ -59,43 +67,15 @@ onMounted(() => {
   <q-layout view="hHh lpR fFf" class="micado-layout">
     <q-header elevated class="micado-header">
       <q-toolbar>
-        <q-btn
-          flat
-          dense
-          round
-          :icon="route.path === '/' ? 'home' : 'home'"
-          @click="router.push(isAuth ? '/home' : '/')"
-        />
+        <q-btn flat dense round :icon="route.path === '/' ? 'home' : 'home'"
+          @click="router.push(isAuth ? '/home' : '/')" />
 
         <q-toolbar-title class="micado-toolbar-title">Home</q-toolbar-title>
 
-        <q-btn
-          flat
-          round
-          dense
-          no-caps
-          :label="currentLang"
-          class="q-mr-sm"
-          @click="languageDialog = true"
-        />
+        <q-btn flat round dense no-caps :label="currentLang" class="q-mr-sm" @click="languageDialog = true" />
 
-        <q-btn
-          v-if="!isAuth"
-          flat
-          round
-          dense
-          icon="login"
-          @click="doLogin"
-        />
-
-        <q-btn
-          v-else
-          flat
-          round
-          dense
-          icon="account_circle"
-          @click="router.push('/profile')"
-        />
+        <q-btn v-if="!isAuth" flat round dense icon="login" @click="doLogin" />
+        <q-btn v-else flat round dense icon="account_circle" @click="router.push('/profile')" />
       </q-toolbar>
     </q-header>
 
@@ -105,14 +85,13 @@ onMounted(() => {
 
     <q-footer class="micado-footer text-white">
       <q-tabs no-caps align="justify" active-color="orange-7" indicator-color="transparent">
-        <q-route-tab
-          v-for="nav in navOptions"
-          :key="nav.label"
-          :to="nav.to"
-          :icon="nav.icon"
-          :label="nav.label"
-        />
+        <q-route-tab v-for="nav in navOptions" :key="nav.label" :to="nav.to" :icon="nav.icon" :label="nav.label" />
       </q-tabs>
+
+      <div class="row items-center q-gutter-sm">
+        <q-btn flat no-caps :label="t('privacy.privacyPageLink')" :to="{ name: 'privacy' }" />
+        <ConsentPreferencesButton />
+      </div>
     </q-footer>
 
     <q-dialog v-model="languageDialog">
@@ -125,12 +104,8 @@ onMounted(() => {
 
         <q-card-section>
           <q-list bordered separator>
-            <q-item
-              v-for="language in languageStore.activeLanguages"
-              :key="language.lang"
-              clickable
-              @click="selectLanguage(language.lang)"
-            >
+            <q-item v-for="language in languageStore.activeLanguages" :key="language.lang" clickable
+              @click="selectLanguage(language.lang)">
               <q-item-section>
                 <q-item-label>{{ language.name }}</q-item-label>
                 <q-item-label caption>{{ language.lang.toUpperCase() }}</q-item-label>
@@ -138,9 +113,7 @@ onMounted(() => {
               <q-item-section side>
                 <q-icon
                   v-if="languageStore.selected?.lang === language.lang || (!languageStore.selected && language.isDefault)"
-                  name="check_circle"
-                  color="positive"
-                />
+                  name="check_circle" color="positive" />
               </q-item-section>
             </q-item>
           </q-list>

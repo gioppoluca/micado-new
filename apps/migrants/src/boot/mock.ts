@@ -27,12 +27,26 @@ export default defineBoot(async () => {
     const adapter = installMockAdapter();
     if (!adapter) return;
 
-    // Register handlers from each API module
+    // Register handlers from each API module.
+    // Infrastructure APIs:
     const { registerLanguageMocks } = await import('src/api/language.api');
     const { registerSettingsMocks } = await import('src/api/settings.api');
+    // Migrant content APIs (public endpoints):
+    const { registerTopicMocks } = await import('src/api/topic.api');
+    const { registerCategoryMocks } = await import('src/api/category.api');
+    const { registerInformationMocks } = await import('src/api/information.api');
+    const { registerEventMocks } = await import('src/api/event.api');
+    const { registerGlossaryMocks } = await import('src/api/glossary.api');
+    const { registerProcessMocks } = await import('src/api/process.api');
 
     registerLanguageMocks(adapter);
     registerSettingsMocks(adapter);
+    registerTopicMocks(adapter);
+    registerCategoryMocks(adapter);
+    registerInformationMocks(adapter);
+    registerEventMocks(adapter);
+    registerGlossaryMocks(adapter);
+    registerProcessMocks(adapter);
 
     logger.warn('[boot:mock] all mock handlers registered');
 });
