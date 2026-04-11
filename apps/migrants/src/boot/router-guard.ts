@@ -1,15 +1,14 @@
 /**
  * src/boot/router-guard.ts
  *
- * Global navigation guard — handles two route meta properties:
+ * Global navigation guard — handles:
  *
- *   requiresAuth: true
- *     Redirect to Keycloak login if the user is not authenticated.
+ *   1. Welcome-skip: if localStorage('showWelcome') === 'false' and the user
+ *      navigates to '/' (welcome), redirect straight to '/home'.
  *
- *   roles: string[]
- *     After authentication, check that the user has at least one of the
- *     listed Keycloak roles.  Redirect to '/' if none match.
- *     Role names are raw Keycloak values (no 'Application/' prefix).
+ *   2. requiresAuth: true — redirect to Keycloak login when unauthenticated.
+ *
+ *   3. roles: string[] — post-auth role check; redirect to '/' on mismatch.
  */
 
 import { defineBoot } from '#q-app/wrappers';
@@ -19,15 +18,23 @@ import { logger } from 'src/services/Logger';
 
 export default defineBoot(({ router }) => {
   router.beforeEach((to) => {
-    // ── Auth check ──────────────────────────────────────────────────────────
+
+    // ── 1. Welcome-skip ────────────────────────────────────────────────────
+    // If the user has previously opted out of the welcome page, send them
+    // straight to /home.  Only applies to the root / route.
+    if (to.name === 'welcome' && localStorage.getItem('showWelcome') === 'false') {
+      logger.info('[router-guard] welcome skip — redirecting to /home');
+      return { name: 'home' };
+    }
+
+    // ── 2. Auth check ──────────────────────────────────────────────────────
     if (to.matched.some(r => r.meta?.requiresAuth) && !keycloak.authenticated) {
       logger.info('[router-guard] unauthenticated — redirecting to login', { path: to.fullPath });
       void keycloak.login({ redirectUri: window.location.origin + to.fullPath });
       return false;
     }
 
-    // ── Role check ──────────────────────────────────────────────────────────
-    // Collect all roles required by matched route segments (parent + child)
+    // ── 3. Role check ──────────────────────────────────────────────────────
     const requiredRoles = to.matched
       .flatMap(r => (r.meta?.roles as string[] | undefined) ?? []);
 

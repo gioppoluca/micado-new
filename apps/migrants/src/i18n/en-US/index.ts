@@ -1,12 +1,9 @@
 /**
- * src/i18n/en-US/index.ts
- *
- * English (US) base translation strings.
- * All other locale files should mirror this structure.
+ * src/i18n/en-US/index.ts — English (US) base strings.
+ * All other locale files mirror this structure exactly.
  */
 
 export default {
-  // ── Generic ───────────────────────────────────────────────────────────────
   failed: 'Action failed',
   success: 'Action was successful',
 
@@ -36,12 +33,19 @@ export default {
     integration_plan: 'Integration Plans',
     glossary: 'Glossary',
     feedback: 'Feedback',
-    about: 'About',
+    about: 'More',
     profile: 'Profile',
     settings: 'Settings',
     login: 'Login',
     logout: 'Logout',
     selectLanguage: 'Select language',
+    // About-page navigation items
+    welcome: 'Welcome page',
+    policy: 'Privacy policy',
+    consent: 'Manage cookies',
+    funding: 'Powered by / Funding',
+
+    tasks: 'Integration Plans',
   },
 
   // ── Shared UI labels ──────────────────────────────────────────────────────
@@ -50,6 +54,15 @@ export default {
     loading: 'Loading…',
     no_results: 'No results found',
     retry: 'Retry',
+    survey_desc: 'Fill in our survey',
+    survey_link: 'Click the link below to open the survey:',
+
+    logout: 'Sign out',
+  },
+
+  // ── Buttons ───────────────────────────────────────────────────────────────
+  button: {
+    go_back: 'Go back',
   },
 
   // ── Glossary ──────────────────────────────────────────────────────────────
@@ -61,11 +74,18 @@ export default {
   privacy: {
     title: 'Privacy',
     privacyPageLink: 'Privacy Policy',
+    privacy: 'Privacy Policy',
+    grant: "This project has received funding from the European Union's H2020 Innovation Action under Grant Agreement No 822717.",
+    notAvailable: 'Privacy policy text is not yet available.',
+    currentStateTitle: 'Cookie preferences',
+    managePreferences: 'Manage preferences',
+    pageTitle: 'Privacy',
+    pageIntro: '',
+    preferencesTitle: 'Cookie settings',
+    preferencesDescription: 'Manage which optional services you allow.',
   },
 
   // ── Klaro consent manager ─────────────────────────────────────────────────
-  // Keys are consumed by klaro-config.factory.ts via the t() function.
-  // Structure must match the Klaro translation schema exactly.
   consent: {
     notice: {
       title: 'We value your privacy',
@@ -91,44 +111,24 @@ export default {
       services: 'services',
     },
     purposes: {
-      necessary: {
-        title: 'Essential',
-        description: 'These cookies are required for the app to function correctly and cannot be disabled.',
-      },
-      analytics: {
-        title: 'Analytics',
-        description: 'Help us understand how the app is used so we can improve it. No personal data is sold.',
-      },
-      embeddedMedia: {
-        title: 'Embedded media',
-        description: 'Allow video and media content embedded from external platforms such as YouTube.',
-      },
-      externalMaps: {
-        title: 'External maps',
-        description: 'Allow interactive maps provided by third-party services.',
-      },
-      thirdPartySupport: {
-        title: 'Support tools',
-        description: 'Allow third-party tools used to provide in-app support and assistance.',
-      },
+      necessary: { title: 'Essential', description: 'These cookies are required for the app to function correctly and cannot be disabled.' },
+      analytics: { title: 'Analytics', description: 'Help us understand how the app is used so we can improve it. No personal data is sold.' },
+      embeddedMedia: { title: 'Embedded media', description: 'Allow video and media content embedded from external platforms such as YouTube.' },
+      externalMaps: { title: 'External maps', description: 'Allow interactive maps provided by third-party services.' },
+      thirdPartySupport: { title: 'Support tools', description: 'Allow third-party tools used to provide in-app support and assistance.' },
     },
     services: {
-      usageTracker: {
-        title: 'Usage analytics',
-        description: 'Collects anonymised data about how pages are visited to help improve the app.',
-      },
-      youtubeEmbed: {
-        title: 'YouTube',
-        description: 'Allows embedded YouTube videos to be played inside the app.',
-      },
-      atlasEmbed: {
-        title: 'Atlas maps',
-        description: 'Provides interactive maps via the Atlas platform.',
-      },
-      supportWidget: {
-        title: 'Support widget',
-        description: 'Enables the in-app support chat and help widget.',
-      },
+      usageTracker: { title: 'Usage analytics', description: 'Collects anonymised data about how pages are visited to help improve the app.' },
+      youtubeEmbed: { title: 'YouTube', description: 'Allows embedded YouTube videos to be played inside the app.' },
+      atlasEmbed: { title: 'Atlas maps', description: 'Provides interactive maps via the Atlas platform.' },
+      supportWidget: { title: 'Support widget', description: 'Enables the in-app support chat and help widget.' },
     },
+  },
+
+  // ── Information centre labels ─────────────────────────────────────────────
+  information_centre: {
+    category: 'Category',
+    topics: 'Topics',
+    user_types: 'User types',
   },
 };
