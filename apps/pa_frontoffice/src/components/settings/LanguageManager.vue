@@ -12,8 +12,10 @@
         </q-card-section>
 
         <!-- ── Add / Edit form ──────────────────────────────────────────────── -->
-        <q-card v-if="showForm" class="q-pa-xl">
+        <q-card v-if="showForm" class="q-pa-xl q-mb-md">
             <q-form @submit.prevent="onSubmit" @reset.prevent="onReset">
+
+                <!-- Name -->
                 <HelpLabel :field-label="t('input_labels.language_name')" :help-label="t('help.topic')"
                     style="padding-top: 10px" />
                 <q-input ref="nameRef" v-model="shell.name" outlined filled dense counter :maxlength="25"
@@ -22,6 +24,7 @@
                         (v: string) => !!v || 'Field is required',
                     ]" :label="t('input_labels.language_name')" />
 
+                <!-- Language tag (primary key — readonly on edit) -->
                 <HelpLabel :field-label="t('input_labels.language_abbr')" :help-label="t('help.topic')"
                     style="padding-top: 10px" />
                 <q-input ref="abbrRef" v-model="shell.lang" outlined filled dense counter :maxlength="10"
@@ -30,6 +33,7 @@
                         (v: string) => !!v || 'Field is required',
                     ]" :label="t('input_labels.language_abbr')" />
 
+                <!-- ISO code -->
                 <HelpLabel :field-label="t('input_labels.language_iso')" :help-label="t('help.topic')"
                     style="padding-top: 10px" />
                 <q-input ref="isoRef" v-model="shell.isoCode" outlined filled dense counter :maxlength="25"
@@ -37,6 +41,28 @@
                         (v: string) => v.length <= 25 || 'Please use maximum 25 characters',
                         (v: string) => !!v || 'Field is required',
                     ]" :label="t('input_labels.language_iso')" />
+
+                <!-- Sort order -->
+                <HelpLabel :field-label="t('input_labels.language_sort_order')" :help-label="t('help.topic')"
+                    style="padding-top: 10px" />
+                <q-input v-model.number="shell.sortOrder" outlined filled dense type="number" :min="1" :max="999"
+                    :label="t('input_labels.language_sort_order')" />
+
+                <!-- TTS voice identifier -->
+                <HelpLabel :field-label="t('input_labels.language_voice_string')"
+                    :help-label="t('help.language_voice_string')" style="padding-top: 10px" />
+                <q-input v-model="shell.voiceString" outlined filled dense counter :maxlength="100"
+                    :label="t('input_labels.language_voice_string')" clearable @clear="shell.voiceString = undefined" />
+
+                <!-- TTS active toggle -->
+                <div class="row items-center q-mt-md q-gutter-sm">
+                    <HelpLabel :field-label="t('input_labels.language_voice_active')"
+                        :help-label="t('help.language_voice_active')" class="col" />
+                    <q-toggle v-model="shell.voiceActive" color="accent" :disable="!shell.voiceString?.trim()" />
+                </div>
+                <div v-if="!shell.voiceString?.trim()" class="text-caption text-grey-6 q-ml-sm q-mb-sm">
+                    {{ t('help.language_voice_string') }}
+                </div>
 
                 <div class="row justify-end q-gutter-sm q-mt-md">
                     <q-btn no-caps flat :label="t('button.cancel')" type="reset" @click="cancelLang" />
@@ -49,24 +75,38 @@
         <!-- ── Language list ────────────────────────────────────────────────── -->
         <q-list>
             <!-- Header row -->
-            <q-item>
-                <q-item-section class="col-4">{{ t('input_labels.language_name') }}</q-item-section>
-                <q-item-section class="col-3 text-center">{{ t('input_labels.language_abbr') }}</q-item-section>
-                <q-item-section class="col-3 text-center">{{ t('input_labels.language_iso') }}</q-item-section>
-                <q-item-section class="col-2 text-center">{{ t('input_labels.edit') }}</q-item-section>
+            <q-item class="text-caption text-grey-7">
+                <q-item-section class="col-3">{{ t('input_labels.language_name') }}</q-item-section>
+                <q-item-section class="col-2 text-center">{{ t('input_labels.language_abbr') }}</q-item-section>
+                <q-item-section class="col-2 text-center">{{ t('input_labels.language_iso') }}</q-item-section>
+                <q-item-section class="col-1 text-center">{{ t('input_labels.language_sort_order') }}</q-item-section>
+                <q-item-section class="col-2 text-center">{{ t('input_labels.language_voice_string') }}</q-item-section>
+                <q-item-section class="col-1 text-center">{{ t('input_labels.language_voice_active') }}</q-item-section>
+                <q-item-section class="col-1 text-center">{{ t('input_labels.edit') }}</q-item-section>
             </q-item>
             <q-separator />
 
-            <q-item v-for="language in langStore.languages" :key="language.lang">
-                <q-item-section class="col-4">{{ language.name }}</q-item-section>
-                <q-item-section class="col-3 text-center">{{ language.lang }}</q-item-section>
-                <q-item-section class="col-3 text-center">{{ language.isoCode }}</q-item-section>
+            <q-item v-for="language in sortedLanguages" :key="language.lang">
+                <q-item-section class="col-3">
+                    <div class="row items-center no-wrap">
+                        {{ language.name }}
+                        <q-badge v-if="language.isDefault" color="accent" outline class="q-ml-sm" label="default" />
+                    </div>
+                </q-item-section>
+                <q-item-section class="col-2 text-center text-mono">{{ language.lang }}</q-item-section>
+                <q-item-section class="col-2 text-center text-mono">{{ language.isoCode ?? '—' }}</q-item-section>
+                <q-item-section class="col-1 text-center">{{ language.sortOrder }}</q-item-section>
                 <q-item-section class="col-2 text-center">
-                    <!--
-            Old app used IconWithTooltip with img:statics/icons/Edit.png.
-            Replaced with a standard q-btn icon — drop the PNG into
-            public/icons/Edit.png and switch to img:icons/Edit.png if needed.
-          -->
+                    <span class="ellipsis" :title="language.voiceString ?? ''">
+                        {{ language.voiceString || '—' }}
+                    </span>
+                </q-item-section>
+                <q-item-section class="col-1 text-center">
+                    <q-icon :name="language.voiceActive ? 'volume_up' : 'volume_off'"
+                        :color="language.voiceActive ? 'positive' : 'grey-5'"
+                        :title="language.voiceActive ? 'TTS active' : 'TTS inactive'" />
+                </q-item-section>
+                <q-item-section class="col-1 text-center">
                     <q-btn flat round dense icon="edit" color="accent" :title="t('help.edit_process')"
                         @click="openEdit(language)" />
                 </q-item-section>
@@ -83,17 +123,21 @@
 /**
  * LanguageManager — add and edit platform languages.
  *
+ * Manages all columns of the languages table:
+ *   - lang (PK, readonly after creation)
+ *   - name, isoCode, sortOrder
+ *   - voiceString: TTS engine identifier (e.g. 'Italian Female', 'UK English Female')
+ *   - voiceActive: TTS enabled for this language; auto-disabled if voiceString is empty
+ *
+ * Note: isDefault and active are managed separately by ActiveLanguageSelector.
+ *
  * Migration notes from Vue 2:
  *  - storeMappingMixin / Vuex → useLanguageStore() (Pinia)
  *  - Languages prop removed: the store is the single source of truth.
- *    Parent no longer needs to pass the list down.
- *  - IconWithTooltip → q-btn icon (see comment in template)
- *  - form @submit.prevent fires onSubmit(); @reset.prevent fires onReset()
- *    which matches Quasar's native form validation pattern
- *  - type="input" on save button corrected to type="submit"
- *  - Ref<QInput> used for programmatic validation instead of this.$refs
+ *  - IconWithTooltip → q-btn icon
+ *  - form @submit.prevent / @reset.prevent — Quasar native form validation
  */
-import { ref, reactive } from 'vue';
+import { ref, reactive, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useQuasar } from 'quasar';
 import type { QInput } from 'quasar';
@@ -105,6 +149,17 @@ import HelpLabel from 'src/components/HelpLabel.vue';
 const { t } = useI18n();
 const $q = useQuasar();
 const langStore = useLanguageStore();
+
+// ── Computed ───────────────────────────────────────────────────────────────
+
+/** Languages sorted by sortOrder ascending, then name. */
+const sortedLanguages = computed(() =>
+    [...langStore.languages].sort((a, b) =>
+        a.sortOrder !== b.sortOrder
+            ? a.sortOrder - b.sortOrder
+            : a.name.localeCompare(b.name),
+    ),
+);
 
 // ── Form state ─────────────────────────────────────────────────────────────
 
@@ -173,7 +228,6 @@ function onReset(): void {
 }
 
 async function onSubmit(): Promise<void> {
-    // Trigger validation on all fields
     const nameOk = await nameRef.value?.validate();
     const abbrOk = await abbrRef.value?.validate();
     const isoOk = await isoRef.value?.validate();
@@ -183,19 +237,29 @@ async function onSubmit(): Promise<void> {
         return;
     }
 
+    // voiceActive cannot be true without a non-empty voiceString
+    const voiceString = shell.voiceString?.trim() || undefined;
+    const voiceActive = !!voiceString && shell.voiceActive;
+
     let success = false;
+
     if (isNew.value) {
-        const created = await langStore.create({ ...shell });
+        const created = await langStore.create({
+            ...shell,
+            voiceString,
+            voiceActive,
+        });
         success = created !== null;
     } else {
         success = await langStore.patch(shell.lang, {
             name: shell.name,
-            ...(shell.isoCode !== undefined ? { isoCode: shell.isoCode } : {}),
-            active: shell.active,
-            isDefault: shell.isDefault,
+            // exactOptionalPropertyTypes: omit the key entirely when value is empty
+            // rather than passing undefined, which is not assignable to optional string
+            ...(shell.isoCode ? { isoCode: shell.isoCode } : {}),
             sortOrder: shell.sortOrder,
-            voiceString: shell.voiceString,
-            voiceActive: shell.voiceActive,
+            ...(voiceString !== undefined ? { voiceString } : {}),
+            voiceActive,
+            // active and isDefault are managed by ActiveLanguageSelector — not touched here
         });
     }
 
@@ -204,6 +268,7 @@ async function onSubmit(): Promise<void> {
         showForm.value = false;
         onReset();
         resetShell();
+        $q.notify({ type: 'positive', message: t('success_messages.send_translation') });
     }
 }
 </script>
@@ -213,5 +278,18 @@ async function onSubmit(): Promise<void> {
     background: #0b91ce;
     border-radius: 5px;
     color: white;
+}
+
+.text-mono {
+    font-family: monospace;
+    font-size: 0.85em;
+}
+
+.ellipsis {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
 }
 </style>

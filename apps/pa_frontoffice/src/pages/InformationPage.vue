@@ -74,6 +74,11 @@
                                 <q-item-section>
                                     <q-item-label>{{ topic.topic }}</q-item-label>
                                 </q-item-section>
+                                <q-item-section v-if="topic.dataExtra?.icon" side>
+                                    <q-avatar size="20px">
+                                        <img :src="topic.dataExtra.icon" :alt="topic.topic" />
+                                    </q-avatar>
+                                </q-item-section>
                             </q-item>
                         </template>
                         <q-item v-if="topicStore.topics.length > 3" dense class="q-mt-xs">
