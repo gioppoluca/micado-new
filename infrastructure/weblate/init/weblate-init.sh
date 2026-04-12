@@ -85,10 +85,20 @@ mask_secret() {
 # Webhook settings
 : "${WEBLATE_WEBHOOK_URL:=}"
 : "${WEBLATE_WEBHOOK_SECRET:=}"
-# Events for the webhook add-on — comma-separated integers from AddonEvent.
-# 4 = EVENT_POST_COMMIT: fires when Weblate commits translated strings to git.
-# Add more integers separated by commas if needed, e.g. "4,2" for post-commit + post-update.
-: "${WEBLATE_WEBHOOK_EVENTS:=4}"
+# Events for the webhook add-on — comma-separated integers from ActionEvents
+# (weblate/trans/actions.py), NOT from AddonEvent. These are translation history
+# action codes, completely different from the add-on lifecycle enum.
+#
+# Relevant values for our use case:
+#   2  = CHANGE    — a translator edits a string
+#   17 = COMMIT    — Weblate commits changes to the local git repo
+#   18 = PUSH      — Weblate pushes to Gitea  ← USE THIS
+#   36 = APPROVE   — a translation is approved
+#
+# We use PUSH (18) + COMMIT (17) so the backend is notified whenever
+# Weblate writes to Gitea. Commits happen first; push follows.
+# The backend then pulls the full translated catalog from Gitea.
+: "${WEBLATE_WEBHOOK_EVENTS:=17,18}"
 
 : "${WEBLATE_GIT_REPO:=http://gitea:3000/weblate-bot/translations.git}"
 : "${WEBLATE_GIT_BRANCH:=main}"
@@ -180,7 +190,7 @@ log_env() {
   info "  WEBLATE_FILE_FORMAT=${WEBLATE_FILE_FORMAT}"
   info "  WEBLATE_WEBHOOK_URL=${WEBLATE_WEBHOOK_URL:-<not set>}"
   info "  WEBLATE_WEBHOOK_SECRET=$(mask_secret "${WEBLATE_WEBHOOK_SECRET:-}")"
-  info "  WEBLATE_WEBHOOK_EVENTS=${WEBLATE_WEBHOOK_EVENTS} (integers: 4=POST_COMMIT, 2=POST_UPDATE, 1=POST_PUSH)"
+  info "  WEBLATE_WEBHOOK_EVENTS=${WEBLATE_WEBHOOK_EVENTS} (ActionEvents: 2=CHANGE,17=COMMIT,18=PUSH,36=APPROVE)"
   info "  MICADO_SOURCE_LANG=${MICADO_SOURCE_LANG}"
   info "  MICADO_CATEGORIES=${MICADO_CATEGORIES:-<none>}"
   info "  MICADO_TARGET_LANGS=${MICADO_TARGET_LANGS:-<none>}"
@@ -426,15 +436,16 @@ find_component_webhook_addon_id() {
 #
 # Correct field names (validated from Weblate API error messages):
 #   webhook_url  — destination URL  (NOT "url")
-#   secret       — HMAC secret (may be empty string)
-#   events       — array of INTEGERS from AddonEvent (NOT string names)
+#   secret       — Standard Webhooks secret (base64-encoded, may be empty)
+#   events       — array of INTEGERS from ActionEvents enum (NOT AddonEvent, NOT strings)
 #
-# AddonEvent integers (weblate/addons/events.py):
-#   1 = EVENT_POST_PUSH       4 = EVENT_POST_COMMIT (use this)
-#   2 = EVENT_POST_UPDATE     8 = EVENT_UNIT_POST_SAVE (too noisy)
-#  11 = EVENT_DAILY          12 = EVENT_COMPONENT_UPDATE
+# ActionEvents integers (weblate/trans/actions.py):
+#   2  = CHANGE    — string edited by translator
+#   17 = COMMIT    — changes committed to local git
+#   18 = PUSH      — changes pushed to Gitea  ← primary trigger
+#   36 = APPROVE   — translation approved
 #
-# WEBLATE_WEBHOOK_EVENTS: comma-separated integers, e.g. "4" or "4,2"
+# WEBLATE_WEBHOOK_EVENTS: comma-separated integers, e.g. "17,18"
 # ---------------------------------------------------------------------------
 build_addon_payload() {
   events_csv="${WEBLATE_WEBHOOK_EVENTS}"
@@ -473,7 +484,7 @@ ensure_webhook_addon() {
 
   info "Ensuring webhook add-on on component '${comp_slug}'"
   info "  Webhook URL: ${WEBLATE_WEBHOOK_URL}"
-  info "  Events:      ${WEBLATE_WEBHOOK_EVENTS} (integers: 4=POST_COMMIT)"
+  info "  Events:      ${WEBLATE_WEBHOOK_EVENTS} (ActionEvents: 17=COMMIT,18=PUSH)"
 
   addon_id=$(find_component_webhook_addon_id "$comp_slug" || true)
 
