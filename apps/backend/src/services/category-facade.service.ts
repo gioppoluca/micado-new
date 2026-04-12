@@ -224,7 +224,7 @@ export class CategoryFacadeService {
         });
 
         for (const [lang, entry] of Object.entries(body.translations ?? {})) {
-            await this.upsertTranslation(draft.id!, lang, entry.title);
+            await this.upsertTranslation(draft.id!, lang, entry.title, sourceLang);
         }
 
         if (body.status === 'APPROVED' && draft.status !== 'APPROVED') {
@@ -417,11 +417,18 @@ export class CategoryFacadeService {
 
     // ── Internal helpers ──────────────────────────────────────────────────────
 
+    /**
+     * Insert or update a translation row.
+     * sourceLang translation → tStatus APPROVED (authored text, no Weblate needed).
+     * Other languages → tStatus DRAFT (awaiting Weblate workflow).
+     */
     protected async upsertTranslation(
         revisionId: string,
         lang: string,
         title: string,
+        sourceLang: string,
     ): Promise<void> {
+        const tStatus = lang === sourceLang ? 'APPROVED' : 'DRAFT';
         const existing = await this.contentRevisionTranslationRepository.findOne({
             where: { revisionId, lang },
         });
@@ -429,12 +436,12 @@ export class CategoryFacadeService {
             await this.contentRevisionTranslationRepository.updateById(existing.id!, {
                 title,
                 description: '',
-                tStatus: 'DRAFT',
+                tStatus,
             });
         } else {
             await this.contentRevisionTranslationRepository.create({
                 revisionId, lang, title,
-                description: '', i18nExtra: {}, tStatus: 'DRAFT',
+                description: '', i18nExtra: {}, tStatus,
             });
         }
     }

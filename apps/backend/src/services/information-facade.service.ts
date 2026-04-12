@@ -288,7 +288,7 @@ export class InformationFacadeService {
         await this.contentRevisionRepository.updateById(draft.id!, { sourceLang });
 
         for (const [lang, entry] of Object.entries(body.translations ?? {})) {
-            await this.upsertTranslation(draft.id!, lang, entry.title, entry.description ?? '');
+            await this.upsertTranslation(draft.id!, lang, entry.title, entry.description ?? '', sourceLang);
         }
 
         if (body.status === 'APPROVED' && draft.status !== 'APPROVED') {
@@ -535,15 +535,24 @@ export class InformationFacadeService {
 
     // ── Internal helpers ──────────────────────────────────────────────────────
 
-    protected async upsertTranslation(revisionId: string, lang: string, title: string, description: string): Promise<void> {
+    /**
+     * Insert or update a translation row.
+     * sourceLang: the revision's source language.
+     * Rule: the source-language translation is the original authored text —
+     * it is implicitly APPROVED by the operator's save action and does NOT
+     * need to go through the Weblate translation workflow.
+     * All other languages remain DRAFT until Weblate promotes them.
+     */
+    protected async upsertTranslation(revisionId: string, lang: string, title: string, description: string, sourceLang: string): Promise<void> {
+        const tStatus = lang === sourceLang ? 'APPROVED' : 'DRAFT';
         const existing = await this.contentRevisionTranslationRepository.findOne({ where: { revisionId, lang } });
         if (existing) {
             await this.contentRevisionTranslationRepository.updateById(existing.id!, {
-                title, description, i18nExtra: {}, tStatus: 'DRAFT',
+                title, description, i18nExtra: {}, tStatus,
             });
         } else {
             await this.contentRevisionTranslationRepository.create({
-                revisionId, lang, title, description, i18nExtra: {}, tStatus: 'DRAFT',
+                revisionId, lang, title, description, i18nExtra: {}, tStatus,
             });
         }
     }

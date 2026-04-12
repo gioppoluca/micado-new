@@ -258,7 +258,7 @@ export class TopicFacadeService {
                 title: entry.title,
                 description: entry.description ?? '',
                 i18nExtra: {},
-            });
+            }, sourceLang);
         }
 
         // ── Parent relation sync ───────────────────────────────────────────
@@ -607,11 +607,18 @@ export class TopicFacadeService {
 
     // ── Internal helpers ──────────────────────────────────────────────────────
 
+    /**
+     * Insert or update a translation row.
+     * sourceLang translation → tStatus APPROVED (authored text, no Weblate needed).
+     * Other languages → tStatus DRAFT (awaiting Weblate workflow).
+     */
     protected async upsertTranslation(
         revisionId: string,
         lang: string,
         data: { title: string; description: string; i18nExtra: Record<string, unknown> },
+        sourceLang: string,
     ): Promise<void> {
+        const tStatus = lang === sourceLang ? 'APPROVED' : 'DRAFT';
         const existing = await this.contentRevisionTranslationRepository.findOne({
             where: { revisionId, lang },
         });
@@ -620,7 +627,7 @@ export class TopicFacadeService {
                 title: data.title,
                 description: data.description,
                 i18nExtra: { ...(existing.i18nExtra ?? {}), ...data.i18nExtra },
-                tStatus: 'DRAFT',
+                tStatus,
             });
         } else {
             await this.contentRevisionTranslationRepository.create({
@@ -628,7 +635,7 @@ export class TopicFacadeService {
                 title: data.title,
                 description: data.description,
                 i18nExtra: data.i18nExtra,
-                tStatus: 'DRAFT',
+                tStatus,
             });
         }
     }

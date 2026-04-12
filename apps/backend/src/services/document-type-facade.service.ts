@@ -328,7 +328,7 @@ export class DocumentTypeFacadeService {
                 title: entry.title,
                 description: entry.description ?? '',
                 i18nExtra: {},
-            });
+            }, sourceLang);
         }
 
         // ── Hotspot diff ───────────────────────────────────────────────────
@@ -615,7 +615,7 @@ export class DocumentTypeFacadeService {
                     langs: Object.keys(hotspot.translations ?? {}),
                     titles: Object.fromEntries(Object.entries(hotspot.translations ?? {}).map(([l, t]) => [l, t.title])),
                 });
-                await this.upsertHotspotTranslations(hotspotDraft.id!, hotspot.translations ?? {});
+                await this.upsertHotspotTranslations(hotspotDraft.id!, hotspot.translations ?? {}, sourceLang);
             } else {
                 // New hotspot — create content_item + revision + translations + relation
                 this.logger.info('[DocumentTypeFacadeService.syncHotspots] creating new hotspot', {
@@ -645,7 +645,7 @@ export class DocumentTypeFacadeService {
                     langs: Object.keys(hotspot.translations ?? {}),
                 });
 
-                await this.upsertHotspotTranslations(hotspotRevision.id!, hotspot.translations ?? {});
+                await this.upsertHotspotTranslations(hotspotRevision.id!, hotspot.translations ?? {}, sourceLang);
 
                 await this.contentItemRelationRepository.create({
                     parentItemId: docItem.id!,
@@ -675,9 +675,15 @@ export class DocumentTypeFacadeService {
      * title → title column.
      * message → i18n_extra.message (declared in PICTURE_HOTSPOT translation_schema).
      */
+    /**
+     * sourceLang: the document revision's source language.
+     * Passed through to upsertTranslation so the source-language hotspot
+     * translation is set to APPROVED, all others to DRAFT.
+     */
     protected async upsertHotspotTranslations(
         revisionId: string,
         translations: Record<string, { title: string; message?: string; tStatus?: string }>,
+        sourceLang: string,
     ): Promise<void> {
         this.logger.debug('[DocumentTypeFacadeService.upsertHotspotTranslations]', {
             revisionId,
@@ -691,7 +697,7 @@ export class DocumentTypeFacadeService {
                 title: entry.title,
                 description: '',
                 i18nExtra: { message: entry.message ?? '' },
-            });
+            }, sourceLang);
         }
     }
 
@@ -790,11 +796,18 @@ export class DocumentTypeFacadeService {
 
     // ── Internal helpers ──────────────────────────────────────────────────────
 
+    /**
+     * Insert or update a translation row.
+     * sourceLang translation → tStatus APPROVED (authored text, no Weblate needed).
+     * Other languages → tStatus DRAFT (awaiting Weblate workflow).
+     */
     protected async upsertTranslation(
         revisionId: string,
         lang: string,
         data: { title: string; description: string; i18nExtra: Record<string, unknown> },
+        sourceLang: string,
     ): Promise<void> {
+        const tStatus = lang === sourceLang ? 'APPROVED' : 'DRAFT';
         const existing = await this.contentRevisionTranslationRepository.findOne({
             where: { revisionId, lang },
         });
@@ -803,7 +816,7 @@ export class DocumentTypeFacadeService {
                 title: data.title,
                 description: data.description,
                 i18nExtra: { ...(existing.i18nExtra ?? {}), ...data.i18nExtra },
-                tStatus: 'DRAFT',
+                tStatus,
             });
         } else {
             await this.contentRevisionTranslationRepository.create({
@@ -811,7 +824,7 @@ export class DocumentTypeFacadeService {
                 title: data.title,
                 description: data.description,
                 i18nExtra: data.i18nExtra,
-                tStatus: 'DRAFT',
+                tStatus,
             });
         }
     }

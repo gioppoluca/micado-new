@@ -225,6 +225,7 @@ export class UserTypeFacadeService {
                     title: content.title,
                     description: content.description ?? '',
                     i18nExtra: {},
+                    // sourceLang row is DRAFT at creation — becomes APPROVED on operator APPROVE toggle
                     tStatus: 'DRAFT',
                 });
             }
@@ -283,8 +284,11 @@ export class UserTypeFacadeService {
             dataExtra: body.dataExtra ?? {},
         });
 
-        // Upsert all translations from the body
+        // Upsert all translations from the body.
+        // sourceLang translation → APPROVED (authored text, no Weblate needed).
+        // Other languages → DRAFT (awaiting Weblate workflow).
         for (const [lang, entry] of Object.entries(body.translations ?? {})) {
+            const tStatus = lang === sourceLang ? 'APPROVED' : 'DRAFT';
             const existing = await this.contentRevisionTranslationRepository.findOne({
                 where: { revisionId: draft.id!, lang },
             });
@@ -293,7 +297,7 @@ export class UserTypeFacadeService {
                 await this.contentRevisionTranslationRepository.updateById(existing.id!, {
                     title: entry.title,
                     description: entry.description ?? '',
-                    tStatus: 'DRAFT',
+                    tStatus,
                 });
             } else {
                 await this.contentRevisionTranslationRepository.create({
@@ -302,7 +306,7 @@ export class UserTypeFacadeService {
                     title: entry.title,
                     description: entry.description ?? '',
                     i18nExtra: {},
-                    tStatus: 'DRAFT',
+                    tStatus,
                 });
             }
         }
@@ -362,13 +366,14 @@ export class UserTypeFacadeService {
                     description: patch.description !== undefined ? patch.description : existing.description,
                 });
             } else {
+                // PATCH always targets sourceLang — row is APPROVED by definition
                 await this.contentRevisionTranslationRepository.create({
                     revisionId: draft.id!,
                     lang,
                     title: patch.user_type ?? '',
                     description: patch.description ?? '',
                     i18nExtra: {},
-                    tStatus: 'DRAFT',
+                    tStatus: 'APPROVED',
                 });
             }
         }
