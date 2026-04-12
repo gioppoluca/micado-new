@@ -66,6 +66,14 @@ export class PublicSettingsController {
         return { key: row.key, value: row.value };
     }
 
+    /**
+     * PATCH /settings/{key}
+     *
+     * Generic setting update.
+     * NOTE: 'default_language' is explicitly rejected here — the platform
+     * default language is managed exclusively via PATCH /languages/:lang
+     * with { isDefault: true }. The settings table no longer holds this key.
+     */
     @patch('/settings/{key}')
     @authenticate('keycloak')
     @authorize({ allowedRoles: ['pa_admin', 'pa_operator'] })
@@ -89,6 +97,14 @@ export class PublicSettingsController {
     ): Promise<{ key: string; value: string }> {
         if (body.value === undefined || body.value === null) {
             throw new HttpErrors.UnprocessableEntity('value is required');
+        }
+        // Guard: default_language is no longer managed via settings.
+        // Use PATCH /languages/:lang with { isDefault: true } instead.
+        if (key === 'default_language') {
+            throw new HttpErrors.Gone(
+                'The default_language setting is deprecated. ' +
+                'Use PATCH /languages/:lang with { isDefault: true } instead.',
+            );
         }
         this.logger.info(`[settings.patch] key=${key}`);
         const existing = await this.settingsRepo.findOne({ where: { key } });

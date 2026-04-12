@@ -36,6 +36,37 @@ export class LanguageController {
         return this.repo.find({ where, order: ['sortOrder ASC', 'name ASC'] });
     }
 
+    /**
+     * GET /languages/default
+     *
+     * Returns the language with is_default = true.
+     * This is the single source of truth for the platform default language —
+     * the settings table no longer holds a 'default_language' key.
+     *
+     * IMPORTANT: this route must appear BEFORE /languages/{lang} in the
+     * controller so LoopBack does not treat 'default' as a path parameter.
+     *
+     * Auth: public (called by the PA and migrant frontends at boot time).
+     */
+    @get('/languages/default')
+    @authenticate.skip()
+    async getDefault(): Promise<Language> {
+        const found = await this.repo.findOne({ where: { isDefault: true } });
+        if (!found) {
+            this.logger.warn('[languages.getDefault] no default language set — falling back to first active');
+            const fallback = await this.repo.findOne({
+                where: { active: true },
+                order: ['sortOrder ASC'],
+            });
+            if (!fallback) {
+                throw new HttpErrors.NotFound('No languages configured in the system');
+            }
+            return fallback;
+        }
+        this.logger.info('[languages.getDefault]', { lang: found.lang });
+        return found;
+    }
+
     @get('/languages/{lang}')
     @authenticate.skip()
     async getOne(@param.path.string('lang') lang: string): Promise<Language> {
