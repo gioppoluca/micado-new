@@ -799,7 +799,7 @@ INSERT INTO content_revision_translation (
 )
 SELECT cr.id, 'en', 'Cultural', NULL, 'PUBLISHED'
 FROM content_item ci
-JOIN content_rezvision cr ON cr.item_id = ci.id
+JOIN content_revision cr ON cr.item_id = ci.id
 WHERE ci.type_code = 'TOPIC'
   AND ci.external_key = '2'
   AND cr.revision_no = 1;
