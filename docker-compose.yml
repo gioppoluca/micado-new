@@ -251,7 +251,7 @@ services:
       GITEA__server__HTTP_PORT: 3000
       GITEA__security__INSTALL_LOCK: "true"
       MICADO_SOURCE_LANG: ${MICADO_SOURCE_LANG:-it}
-      MICADO_CATEGORIES: ${MICADO_CATEGORIES:-news,events,categories}
+      MICADO_CATEGORIES: ${MICADO_CATEGORIES:-information,event,categories}
       GITEA_TRANSLATIONS_REPO_PRIVATE: "false"
     volumes:
       - gitea_data:/data
@@ -291,6 +291,8 @@ services:
       REDIS_HOST: cache
       WEBLATE_GIT_REPO: http://weblate-bot:${GITEA_WEBLATE_PASSWORD}@gitea:3000/weblate-bot/translations.git
       GIT_CONFIG_GLOBAL: /home/weblate/.gitconfig
+      MICADO_TARGET_LANGS: ${MICADO_TARGET_LANGS:-it,fr,ar,de,sq,mk}   # your actual languages
+      WEBLATE_GIT_PUSH_REPO: ""                    # empty = same as WEBLATE_GIT_REPO
     #      GIT_ALLOW_PROTOCOL: http:https
     #      GIT_CONFIG_COUNT: "1"
     #      GIT_CONFIG_KEY_0: protocol.http.allow
@@ -329,7 +331,7 @@ services:
       WEBLATE_GIT_REPO: http://weblate-bot:${GITEA_WEBLATE_PASSWORD}@gitea:3000/weblate-bot/translations.git
       GIT_CONFIG_GLOBAL: /home/weblate/.gitconfig
       MICADO_SOURCE_LANG: ${MICADO_SOURCE_LANG:-it}
-      MICADO_CATEGORIES: ${MICADO_CATEGORIES:-news,events,categories}
+      MICADO_CATEGORIES: ${MICADO_CATEGORIES:-information,event,categories}
       #      GIT_ALLOW_PROTOCOL: http:https
       #      GIT_CONFIG_COUNT: "1"
       #      GIT_CONFIG_KEY_0: protocol.http.allow
@@ -347,7 +349,9 @@ services:
       WEBLATE_BASE_FILE_TEMPLATE: backend/en.json
       WEBLATE_FILE_FORMAT: json
       WEBLATE_NAME_TEMPLATE: Backend
-      BOOTSTRAP_DIR: /bootstrap
+      WEBLATE_WEBHOOK_URL: ${WEBLATE_WEBHOOK_URL:-http://backend:3000/api/webhooks/weblate/translation-complete}
+      MICADO_TARGET_LANGS: ${MICADO_TARGET_LANGS:-it,fr,ar,de,sq,mk}   # your actual languages
+      WEBLATE_GIT_PUSH_REPO: ""                    # empty = same as WEBLATE_GIT_REPO      BOOTSTRAP_DIR: /bootstrap
       TOKEN_FILE: /bootstrap/gitea-weblate.token
     volumes:
       - weblate_data:/app/data
