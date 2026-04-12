@@ -1,53 +1,70 @@
 /**
  * src/controllers/webhooks/weblate.controller.ts
  *
- * Receives the POST from the Weblate "weblate.webhook.webhook" add-on after
- * every EVENT_POST_COMMIT (integer 4) — i.e. when Weblate commits translated
- * strings to the Gitea repo.
+ * Receives POST from Weblate's "weblate.webhook.webhook" add-on (Weblate ≥ 5.11).
  *
- * ── Why this endpoint must be public ─────────────────────────────────────────
+ * ── Why @authenticate.skip() is REQUIRED ─────────────────────────────────────
  *
- * The application uses AuthorizationDecision.DENY by default.  Any endpoint
- * without @authenticate.skip() is rejected with 401 BEFORE the method body
- * runs — meaning zero logs and no processing.  Weblate sends no JWT token,
- * so this endpoint MUST be marked as public.  Security is provided by the
- * optional HMAC-SHA256 signature instead.
+ * The application has AuthorizationDecision.DENY by default.
+ * Without @authenticate.skip(), the request is rejected with 401 BEFORE the
+ * method body runs — zero logs, zero processing, silent discard.
+ * Weblate sends no JWT token, so this endpoint must be public.
+ * Security is provided by the Standard Webhooks signature instead.
  *
- * ── Endpoint ─────────────────────────────────────────────────────────────────
+ * ── Event enum confusion (documented to prevent future mistakes) ──────────────
  *
- *   POST /api/webhooks/weblate/translation-complete
+ * Weblate has TWO completely different integer enums:
  *
- * ── Weblate payload shape ─────────────────────────────────────────────────────
+ *   AddonEvent  (weblate/addons/events.py)     — add-on lifecycle hooks (1–15)
+ *               used as the `events` field on @DBOS.step() decorators
  *
- * Weblate's webhook addon sends a JSON body like:
+ *   ActionEvents (weblate/trans/actions.py)    — translation history actions (0–88)
+ *               used as the `events` field in the WEBHOOK ADDON configuration
  *
+ * The webhook add-on form field "events" takes ActionEvents integers.
+ * Correct values for this project:
+ *   17 = COMMIT   — Weblate commits changes to the local git repo
+ *   18 = PUSH     — Weblate pushes to Gitea  ← primary trigger
+ *
+ * ── Weblate 5.16 payload shape ────────────────────────────────────────────────
+ *
+ * Weblate sends a flat JSON body (Standard Webhooks schema):
  *   {
- *     "component": { "slug": "user-types", "project": { "slug": "micado" } },
- *     "translation": {
- *       "language_code": "it",
- *       "component": { "slug": "user-types" },
- *       "web_url": "http://weblate.localhost/projects/micado/user-types/it/"
- *     },
- *     "event": "post_commit"
+ *     "change_id":  12345,
+ *     "action":     "Changes pushed",      // human-readable, not reliable for routing
+ *     "timestamp":  "2026-04-12T20:47:43+00:00",
+ *     "project":    "micado",
+ *     "component":  "categories",          // ← slug = our category / Gitea folder
+ *     "translation": "it"                  // ← language code
  *   }
  *
- * We extract compSlug + langCode, then pull the translated JSON from Gitea,
- * and signal the waiting DBOS child workflow for each item in the catalog.
+ * ── Standard Webhooks signature ───────────────────────────────────────────────
  *
- * ── HMAC signature ────────────────────────────────────────────────────────────
+ * Headers:
+ *   webhook-id:        <uuid hex>
+ *   webhook-timestamp: <unix timestamp float>
+ *   webhook-signature: v1,<base64(HMAC-SHA256(secret, "{id}.{ts}.{body}"))>
  *
- * Set WEBLATE_WEBHOOK_SECRET on the backend container.  When set, the controller
- * validates the X-Weblate-Signature header (format: "sha256=<hex>").
- * Leave empty to disable signature checking (useful during initial testing).
+ * The secret in Weblate is stored as "whsec_<base64>" — the "whsec_" prefix is
+ * stripped and the remainder is base64-decoded before use as the HMAC key.
+ * Set WEBLATE_WEBHOOK_SECRET to the raw base64 value (with or without "whsec_").
+ * Leave empty to disable signature checking during testing.
  *
- * ── Sequence of log tags to look for ─────────────────────────────────────────
+ * ── Log tags to search for ────────────────────────────────────────────────────
  *
- *   [WeblateWebhook] REGISTERED          ← logged at boot, confirms route is live
- *   [WeblateWebhook] INCOMING            ← logged on every POST
- *   [WeblateWebhook] parsed              ← shows extracted compSlug + langCode
- *   [WeblateWebhook] catalog loaded      ← shows how many items Gitea returned
- *   [WeblateWebhook] signaled            ← per-item DBOS signal result
- *   [WeblateWebhook] complete            ← summary of the whole call
+ *   [WeblateWebhook] REGISTERED     — at boot, confirms route is live
+ *   [WeblateWebhook] INCOMING       — every POST received
+ *   [WeblateWebhook] parsed         — extracted component + lang
+ *   [WeblateWebhook] catalog loaded — how many items Gitea returned
+ *   [WeblateWebhook] signaled       — per-item DBOS signal result
+ *   [WeblateWebhook] complete       — call summary
+ *
+ * ── Manual test via curl ──────────────────────────────────────────────────────
+ *
+ *   curl -X POST http://localhost:3000/api/webhooks/weblate/translation-complete \
+ *     -H 'Content-Type: application/json' \
+ *     -d '{"change_id":1,"action":"Changes pushed","timestamp":"2026-01-01T00:00:00+00:00",
+ *          "project":"micado","component":"user-types","translation":"it"}'
  */
 
 import {
@@ -59,28 +76,32 @@ import {
 } from '@loopback/rest';
 import { inject } from '@loopback/core';
 import { authenticate } from '@loopback/authentication';
-import { authorize } from '@loopback/authorization';
+//import { authorize } from '@loopback/authorization';
 import { LoggingBindings } from '@loopback/logging';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { Logger } from 'winston';
 import { TranslationWorkflowOrchestratorService } from '../../services/translation-workflow-orchestrator.service';
 import { GiteaTranslationImportService } from '../../services/gitea-translation-import.service';
-
-// ── Weblate webhook body shape ────────────────────────────────────────────────
-// Only the fields we actually use — Weblate sends more.
+// ── Weblate 5.16 webhook payload (Standard Webhooks schema) ──────────────────
 interface WeblateWebhookBody {
-    event?: string;
-    component?: {
-        slug?: string;
-        project?: { slug?: string };
-    };
-    translation?: {
-        language_code?: string;
-        component?: { slug?: string };
-        web_url?: string;
-    };
-    // Some Weblate versions send language as a string, others as an object
-    language?: { code?: string } | string;
+    /** Weblate Change pk */
+    change_id?: number;
+    /** Human-readable action name e.g. "Changes pushed", "Changes committed" */
+    action?: string;
+    /** ISO 8601 timestamp */
+    timestamp?: string;
+    /** Project slug */
+    project?: string;
+    /** Component slug — this IS our Gitea folder / category name */
+    component?: string;
+    /** Language code e.g. "it", "fr" — present on translation-level events */
+    translation?: string;
+    /** Translation URL in Weblate UI */
+    url?: string;
+    /** Username of the author */
+    author?: string;
+    /** Username of the acting user */
+    user?: string;
 }
 
 export class WeblateWebhookController {
@@ -95,29 +116,32 @@ export class WeblateWebhookController {
         @inject('services.GiteaTranslationImportService')
         private readonly giteaImport: GiteaTranslationImportService,
     ) {
-        // Log at construction time (happens once at boot) so you can confirm the
-        // route is registered even before the first webhook arrives.
+        // Logged once at boot — confirms the route is registered.
+        // If you DON'T see this in backend logs on startup, the controller
+        // was not picked up by the boot artifact (check controllers/index.ts).
         this.logger.info(
-            '[WeblateWebhook] REGISTERED — POST /api/webhooks/weblate/translation-complete is live',
+            '[WeblateWebhook] REGISTERED — POST /api/webhooks/weblate/translation-complete',
         );
         this.logger.info(
-            `[WeblateWebhook] Signature check: ${process.env.WEBLATE_WEBHOOK_SECRET?.trim() ? 'ENABLED' : 'DISABLED (set WEBLATE_WEBHOOK_SECRET to enable)'}`,
+            `[WeblateWebhook] Signature: ${process.env.WEBLATE_WEBHOOK_SECRET?.trim() ? 'ENABLED (Standard Webhooks)' : 'DISABLED — set WEBLATE_WEBHOOK_SECRET to enable'}`,
+        );
+        this.logger.info(
+            '[WeblateWebhook] Listening for ActionEvents: 17=COMMIT, 18=PUSH',
         );
     }
 
-    // ── Endpoint ────────────────────────────────────────────────────────────────
-
     @post('/api/webhooks/weblate/translation-complete')
-    // ↓ REQUIRED: without this, the DENY-by-default auth policy rejects the
-    //   request with 401 before the method body runs — producing zero logs.
+    // REQUIRED: without this the DENY-by-default auth policy rejects with 401
+    // before the method body runs — producing zero logs.
     @authenticate.skip()
-    // ↓ REQUIRED alongside authenticate.skip() when the app uses
-    //   AuthorizationComponent with defaultDecision DENY.
-    @authorize({ allowedRoles: ['$everyone'] })
+    // REQUIRED: tells the custom RoleAuthorizerProvider to ALLOW without a principal.
+    // The authorizer checks allowedRoles.includes('$everyone') first, before
+    // requiring a principal — see src/auth/role.authorizer.ts case 1.
+    // @authorize({ allowedRoles: ['$everyone'] })
     async receive(
         @inject(RestBindings.Http.REQUEST) req: Request,
         @requestBody({
-            description: 'Weblate webhook POST body',
+            description: 'Weblate Standard Webhooks POST body',
             required: false,
             content: {
                 'application/json': {
@@ -130,73 +154,88 @@ export class WeblateWebhookController {
 
         const tag = '[WeblateWebhook]';
 
-        // ── 1. Log incoming request — visible at default log level ──────────────
-        this.logger.info(`${tag} INCOMING POST /api/webhooks/weblate/translation-complete`);
-        this.logger.info(`${tag} remote=${req.ip}  content-type=${req.headers['content-type'] ?? '(none)'}`);
-
-        // Log all headers at debug level (too verbose for info)
-        this.logger.debug(`${tag} headers=${JSON.stringify(req.headers)}`);
-
-        // Log full body at info level — we WANT this visible during testing
+        // ── 1. Log everything immediately — visible even if processing fails ──────
+        this.logger.info(`${tag} INCOMING  remote=${req.ip}`);
+        this.logger.info(
+            `${tag} headers  webhook-id=${req.headers['webhook-id'] ?? '(none)'}` +
+            `  webhook-timestamp=${req.headers['webhook-timestamp'] ?? '(none)'}` +
+            `  webhook-signature=${this.maskSecret(String(req.headers['webhook-signature'] ?? ''))}`,
+        );
         this.logger.info(`${tag} body=${JSON.stringify(body)}`);
 
-        // ── 2. HMAC signature verification ──────────────────────────────────────
-        const secret = process.env.WEBLATE_WEBHOOK_SECRET?.trim() ?? '';
-        if (secret) {
-            const sigHeader = req.headers['x-weblate-signature'];
-            if (!sigHeader) {
-                this.logger.warn(`${tag} REJECTED — missing X-Weblate-Signature header`);
-                throw new HttpErrors.Forbidden('Missing webhook signature');
-            }
-            const signature = Array.isArray(sigHeader) ? sigHeader[0] : sigHeader;
+        // ── 2. Standard Webhooks signature verification ───────────────────────────
+        // Weblate signs: "{webhook-id}.{webhook-timestamp}.{body}"
+        // Secret: base64-decoded after stripping "whsec_" prefix
+        const rawSecret = process.env.WEBLATE_WEBHOOK_SECRET?.trim() ?? '';
+        if (rawSecret) {
+            const msgId = req.headers['webhook-id'];
+            const msgTs = req.headers['webhook-timestamp'];
+            const sigHeader = req.headers['webhook-signature'];
 
-            // LoopBack already parsed the body — re-serialize for HMAC verification.
-            // This matches what Weblate signed (compact JSON, sorted keys not required).
-            const bodyForHmac = JSON.stringify(body);
-            const valid = this.verifySignature(bodyForHmac, signature, secret);
+            if (!msgId || !msgTs || !sigHeader) {
+                this.logger.warn(
+                    `${tag} REJECTED — missing Standard Webhooks headers` +
+                    `  id=${!!msgId} ts=${!!msgTs} sig=${!!sigHeader}`,
+                );
+                throw new HttpErrors.Forbidden('Missing webhook signature headers');
+            }
+
+            const bodyStr = JSON.stringify(body);
+            const valid = this.verifyStandardWebhook(
+                String(msgId),
+                String(msgTs),
+                bodyStr,
+                String(sigHeader),
+                rawSecret,
+            );
 
             if (!valid) {
-                this.logger.warn(
-                    `${tag} REJECTED — signature mismatch ` +
-                    `received=${this.maskSecret(signature)}`,
-                );
+                this.logger.warn(`${tag} REJECTED — signature mismatch`);
                 throw new HttpErrors.Forbidden('Invalid webhook signature');
             }
             this.logger.info(`${tag} signature OK`);
         } else {
-            this.logger.warn(`${tag} signature check DISABLED (WEBLATE_WEBHOOK_SECRET not set)`);
+            this.logger.warn(`${tag} signature check DISABLED`);
         }
 
-        // ── 3. Extract routing fields ────────────────────────────────────────────
-        const compSlug = body?.translation?.component?.slug
-            ?? body?.component?.slug
-            ?? null;
-
-        const langCode = this.extractLangCode(body);
+        // ── 3. Extract routing fields from the flat Weblate 5.16 payload ─────────
+        // component → Gitea folder = our category slug
+        // translation → language code
+        const compSlug = body?.component ?? null;
+        const langCode = body?.translation ?? null;
+        const action = body?.action ?? '(none)';
 
         this.logger.info(
-            `${tag} parsed  event=${body?.event ?? '(none)'}  ` +
-            `compSlug=${compSlug ?? '(missing)'}  ` +
-            `langCode=${langCode ?? '(missing)'}  ` +
-            `webUrl=${body?.translation?.web_url ?? '(none)'}`,
+            `${tag} parsed  action="${action}"  component=${compSlug ?? '(missing)'}` +
+            `  translation=${langCode ?? '(missing)'}  url=${body?.url ?? '(none)'}`,
         );
 
-        if (!compSlug || !langCode) {
-            this.logger.warn(
-                `${tag} SKIPPED — compSlug or langCode missing.` +
-                `  compSlug=${compSlug}  langCode=${langCode}` +
-                `  Returning 200 to prevent Weblate retries.`,
-            );
-            return { ok: true, message: 'missing routing fields — logged and ignored' };
+        // ── 4. Only process events that have a translation language ───────────────
+        // COMMIT (17) may not have a translation field — only the PUSH (18) event
+        // for a specific language does. We only need to act when we know which
+        // language was pushed.
+        if (!compSlug) {
+            this.logger.warn(`${tag} SKIPPED — no component in payload. action="${action}"`);
+            return { ok: true, message: 'no component — skipped' };
         }
 
-        // ── 4. Component slug IS the Gitea folder / category ───────────────────
-        // Convention set in gitea-init + weblate-init + GiteaTranslationExportService:
-        //   Weblate component slug  = Gitea folder name = content-type category
+        if (!langCode) {
+            // COMMIT events are component-level and lack a translation code.
+            // We still log them but don't try to pull translations yet.
+            this.logger.info(
+                `${tag} NOTED — no translation language in payload (probably a COMMIT event).` +
+                `  action="${action}"  component=${compSlug}. Waiting for PUSH event.`,
+            );
+            return { ok: true, message: 'no translation language — noted, waiting for push' };
+        }
+
+        // ── 5. Component slug = Gitea folder = category ───────────────────────────
         const category = compSlug;
 
-        // ── 5. Pull translations from Gitea ─────────────────────────────────────
-        this.logger.info(`${tag} fetching Gitea catalog  category=${category}  lang=${langCode}`);
+        // ── 6. Pull translated catalog from Gitea ─────────────────────────────────
+        this.logger.info(
+            `${tag} fetching Gitea catalog  category=${category}  lang=${langCode}`,
+        );
 
         let catalogEntries: Record<string, Record<string, string>>;
         try {
@@ -208,8 +247,6 @@ export class WeblateWebhookController {
             this.logger.error(
                 `${tag} Gitea fetch FAILED  category=${category}  lang=${langCode}  error=${String(err)}`,
             );
-            // Return 200 so Weblate doesn't retry — the DBOS child will timeout
-            // after 7 days and can be manually replayed via the dev controller.
             return { ok: true, message: 'gitea fetch failed — logged' };
         }
 
@@ -217,19 +254,17 @@ export class WeblateWebhookController {
         this.logger.info(
             `${tag} catalog loaded  category=${category}  lang=${langCode}  items=${itemCount}`,
         );
+        this.logger.debug(`${tag} catalog=${JSON.stringify(catalogEntries)}`);
 
         if (itemCount === 0) {
             this.logger.warn(
                 `${tag} catalog is empty — no items to signal.` +
-                `  category=${category}  lang=${langCode}` +
                 `  This is expected until the backend pushes real translation keys.`,
             );
             return { ok: true, message: 'empty catalog — no items to signal' };
         }
 
-        this.logger.debug(`${tag} catalog entries=${JSON.stringify(catalogEntries)}`);
-
-        // ── 6. Signal each item's child workflow ─────────────────────────────────
+        // ── 7. Signal DBOS child workflows ────────────────────────────────────────
         let signaled = 0;
         let skipped = 0;
         let errors = 0;
@@ -251,7 +286,7 @@ export class WeblateWebhookController {
                     signaled++;
                 } else {
                     this.logger.warn(
-                        `${tag} no active workflow  category=${category}  itemId=${itemId}` +
+                        `${tag} no workflow  category=${category}  itemId=${itemId}` +
                         `  lang=${langCode}  reason=${result.reason}`,
                     );
                     skipped++;
@@ -273,42 +308,56 @@ export class WeblateWebhookController {
         return { ok: true };
     }
 
-    // ── Helpers ──────────────────────────────────────────────────────────────────
-
-    private extractLangCode(body: WeblateWebhookBody | undefined): string | null {
-        if (!body) return null;
-        // translation.language_code is the most reliable (present in all versions)
-        if (body.translation?.language_code) return body.translation.language_code;
-        // Some versions put language as a nested object
-        if (typeof body.language === 'object' && body.language?.code) return body.language.code;
-        // Oldest versions send language as a plain string
-        if (typeof body.language === 'string') return body.language;
-        return null;
-    }
-
-    private verifySignature(payload: string, signature: string, secret: string): boolean {
+    // ── Standard Webhooks signature verification ──────────────────────────────────
+    //
+    // Algorithm (from Standard Webhooks spec):
+    //   key    = base64_decode(secret.removeprefix("whsec_"))
+    //   toSign = "{msgId}.{timestamp}.{body}"
+    //   sig    = base64_encode(HMAC-SHA256(key, toSign))
+    //
+    // Header format: "v1,<base64>"  (may contain multiple signatures: "v1,<a> v1,<b>")
+    //
+    private verifyStandardWebhook(
+        msgId: string,
+        timestamp: string,
+        body: string,
+        sigHeader: string,
+        rawSecret: string,
+    ): boolean {
         try {
-            // Weblate format: "sha256=<hex>"
-            const eqIdx = signature.indexOf('=');
-            if (eqIdx === -1) return false;
-            const algo = signature.slice(0, eqIdx);
-            const receivedHex = signature.slice(eqIdx + 1);
-            if (algo !== 'sha256' || !receivedHex) return false;
+            // Strip optional "whsec_" prefix and base64-decode the secret
+            const secretB64 = rawSecret.replace(/^whsec_/, '');
+            const key = Buffer.from(secretB64, 'base64');
 
-            const expected = createHmac('sha256', secret).update(payload).digest('hex');
+            const toSign = `${msgId}.${timestamp}.${body}`;
+            const expected = createHmac('sha256', key).update(toSign).digest('base64');
 
-            // Constant-time comparison prevents timing attacks
-            const receivedBuf = Buffer.from(receivedHex, 'hex');
-            const expectedBuf = Buffer.from(expected, 'hex');
-            if (receivedBuf.length !== expectedBuf.length) return false;
-            return timingSafeEqual(receivedBuf, expectedBuf);
+            // Header may contain multiple signatures separated by spaces
+            const signatures = sigHeader.split(' ');
+            for (const sig of signatures) {
+                // Format: "v1,<base64>"
+                const commaIdx = sig.indexOf(',');
+                if (commaIdx === -1) continue;
+                const version = sig.slice(0, commaIdx);
+                const received = sig.slice(commaIdx + 1);
+                if (version !== 'v1') continue;
+
+                // Constant-time comparison
+                const expectedBuf = Buffer.from(expected, 'base64');
+                const receivedBuf = Buffer.from(received, 'base64');
+                if (expectedBuf.length === receivedBuf.length &&
+                    timingSafeEqual(expectedBuf, receivedBuf)) {
+                    return true;
+                }
+            }
+            return false;
         } catch {
             return false;
         }
     }
 
     private maskSecret(value: string): string {
-        if (!value || value.length <= 8) return '****';
-        return `${value.slice(0, 4)}...${value.slice(-4)} (len=${value.length})`;
+        if (!value || value.length <= 8) return value ? '****' : '(none)';
+        return `${value.slice(0, 6)}...(len=${value.length})`;
     }
 }
