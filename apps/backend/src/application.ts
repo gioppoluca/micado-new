@@ -24,12 +24,11 @@ export class MicadoBackend extends BootMixin(
   constructor(options: ApplicationConfig = {}) {
     super(options);
 
-    // LOGGER
+    // ── Logger ──────────────────────────────────────────────────────────────
     this.configure(LoggingBindings.COMPONENT).to({
       enableFluent: false,
       enableHttpAccessLog: true,
     });
-    // Configure winston logger level and format
     this.configure(LoggingBindings.WINSTON_LOGGER).to({
       level: process.env.LOG_LEVEL ?? 'info',
       format: format.combine(
@@ -41,32 +40,28 @@ export class MicadoBackend extends BootMixin(
         }),
       ),
     });
-
-    // Registra LOGGER
     this.component(LoggingComponent);
 
     this.sequence(MySequence);
     this.static('/', path.join(__dirname, '../public'));
 
-
-    // Authentication
+    // ── Authentication ───────────────────────────────────────────────────────
     this.component(AuthenticationComponent);
     registerAuthenticationStrategy(this, KeycloakJwtStrategy);
 
-    // Authorization — without this component @authorize() decorators have no
-    // voter and LoopBack defaults to DENY for every request, producing 403
-    // even when the token is valid and the user has the correct roles.
+    // ── Authorization ────────────────────────────────────────────────────────
+    // DENY by default so unannotated endpoints are never accidentally open.
     const authorizationOptions: AuthorizationOptions = {
-      // DENY by default so unannotated endpoints are never accidentally open.
       defaultDecision: AuthorizationDecision.DENY,
-      // When multiple voters respond, require all to ALLOW (fail-closed).
       precedence: AuthorizationDecision.DENY,
     };
-
     this.configure(AuthorizationBindings.COMPONENT).to(authorizationOptions);
     this.component(AuthorizationComponent);
-    this.bind('authorizationProviders.role-authorizer-provider').toProvider(RoleAuthorizerProvider).tag(AuthorizationTags.AUTHORIZER);;
+    this.bind('authorizationProviders.role-authorizer-provider')
+      .toProvider(RoleAuthorizerProvider)
+      .tag(AuthorizationTags.AUTHORIZER);
 
+    // ── OpenAPI spec ─────────────────────────────────────────────────────────
     this.api({
       openapi: '3.0.0',
       info: {
@@ -82,31 +77,26 @@ export class MicadoBackend extends BootMixin(
           },
         },
       },
-      security: [
-        {
-          bearerAuth: [],
-        },
-      ],
+      security: [{ bearerAuth: [] }],
       paths: {},
     });
 
-    // REST Explorer
+    // ── REST Explorer ────────────────────────────────────────────────────────
     this.configure(RestExplorerBindings.COMPONENT).to({ path: '/explorer' });
     this.component(RestExplorerComponent);
-    
-    // DBOS
+
+    // ── DBOS ─────────────────────────────────────────────────────────────────
     this.bind(DBOS_CONFIG).to({
       appName: process.env.DBOS_APP_NAME ?? 'micado-backend',
       systemDatabaseUrl: process.env.DBOS_SYSTEM_DATABASE_URL ?? '',
       sys_db_name: 'micado',
-      systemSchema: process.env.DBOS_SYSTEM_SCHEMA_NAME ?? 'dbos', // consiglio
+      systemSchema: process.env.DBOS_SYSTEM_SCHEMA_NAME ?? 'dbos',
       executorId: process.env.DBOS_EXECUTOR_ID,
       logLevel: process.env.DBOS_LOG_LEVEL ?? 'info',
     });
-
     this.component(DbosComponent);
 
-
+    // ── Boot configuration ───────────────────────────────────────────────────
     this.projectRoot = __dirname;
     this.bootOptions = {
       controllers: {
@@ -123,6 +113,19 @@ export class MicadoBackend extends BootMixin(
         dirs: ['datasources'],
         extensions: ['.datasource.js'],
         nested: true,
+      },
+      // ── Service auto-discovery ────────────────────────────────────────────
+      // All @injectable classes in src/services/ are automatically bound into
+      // the IoC container.  The binding key is derived from the class name:
+      //   GiteaTranslationExportService  → services.GiteaTranslationExportService
+      //   TranslationWorkflowOrchestratorService → services.TranslationWorkflowOrchestratorService
+      //   GiteaTranslationImportService  → services.GiteaTranslationImportService
+      //
+      // Controllers inject them via @inject('services.<ClassName>').
+      services: {
+        dirs: ['services'],
+        extensions: ['.service.js'],
+        nested: false,
       },
     };
   }
