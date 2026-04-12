@@ -718,298 +718,574 @@ ORDER  BY code, revision_field;
 
 
 
--- -----------------------------------------------------------------------------
--- 5) TOPICS
--- Legacy source: topic + topic_translation
--- New target: content_item/content_revision/content_revision_translation
--- Notes:
--- - published=true -> revision status PUBLISHED
--- - icon mapped into content_revision.data_extra.icon
--- - father mapped via content_item_relation relation_type='PARENT_CHILD'
--- -----------------------------------------------------------------------------
+-- ============================================================================
+-- TOPIC
+-- external_key riordinate:
+-- 1 Administration (old 25)
+-- 2 Cultural       (old 7)
+-- 3 Finance        (old 13)
+-- 4 House          (old 1)
+-- 5 Health         (old 3)
+-- 6 Education      (old 4)
+-- 7 Employment     (old 2)
+-- ============================================================================
 
-WITH seed_topic AS (
-  SELECT *
-  FROM (
-    VALUES
-      (1,  'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTE3LjA0ODggMTFWM0g3VjdIM1YyMUgxMVYxN0gxM1YyMUgyMVYxMUgxNy4wNDg4Wk03IDE5LjA0ODhINVYxNy4wNDg4SDdWMTkuMDQ4OFpNNyAxNS4wNDg4SDVWMTMuMDQ4OEg3VjE1LjA0ODhaTTcgMTFINVY5SDdWMTFaTTExIDE1LjA0ODhIOVYxMy4wNDg4SDExVjE1LjA0ODhaTTExIDExSDlWOUgxMVYxMVpNMTEgN0g5VjVIMTFWN1pNMTUuMDQ4OCAxNS4wNDg4SDEzLjA0ODhWMTMuMDQ4OEgxNS4wNDg4VjE1LjA0ODhaTTE1LjA0ODggMTFIMTMuMDQ4OFY5SDE1LjA0ODhWMTFaTTE1LjA0ODggN0gxMy4wNDg4VjVIMTUuMDQ4OFY3Wk0xOS4wNDg4IDE5LjA0ODhIMTcuMDQ4OFYxNy4wNDg4SDE5LjA0ODhWMTkuMDQ4OFpNNTEuMDQ4OCAxNS4wNDg4SDE3LjA0ODhWMTMuMDQ4OEgxOS4wNDg4VjE1LjA0ODhaIiBmaWxsPSIjNUM4MUEyIi8+Cjwvc3ZnPgo=', 13),
-      (2,  'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEyLjU2NDIgMTQuOTI4NkgxMS4yNzQ2QzEwLjYyOTkgMTQuOTI4NiAxMC4xNDYzIDE0LjQ0NSAxMC4wOTI1IDEzLjg1MzlMMyAxMi43NzkzVjE4LjM2NzRDMyAxOS40OTU3IDMuOTEzNDMgMjAuMzU1NCA0Ljk4ODA2IDIwLjM1NTRIMTguOTU4MkMyMC4wODY2IDIwLjM1NTQgMjAuOTQ2MyAxOS40NDIgMjAuOTQ2MyAxOC4zNjc0VjEyLjc3OTNMMTMuNzQ2MyAxMy44NTM5QzEzLjY5MjUgMTQuNDk4NyAxMy4yMDkgMTQuOTI4NiAxMi41NjQyIDE0LjkyODZaIiBmaWxsPSIjNUM4MUEyIi8+CjxwYXRoIGQ9Ik0xOC45NTgyIDcuMDgzNThIMTUuOTQ5M1Y1Ljc5NDAzQzE1Ljk0OTMgNC4yMzU4MiAxNC43MTM0IDMgMTMuMTU1MiAzSDEwLjczNzNDOS4xNzkxMSAzIDcuOTQzMjggNC4yMzU4MiA3Ljk0MzI4IDUuNzk0MDNWNy4wODM1OEg0Ljk4ODA2QzMuODU5NyA3LjA4MzU4IDMgNy45OTcwMiAzIDkuMDcxNjRWMTEuOTczMUwxMC4zMDc1IDEzLjA0NzhDMTAuNTIyNCAxMi43MjU0IDEwLjg5ODUgMTIuNTEwNCAxMS4zMjg0IDEyLjUxMDRIMTIuNjE3OUMxMy4wNDc4IDEyLjUxMDQgMTMuNDIzOSAxMi43MjU0IDEzLjYzODggMTMuMTAxNUwyMSAxMS45NzMxVjkuMDcxNjRDMjAuOTQ2MyA3Ljk5NzAyIDIwLjAzMjggNy4wODM1OCAxOC45NTgyIDcuMDgzNThaTTkuNTAxNDkgNS43OTQwM0M5LjUwMTQ5IDUuMTQ5MjUgMTAuMDM4OCA0LjYxMTk0IDEwLjY4MzYgNC42MTE5NEgxMy4xMDE1QzEzLjc0NjMgNC42MTE5NCAxNC4yODM2IDUuMTQ5MjUgMTQuMjgzNiA1Ljc5NDAzVjcuMDgzNThIOS40NDc3NlY1Ljc5NDAzSDkuNTAxNDlaIiBmaWxsPSIjNUM4MUEyIi8+Cjwvc3ZnPgo=', NULL),
-      (3,  'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEyIDIwLjczNjFDMTEuODA4IDIwLjczNjEgMTEuNjY0IDIwLjY4ODEgMTEuNTIgMjAuNTkyMUM3LjgyNDA1IDE4LjA0ODEgNS4xODQwNSAxNS40NTYxIDMuNjk2MDUgMTIuOTEyMUg2LjcyMDA1QzcuMDU2MDUgMTIuOTEyMSA3LjM0NDA1IDEyLjcyMDEgNy40NDAwNSAxMi40MzIxTDguMzA0MDUgMTAuMTc2MUw5Ljc0NDA1IDE1Ljg4ODFDOS44NDAwNSAxNi4yMjQxIDEwLjA4IDE2LjQ2NDEgMTAuNDE2IDE2LjQ2NDFDMTAuNDY0IDE2LjQ2NDEgMTAuNDY0IDE2LjQ2NDEgMTAuNTEyIDE2LjQ2NDFDMTAuOCAxNi40NjQxIDExLjA4OCAxNi4zMjAxIDExLjIzMiAxNi4wMzIxTDEyLjgxNiAxMi45MTIxSDE1Ljg4OEMxNi4wOCAxMi45MTIxIDE2LjMyIDEyLjgxNjEgMTYuNDY0IDEyLjY3MjFDMTYuNjA4IDEyLjUyODEgMTYuNzA0IDEyLjMzNjEgMTYuNzA0IDEyLjA5NjFDMTYuNzA0IDExLjY2NDEgMTYuMzIgMTEuMzI4MSAxNS44ODggMTEuMzI4MUgxMi4zMzZDMTIuMDQ4IDExLjMyODEgMTEuNzYgMTEuNDcyMSAxMS42MTYgMTEuNzYwMUwxMC43NTIgMTMuNDQwMUw5LjI2NDA1IDcuMzkyMDdDOS4xNjgwNSA3LjEwNDA2IDguOTI4MDUgNi44NjQwNyA4LjY0MDA1IDYuNzY4MDdDOC41OTIwNSA2Ljc2ODA3IDguNTQ0MDUgNi43NjgwNyA4LjQ5NjA1IDYuNzY4MDdDOC4xNjAwNSA2Ljc2ODA3IDcuODcyMDUgNi45NjAwNyA3Ljc3NjA1IDcuMjQ4MDdMNi4xOTIwNSAxMS4zMjgxSDIuOTI4MDVDMi4wNjQwNSA5LjEyMDA3IDIuMTYwMDUgNy4wNTYwNyAzLjIxNjA1IDUuNDcyMDZDNC4xNzYwNSA0LjAzMjA2IDUuODA4MDUgMy4yMTYwNiA3LjYzMjA1IDMuMjE2MDZDOS4xNjgwNSAzLjIxNjA2IDEwLjY1NiAzLjg0MDA2IDExLjg1NiA0Ljk0NDA2TDEyLjA0OCA1LjA4ODA3TDEyLjI0IDQuOTQ0MDZDMTMuMzkyIDMuODQwMDYgMTQuODggMy4yNjQwNi ১৬LjQxNiAzLjI2NDA2QzE4Ljc2OCAzLjI2NDA2IDIwLjc4NCA0LjcwNDA2IDIxLjQwOCA2LjgxNjA3QzIyLjY1NiAxMC44MDAxIDE5LjI5NiAxNS45MzYxIDEyLjQ4IDIwLjU5MjFDMTIuMzM2IDIwLjY4ODEgMTIuMTkyIDIwLjczNjEgMTIgMjAuNzM2MVoiIGZpbGw9IiM1QzgxQTIiLz4KPC9zdmc+Cg==', 25),
-      (4,  'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZmlsbC1ydWxlPSJldmVub2RkIiBjbGlwLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik0xLjIwODU4IDkuMjk1NDRDMC45MzA1MjggOS4xNDM5IDAuOTMwNDU4IDguNzQ0NyAxLjIwODQ2IDguNTkzMDZMMTEuMzcyOSAzLjA0ODg0QzExLjQ5MjMgMi45ODM3MiAxMS42MzY2IDIuOTgzNzIgMTEuNzU1OSAzLjA0ODg0TDIyLjM1NTkgOC44MzA2NkMyMi40ODQ0IDguOTAwNzUgMjIuNTY0NCA5LjAzNTQ0IDIyLjU2NDQgOS4xODE4MlYxNi41NDQ0QzIyLjU2NDQgMTYuNzY1MyAyMi4zODUzIDE2Ljk0NDQgMjIuMTY0NCAxNi45NDQ0SDIwLjk2NDRDMjAuNzQzNSAxNi45NDQ0IDIwLjU2NDQgMTYuNzY1MyAyMC41NjQ0IDE2LjU0NDRWMTAuNzA3OUMyMC41NjQ0IDEwLjQwNDQgMjAuMjM5NSAxMC4yMTE0IDE5Ljk3MyAxMC4zNTY3TDE4Ljc3MyAxMS4wMTA3QzE4LjY0NDQgMTEuMDgwOCAxOC41NjQ0IDExLjIxNTUgMTguNTY0NCAxMS4zNjE5VjE2Ljg4N0MxOC41NjQ0IDE3LjAzMzMgMTguNDg0NSAxNy4xNjggMTguMzU2IDE3LjIzODFMMTEuNzU2IDIwLjgzOThDMTEuNjM2NiAyMC45MDUgMTEuNDkyMiAyMC45MDUgMTEuMzcyOCAyMC44Mzk4TDQuNzcyNzkgMTcuMjM4MUM0LjY0NDMyIDE3LjE2OCA0LjU2NDQgMTcuMDMzMyA0LjU2NDQgMTYuODg3VjExLjM2MTlDNC41NjQ0IDExLjIxNTUgNC40ODQzOSAxMS4wODA4IDQuMzU1ODIgMTEuMDEwN0wxLjIwODU4IDkuMjk1NDRaTTExLjM3MjcgMTguNTU5N0MxMS40OTIyIDE4LjYyNDkgMTEuNjM2NiAxOC42MjQ5IDExLjc1NjEgMTguNTU5N0wxNi4zNTYxIDE2LjA0ODFDMTYuNDg0NSAxNS45NzggMTYuNTY0NCAxNS44NDMzIDE2LjU2NDQgMTUuNjk3VjEyLjg4ODVDMTYuNTY0NCAxMi41ODQ4IDE2LjIzOTMgMTIuMzkxOSAxNS45NzI3IDEyLjUzNzRMMTEuNzU2MSAxNC44Mzk3QzExLjYzNjYgMTQuOTA0OSAxMS40OTIyIDE0LjkwNDkgMTEuMzcyNyAxNC44Mzk3TDcuMTU2MDkgMTIuNTM3NEM2Ljg4OTU0IDEyLjM5MTkgNi41NjQ0IDEyLjU4NDggNi41NjQ0IDEyLjg4ODVWMTUuNjk3QzYuNTY0NCAxNS44NDMzIDYuNjQ0MjkgMTUuOTc4IDYuNzcyNzEgMTYuMDQ4MUwxMS4zNzI3IDE4LjU1OTdaIiBmaWxsPSIjNUM4MUEyIi8+Cjwvc3ZnPgo=', 25),
-      (7,  'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTIxLjg3MjYgMTAuNDQ1OUMyMS4zMjQxIDEwLjUzNzMgMjAuNjg0MiAxMC41MzczIDIwLjEzNTcgMTAuNTM3M0MxOC45NDc0IDEwLjUzNzMgMTcuNjY3NiAxMC40NDU5IDE2LjM4NzggMTAuMjYzMUMxNS42NTY1IDEzLjQ2MjUgMTMuNzM2OS AixNi4wMjIxIDExLjA4NTkgMTYuOTM2MkMxMC43MjAyIDE3LjAyNzYgMTAuMzU0NiAxNy4xMTkgOS45ODg5MiAxNy4yMTA0QzkuODA2MSAxNy4yMTA0IDkuNzE0NjkgMTcuMjEwNCA5LjUzMTg2IDE3LjIxMDRDMTAuMjYzMiAxOS41ODcyIDExLjkwODYgMjEuNDE1NCAxNC4wMTExIDIxLjc4MTFDMTQuMjg1MyAyMS43ODExIDE0LjU1OTYgMjEuODcyNSAxNC44MzM4IDIxLjg3MjVDMTguMDMzMyAyMS44NzI1IDIxLjA0OTkgMTguNTgxNiAyMS43ODEyIDE0LjI4NTJDMjIuMDU1NCAxMy4wMDU0IDIyLjA1NTQgMTEuNjM0MyAyMS44NzI2IDEwLjQ0NTlaTTE3LjQ4NDggMjAuMjI3MUMxNy40ODQ4IDIwLjIyNzEgMTYuNzUzNSAxOS4wMzg3IDE1LjEwOCAxOC43NjQ1QzEzLjczNjkgMTguNDkwMiAxMy4yNzk4IDE4Ljc2NDUgMTIuMjc0MiAxOS4xMzAxQzEyLjI3NDIgMTkuMTMwMSAxMi4xODI4IDE2LjkzNjIgMTQuNjUxIDE2Ljg0NDhDMTYuOTM2MyAxNi44NDQ4IDE4LjMwNzUgMTguOTQ3MyAxNy40ODQ4IDIwLjIyNzFaTTE4LjEyNDcgMTUuNzQ3OEMxNy4zMDIgMTUuNzQ3OCAxNi42NjIxIDE1LjEwNzkgMTYuNjYyMSAxNC4yODUyQzE2LjY2MjEgMTMuNDYyNSAxNy4zMDIgMTIuODIyNiAxOC4xMjQ3IDEyLjgyMjZDMTguOTQ3NCAxMi44MjI2IDE5LjU4NzMgMTMuNDYyNSAxOS41ODczIDE0LjI4NTJDMTkuNTg3MyAxNS4xMDc5IDE4Ljk0NzQgMTUuNzQ3OCAxOC4xMjQ3IDE1Ljc0NzhaIiBmaWxsPSIjNUM4MUEyIi8+Cjwvc3ZnPgo=', 25),
-      (13, 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZmlsbC1ydWxlPSJldmVub2RkIiBjbGlwLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik0xMiAyMkMxNy41MjI4IDIyIDIyIDE3LjUyMjggMjIgMTJDMjIgNi40NzcxNSAxNy41MjI4IDIgMTIgMkM2LjQ3NzE1IDIgMiA2LjQ3NzE1IDIgMTJDMiAxNy41MjI4IDYuNDc3MTUgMjIgMTIgMjJaTTE0LjA1MjQgMTYuMTE1OEMxMy42NjAyIDE2LjIxNTEgMTMuMTkyMSAxNi4yNjQ4IDEyLjY0ODIgMTYuMjY0OEMxMS45MjcxIDE2LjI2NDggMTEuMjc1NiAxNi4wODQ3IDEwLjY5MzcgMTUuNzI0N0MxMC4xMjQ1IDE1LjM1MjIgOS43MzIzMSAxNC43MzE0IDkuNTE3MjUgMTMuODYyM0gxNC4xODUyVjEyLjcyNjNIOS4yODk1NUM5LjI3NjkgMTIuNTQwMSA5LjI3MDU3IDEyLjM5MTEgOS4yNzA1NyAxMi4yNzkzVjExLjkyNTVWMTEuNzAySDE0LjE4NTJWMTAuNTY2SDkuNDIyMzhDOS40OTgyOCAxMC4wNjkzIDkuNjM3NDMgOS42NDcyMSA5LjgzOTgzIDkuMjk5NTdDMTAuMDU0OSA4LjkzOTUyIDEwLjMwNzkgOC42NDc3NSAxMC41OTg4IDguNDI0MjdDMTAuOTAyNSA4LjE4ODM3IDExLjIzMTQgOC4wMTQ1NSAxMS41ODU2IDcuOTAyODFDMTEuOTUyNCA3Ljc5MTA3IDEyLjMzMTkgNy43MzUyIDEyLjcyNDEgNy43MzUyQzEzLjE5MjEgNy43MzUyIDEzLjYxNTkgNy43OTEwNyAxMy45OTU0IDcuOTAyODFDMTQuMzg3NiA4LjAxNDU1IDE0Ljc3MzQgOC4xNjM1NCAxNS4xNTI5IDguMzQ5NzhMMTUuNjg0MiA2LjYzNjQyQzE1LjMxNzQgNi40NTAxOCAxNC44ODczIDYuMjg4NzggMTQuMzkzOSA2LjE1MjIxQzEzLjkxMzIgNi4wMTU2MyAxMy4yNjggNS45NDczNSAxMi40NTg0IDUuOTQ3MzVDMTAuOTQwNCA1Ljk0NzM1IDkuNzEzMzMgNi4zNTA4NiA4Ljc3NzIxIDcuMTU3ODdDNy44NDExIDcuOTY0ODkgNy4yNDY1NCA5LjEwMDkyIDYuOTkzNTMgMTAuNTY2SDUuNjg0MjNWMTEuNzAySDYuODQxNzNWMTEuOTgxNFYxMi4zMTY2QzYuODQxNzMgMTIuNDE1OSA2Ljg0ODA1IDEyLjU1MjUgNi44NjA3MSAxMi43MjYzSDUuNjg0MjNWMTMuODYyM0g3LjAzMTQ4QzcuMTgzMjkgMTQuNTU3NiA3LjQxNzMyIDE1LjE2NiA3LjczMzU3IDE1LjY4NzRDOC4wNjI0OCAxNi4yMDg5IDguNDYwOTYgMTYuNjQzNCA4LjkyOTAyIDE2Ljk5MTFDOS4zOTcwOCAxNy4zMzg3IDkuOTIyMDYgMTcuNjA1NiAxMC41MDQgMTcuNzkxOUMxMS4wOTg1IDE3Ljk2NTcgMTEuNzMxIDE4LjA1MjYgMTIuNDAxNSAxOC4wNTI2QzEzLjE4NTggMTguMDUyNiAxMy44MzEgMTcuOTkwNSAxNC4zMzcgMTcuODY2NEMxNC44NTU2IDE3Ljc0MjIgMTUuMjkyMSAxNy41OTMyIDE1LjY0NjMgMTcuNDE5NEwxNS4xNTI5IDE1LjcwNjFDMTQuODI0IDE1Ljg3OTkgMTQuNDU3MiAxNi4wMTY0IDE0LjA1MjQgMTYuMTE1OFoiIGZpbGw9IiM1QzgxQTIiLz4KPC9zdmc+Cg==', 7),
-      (25, 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTkuODAwMDUgMTYuM0M5LjYwMDA1IDEyLjYgMTIuNiA5LjQgMTYuMiA5LjJDMTcuMyA5LjIgMTguMyA5LjQgMTkuMiA5LjhWNC42QzE5LjIgMy4yIDE4IDIgMTYuNiAySDYuMzAwMDVDNC45MDAwNSAyIDMuODAwMDUgMy4yIDMuODAwMDUgNC42VjE5LjRDMy44MDAwNSAyMC44IDUuMDAwMDUgMjIgNi40MDAwNSAyMkgxMy41QzExLjQgMjAuOSA5LjkwMDA1IDE4LjggOS44MDAwNSAxNi4zWiIgZmlsbD0iIzVDODFBMiIvPgo8L3N2Zz4K', NULL)
-  ) AS t(legacy_id, icon, father_legacy_id)
-),
-insert_topic_items AS (
-  INSERT INTO content_item (type_code, external_key)
-  SELECT 'TOPIC', st.legacy_id::text
-  FROM seed_topic st
-  WHERE NOT EXISTS (
-    SELECT 1
-    FROM content_item ci
-    WHERE ci.type_code = 'TOPIC'
-      AND ci.external_key = st.legacy_id::text
-  )
-  RETURNING id, external_key
-),
-topic_item_map AS (
-  SELECT ci.id AS item_id, st.legacy_id, st.icon, st.father_legacy_id
-  FROM seed_topic st
-  JOIN content_item ci
-    ON ci.type_code = 'TOPIC'
-   AND ci.external_key = st.legacy_id::text
-),
-insert_topic_revisions AS (
-  INSERT INTO content_revision (
-    item_id, revision_no, status, source_lang, data_extra, published_at
-  )
-  SELECT
-    tim.item_id,
-    1,
-    'PUBLISHED',
-    'en',
-    jsonb_build_object('icon', tim.icon),
-    NOW()
-  FROM topic_item_map tim
-  WHERE NOT EXISTS (
-    SELECT 1
-    FROM content_revision cr
-    WHERE cr.item_id = tim.item_id
-      AND cr.revision_no = 1
-  )
-  RETURNING id, item_id
-),
-update_topic_revisions AS (
-  UPDATE content_revision cr
-  SET
-    status = 'PUBLISHED',
-    source_lang = 'en',
-    data_extra = jsonb_build_object('icon', tim.icon)
-  FROM topic_item_map tim
-  WHERE cr.item_id = tim.item_id
-    AND cr.revision_no = 1
-  RETURNING cr.id, cr.item_id
-),
-topic_revisions AS (
-  SELECT id, item_id FROM insert_topic_revisions
-  UNION
-  SELECT id, item_id FROM update_topic_revisions
-),
-seed_topic_translations AS (
-  SELECT *
-  FROM (
-    VALUES
-      (7,  'en', 'Cultural',       NULL),
-      (13, 'en', 'Finance',        NULL),
-      (1,  'en', 'House',          NULL),
-      (4,  'en', 'Education',      NULL),
-      (3,  'en', 'Health',         NULL),
-      (2,  'en', 'Employment',     NULL),
-      (25, 'en', 'Administration', NULL),
-      (1,  'de', 'aggiornato',     NULL),
-      (1,  'it', 'Casa',           NULL),
-      (2,  'de', 'Werk',           NULL),
-      (2,  'it', 'Lavoro',         NULL)
-  ) AS x(legacy_id, lang, title, description)
-),
-insert_topic_translations AS (
-  INSERT INTO content_revision_translation (
-    revision_id, lang, title, description, t_status
-  )
-  SELECT
-    tr.id,
-    stt.lang,
-    stt.title,
-    stt.description,
-    'PUBLISHED'
-  FROM topic_revisions tr
-  JOIN topic_item_map tim
-    ON tim.item_id = tr.item_id
-  JOIN seed_topic_translations stt
-    ON stt.legacy_id = tim.legacy_id
-  WHERE NOT EXISTS (
-    SELECT 1
-    FROM content_revision_translation crt
-    WHERE crt.revision_id = tr.id
-      AND crt.lang = stt.lang
-  )
-  RETURNING revision_id, lang
+-- ----------------------------------------------------------------------------
+-- TOPIC 1 - Administration
+-- ----------------------------------------------------------------------------
+INSERT INTO content_item (type_code, external_key)
+VALUES ('TOPIC', '1');
+
+INSERT INTO content_revision (
+  item_id, revision_no, status, source_lang, data_extra, published_at
 )
-UPDATE content_revision_translation crt
-SET
-  title = stt.title,
-  description = stt.description,
-  t_status = 'PUBLISHED'
-FROM topic_revisions tr
-JOIN topic_item_map tim
-  ON tim.item_id = tr.item_id
-JOIN seed_topic_translations stt
-  ON stt.legacy_id = tim.legacy_id
-WHERE crt.revision_id = tr.id
-  AND crt.lang = stt.lang;
+SELECT
+  ci.id,
+  1,
+  'PUBLISHED',
+  'en',
+  jsonb_build_object(
+    'icon',
+    'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTkuODAwMDUgMTYuM0M5LjYwMDA1IDEyLjYgMTIuNiA5LjQgMTYuMiA5LjJDMTcuMyA5LjIgMTguMyA5LjQgMTkuMiA5LjhWNC42QzE5LjIgMy4yIDE4IDIgMTYuNiAySDYuMzAwMDVDNC45MDAwNSAyIDMuODAwMDUgMy4yIDMuODAwMDUgNC42VjE5LjRDMy44MDAwNSAyMC44IDUuMDAwMDUgMjIgNi40MDAwNSAyMkgxMy41QzExLjQgMjAuOSA5LjkwMDA1IDE4LjggOS44MDAwNSAxNi4zWiIgZmlsbD0iIzVDODFBMiIvPgo8cGF0aCBkPSJNNi41IDUuOTAwMDJIMTYuOCIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1taXRlcmxpbWl0PSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CjxwYXRoIGQ9Ik02LjUgMTBIMTYuOCIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1taXRlcmxpbWl0PSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CjxwYXRoIGQ9Ik02LjUgMTRIMTYuOCIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1taXRlcmxpbWl0PSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CjxwYXRoIGQ9Ik0yMC45OTk5IDExLjdDMjAuODk5OSAxMS43IDIwLjg5OTkgMTEuNyAyMC44OTk5IDExLjhMMTYuNjk5OSAxNkwxNi41OTk5IDE2LjFDMTYuNDk5OSAxNi4xIDE2LjQ5OTkgMTYuMSAxNi40OTk5IDE2TDE1LjE5OTkgMTQuN0wxNS4wOTk5IDE0LjZDMTUuMDk5OSAxNC42IDE0Ljk5OTkgMTQuNiAxNC45OTk5IDE0LjdMMTMuOTk5OSAxNS41QzEzLjg5OTkgMTUuNiAxMy44OTk5IDE1LjcgMTMuOTk5OSAxNS44TDE1LjM5OTkgMTcuMkwxNi4yOTk5IDE4LjFMMTYuMzk5OSAxOC4yQzE2LjQ5OTkgMTguMiAxNi40OTk5IDE4LjIgMTYuNDk5OSAxOC4xTDIwLjA5OTkgMTQuNUwyMC43OTk5IDEzLjhMMjEuNzk5OSAxMi44QzIxLjg5OTkgMTIuNyAyMS44OTk5IDEyLjYgMjEuNzk5OSAxMi41TDIwLjk5OTkgMTEuN0MyMC45OTk5IDExLjcgMjEuMDk5OSAxMS43IDIwLjk5OTkgMTEuN1oiIGZpbGw9IiM1QzgxQTIiLz4KPHBhdGggZD0iTTIxLjIgMTUuNEwyMC42IDE2QzIwLjYgMTguMiAxOC44IDIwIDE2LjYgMjBDMTQuNCAyMCAxMi42IDE4LjIgMTIuNiAxNkMxMi42IDEzLjggMTQuNCAxMiAxNi42IDEyQzE3LjMgMTIgMTcuOSAxMi4yIDE4LjQgMTIuNEwxOS4xIDExLjdDMTguNCAxMS4zIDE3LjUgMTEgMTYuNiAxMUMxNS4zIDExIDE0IDExLjUgMTMuMSAxMi40QzEyLjIgMTMuMyAxMS43IDE0LjYgMTEuNyAxNS45QzExLjcgMTcuMiAxMi4yIDE4LjUgMTMuMSAxOS40QzE0IDIwLjMgMTUuMyAyMC44IDE2LjYgMjAuOEMxNy45IDIwLjggMTkuMiAyMC4zIDIwLjEgMTkuNEMyMSAxOC41IDIxLjUgMTcuMiAyMS41IDE1LjlDMjEuNSAxNS42IDIxLjUgMTUuNCAyMS40IDE1LjFMMjEuMiAxNS40WiIgZmlsbD0iIzVDODFBMiIvPgo8L3N2Zz4K'
+  ),
+  NOW()
+FROM content_item ci
+WHERE ci.type_code = 'TOPIC'
+  AND ci.external_key = '1';
 
--- update published_revision_id for TOPIC items
+INSERT INTO content_revision_translation (
+  revision_id, lang, title, description, t_status
+)
+SELECT cr.id, 'en', 'Administration', NULL, 'PUBLISHED'
+FROM content_item ci
+JOIN content_revision cr ON cr.item_id = ci.id
+WHERE ci.type_code = 'TOPIC'
+  AND ci.external_key = '1'
+  AND cr.revision_no = 1;
+
 UPDATE content_item ci
 SET published_revision_id = cr.id
 FROM content_revision cr
-WHERE ci.id = cr.item_id
+WHERE cr.item_id = ci.id
   AND ci.type_code = 'TOPIC'
+  AND ci.external_key = '1'
   AND cr.revision_no = 1;
 
--- parent-child topic relations
-WITH topic_lookup AS (
-  SELECT id, external_key::int AS legacy_id
-  FROM content_item
-  WHERE type_code = 'TOPIC'
-)
-INSERT INTO content_item_relation (
-  relation_type, parent_item_id, child_item_id, sort_order
+-- ----------------------------------------------------------------------------
+-- TOPIC 2 - Cultural
+-- ----------------------------------------------------------------------------
+INSERT INTO content_item (type_code, external_key)
+VALUES ('TOPIC', '2');
+
+INSERT INTO content_revision (
+  item_id, revision_no, status, source_lang, data_extra, published_at
 )
 SELECT
-  'PARENT_CHILD',
-  p.id,
-  c.id,
-  0
-FROM (
-  VALUES
-    (13, 5),
-    (1, 13),
-    (3, 25),
-    (4, 25),
-    (5, 25)
-) AS rel(child_legacy_id, parent_legacy_id)
-JOIN topic_lookup c ON c.legacy_id = rel.child_legacy_id
-JOIN topic_lookup p ON p.legacy_id = rel.parent_legacy_id
-ON CONFLICT (relation_type, parent_item_id, child_item_id) DO NOTHING;
+  ci.id,
+  1,
+  'PUBLISHED',
+  'en',
+  jsonb_build_object(
+    'icon',
+    'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTIxLjg3MjYgMTAuNDQ1OUMyMS4zMjQxIDEwLjUzNzMgMjAuNjg0MiAxMC41MzczIDIwLjEzNTcgMTAuNTM3M0MxOC45NDc0IDEwLjUzNzMgMTcuNjY3NiAxMC40NDU5IDE2LjM4NzggMTAuMjYzMUMxNS42NTY1IDEzLjQ2MjUgMTMuNzM2OSAxNi4wMjIxIDExLjA4NTkgMTYuOTM2MkMxMC43MjAyIDE3LjAyNzYgMTAuMzU0NiAxNy4xMTkgOS45ODg5MiAxNy4yMTA0QzkuODA2MSAxNy4yMTA0IDkuNzE0NjkgMTcuMjEwNCA5LjUzMTg2IDE3LjIxMDRDMTAuMjYzMiAxOS41ODcyIDExLjkwODYgMjEuNDE1NCAxNC4wMTExIDIxLjc4MTFDMTQuMjg1MyAyMS43ODExIDE0LjU1OTYgMjEuODcyNSAxNC44MzM4IDIxLjg3MjVDMTguMDMzMyAyMS44NzI1IDIxLjA0OTkgMTguNTgxNiAyMS43ODEyIDE0LjI4NTJDMjIuMDU1NCAxMy4wMDU0IDIyLjA1NTQgMTEuNjM0MyAyMS44NzI2IDEwLjQ0NTlaTTE3LjQ4NDggMjAuMjI3MUMxNy40ODQ4IDIwLjIyNzEgMTYuNzUzNSAxOS4wMzg3IDE1LjEwOCAxOC43NjQ1QzEzLjczNjkgMTguNDkwMiAxMy4yNzk4IDE4Ljc2NDUgMTIuMjc0MiAxOS4xMzAxQzEyLjI3NDIgMTkuMTMwMSAxMi4xODI4IDE2LjkzNjIgMTQuNjUxIDE2Ljg0NDhDMTYuOTM2MyAxNi44NDQ4IDE4LjMwNzUgMTguOTQ3MyAxNy40ODQ4IDIwLjIyNzFaTTE4LjEyNDcgMTUuNzQ3OEMxNy4zMDIgMTUuNzQ3OCAxNi42NjIxIDE1LjEwNzkgMTYuNjYyMSAxNC4yODUyQzE2LjY2MjEgMTMuNDYyNSAxNy4zMDIgMTIuODIyNiAxOC4xMjQ3IDEyLjgyMjZDMTguOTQ3NCAxMi44MjI2IDE5LjU4NzMgMTMuNDYyNSAxOS41ODczIDE0LjI4NTJDMTkuNTg3MyAxNS4xMDc5IDE4Ljk0NzQgMTUuNzQ3OCAxOC4xMjQ3IDE1Ljc0NzhaIiBmaWxsPSIjNUM4MUEyIi8+CjxwYXRoIGQ9Ik0xNC43NDI0IDUuNzgzODNDMTQuNTU5NiA0LjUwNDA1IDE0LjEwMjUgMy4yMjQyNyAxMy42NDU0IDIuMTI3MzJDMTMuMDk3IDIuMzEwMTUgMTIuNTQ4NSAyLjU4NDM4IDEyIDIuNzY3MjFDMTAuNzIwMiAzLjIyNDI3IDkuNDQwNDUgMy40OTg1MSA3Ljk3Nzg0IDMuNjgxMzRDNS45NjY3NiA0LjA0Njk5IDMuOTU1NjggNC4xMzg0IDIuMjE4ODMgMy44NjQxNkMxLjk0NDU5IDUuMTQzOTQgMS45NDQ1OSA2LjQyMzcyIDIuMTI3NDIgNy43MDM1QzIuODU4NzIgMTIuNDU3IDYuMjQxIDE1LjgzOTIgOS43MTQ2OCAxNS4yOTA4QzkuOTg4OTIgMTUuMjkwOCAxMC4yNjMyIDE1LjE5OTQgMTAuNTM3NCAxNS4xMDc5QzEzLjU1NCAxNC4xMDI0IDE1LjM4MjMgMTAuMDgwMiAxNC43NDI0IDUuNzgzODNaTTQuNTk1NTcgNy43OTQ5MkM0LjMyMTMzIDcuMDYzNjEgNC43NzgzOSA2LjE0OTQ4IDUuNTA5NjkgNS45NjY2NkM2LjI0MSA1LjY5MjQyIDcuMTU1MTIgNi4xNDk0OCA3LjMzNzk1IDYuODgwNzlDNy42MTIxOSA3LjYxMjA5IDcuMTU1MTIgOC41MjYyMiA2LjQyMzgyIDguNzA5MDRDNS42OTI1MiA5LjA3NDcgNC44Njk4IDguNjE3NjMgNC41OTU1NyA3Ljc5NDkyWk0xMC4yNjMyIDEyLjkxNEM3Ljk3Nzg0IDEzLjczNjggNi4wNTgxNyAxMi4wOTEzIDYuNDIzODIgMTAuNjI4N0M2LjQyMzgyIDEwLjYyODcgNy43MDM2IDExLjI2ODYgOS4yNTc2MiAxMS4wODU4QzEwLjA4MDMgMTAuOTk0NCAxMC45MDMxIDEwLjcyMDEgMTEuODE3MiAxMC4wODAyQzExLjcyNTggMTAuMDgwMiAxMi41NDg1IDEyLjA5MTMgMTAuMjYzMiAxMi45MTRaTTExLjM2MDEgOC4zNDMzOUMxMC42Mjg4IDguNjE3NjMgOS43MTQ2OCA4LjE2MDU3IDkuNTMxODYgNy40MjkyNkM5LjI1NzYyIDYuNjk3OTYgOS43MTQ2OCA1Ljc4MzgzIDEwLjQ0NiA1LjYwMTAxQzExLjE3NzMgNS4zMjY3NyAxMi4wOTE0IDUuNzgzODMgMTIuMjc0MiA2LjUxNTE0QzEyLjU0ODUgNy4yNDY0NCAxMi4wOTE0IDguMDY5MTUgMTEuMzYwMSA4LjM0MzM5WiIgZmlsbD0iIzVDODFBMiIvPgo8L3N2Zz4K'
+  ),
+  NOW()
+FROM content_item ci
+WHERE ci.type_code = 'TOPIC'
+  AND ci.external_key = '2';
 
--- -----------------------------------------------------------------------------
--- 6) USER TYPES
--- Legacy source: user_types + user_types_translation
--- New target: content_item/content_revision/content_revision_translation
--- -----------------------------------------------------------------------------
-WITH seed_user_type AS (
-  SELECT *
-  FROM (
-    VALUES
-      (1, 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTExLjcxMiAxNC4yNTU5SDkuNjk2VjE5LjY3OTlINlY0LjMxOTk1SDEyLjA0OEMxMy44NzIgNC4zMTk5NSAxNS4zMTIgNC43MDM5NSAxNi4zMiA1LjUxOTk1QzE3LjMyOCA2LjMzNTk1IDE3Ljg1NiA3LjQ4Nzk1IDE3Ljg1NiA4LjkyNzk1QzE3Ljg1NiA5Ljk4Mzk1IDE3LjYxNiAxMC44OTU5IDE3LjE4NCAxMS41Njc5QzE2Ljc1MiAxMi4yMzk5IDE2LjA4IDEyLjgxNTkgMTUuMTY4IDEzLjI5NTlMMTguMzg0IDE5LjQ4NzlWMTkuNjc5OUgxNC40TDExLjcxMiAxNC4yNTU5Wk05LjY5NiAxMS4zNzU5SDEyLjA0OEMxMi43NjggMTEuMzc1OSAxMy4yOTYgMTEuMTgzOSAxMy42MzIgMTAuNzk5OUMxMy45NjggMTAuNDE1OSAxNC4xNiA5LjkzNTk1IDE0LjE2IDkuMjYzOTVDMTQuMTYgOC41OTE5NSAxMy45NjggOC4wNjM5NSAxMy42MzIgNy43Mjc5NUMxMy4yOTYgNy4zOTE5NSAxMi4zNjggNy4xNTE5NSAxMi4wNDggNy4xNTE5NUg5LjY5NlY5LjM3NTlWiIgZmlsbD0iI0ZCQTU1QSIvPgo8L3N2Zz4K'),
-      (7, 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTguODk2IDRMMTIuMzA0IDE0LjcwNEwxMi4zMTIgNEgyMi4yMDhWMTkuMzZIMTYuOTEyVjE1Ljc2TDE3LjIwOCA4LjQxNkwxMy41MDQgMTkuMzZIMTEuMDU2TDcuMzEyIDguNDE2TDcuNjQ4IDE1Ljc2VjkuMzZINFY0SDguODk2WiIgZmlsbD0iI0ZCQTU1QSIvPgo8L3N2Zz4K'),
-      (9, 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTguODk2IDRMMTIuMzA0IDE0LjcwNEwxMi4zMTIgNEgyMi4yMDhWMTkuMzZIMTYuOTEyVjE1Ljc2TDE3LjIwOCA4LjQxNkwxMy41MDQgMTkuMzZIMTEuMDU2TDcuMzEyIDguNDE2TDcuNjQ4IDE1Ljc2VjkuMzZINFY0SDguODk2WiIgZmlsbD0iI0ZCQTU1QSIvPgo8L3N2Zz4K')
-  ) AS t(legacy_id, icon)
-),
-
-insert_ut_items AS (
-  INSERT INTO content_item (type_code, external_key)
-  SELECT 'USER_TYPE', su.legacy_id::text
-  FROM seed_user_type su
-  WHERE NOT EXISTS (
-    SELECT 1
-    FROM content_item ci
-    WHERE ci.type_code = 'USER_TYPE'
-      AND ci.external_key = su.legacy_id::text
-  )
-  RETURNING id, external_key
-),
-
-ut_item_map AS (
-  SELECT ci.id AS item_id, su.legacy_id, su.icon
-  FROM seed_user_type su
-  JOIN content_item ci
-    ON ci.type_code = 'USER_TYPE'
-   AND ci.external_key = su.legacy_id::text
-),
-
-insert_ut_revisions AS (
-  INSERT INTO content_revision (
-    item_id, revision_no, status, source_lang, data_extra, published_at
-  )
-  SELECT
-    uim.item_id,
-    1,
-    'PUBLISHED',
-    'en',
-    jsonb_build_object('icon', uim.icon),
-    NOW()
-  FROM ut_item_map uim
-  WHERE NOT EXISTS (
-    SELECT 1
-    FROM content_revision cr
-    WHERE cr.item_id = uim.item_id
-      AND cr.revision_no = 1
-  )
-  RETURNING id, item_id
-),
-
-update_ut_revisions AS (
-  UPDATE content_revision cr
-  SET
-    status = 'PUBLISHED',
-    source_lang = 'en',
-    data_extra = jsonb_build_object('icon', uim.icon)
-  FROM ut_item_map uim
-  WHERE cr.item_id = uim.item_id
-    AND cr.revision_no = 1
-  RETURNING cr.id, cr.item_id
-),
-
-ut_revisions AS (
-  SELECT id, item_id FROM insert_ut_revisions
-  UNION
-  SELECT id, item_id FROM update_ut_revisions
-),
-
-seed_ut_translations AS (
-  SELECT *
-  FROM (
-    VALUES
-      (7, 'en', 'Migrant ',      ''),
-      (1, 'en', 'Refugee',       '<p>Refugee</p>'),
-      (9, 'en', 'Asylum Seeker', '<p>Asylum Seeker</p>'),
-      (1, 'nl', 'Vluchteling',   '<p>Vluchteling</p>'),
-      (1, 'it', 'Rifugiato',     ' '),
-      (7, 'it', 'Migrante ',     ''),
-      (9, 'nl', 'Asielzoeker',   '<p>Asielzoeker</p>'),
-      (1, 'de', 'Flüchtling',    '<p>Flüchtling</p>'),
-      (9, 'de', 'Asylsuchender', '<p>Asylsuchender</p>')
-  ) AS x(legacy_id, lang, title, description)
-),
-
-insert_ut_translations AS (
-  INSERT INTO content_revision_translation (
-    revision_id, lang, title, description, t_status
-  )
-  SELECT
-    ur.id,
-    sut.lang,
-    sut.title,
-    sut.description,
-    'PUBLISHED'
-  FROM ut_revisions ur
-  JOIN ut_item_map uim
-    ON uim.item_id = ur.item_id
-  JOIN seed_ut_translations sut
-    ON sut.legacy_id = uim.legacy_id
-  WHERE NOT EXISTS (
-    SELECT 1
-    FROM content_revision_translation crt
-    WHERE crt.revision_id = ur.id
-      AND crt.lang = sut.lang
-  )
-  RETURNING revision_id, lang
+INSERT INTO content_revision_translation (
+  revision_id, lang, title, description, t_status
 )
+SELECT cr.id, 'en', 'Cultural', NULL, 'PUBLISHED'
+FROM content_item ci
+JOIN content_rezvision cr ON cr.item_id = ci.id
+WHERE ci.type_code = 'TOPIC'
+  AND ci.external_key = '2'
+  AND cr.revision_no = 1;
 
-UPDATE content_revision_translation crt
-SET
-  title = sut.title,
-  description = sut.description,
-  t_status = 'PUBLISHED'
-FROM ut_revisions ur
-JOIN ut_item_map uim
-  ON uim.item_id = ur.item_id
-JOIN seed_ut_translations sut
-  ON sut.legacy_id = uim.legacy_id
-WHERE crt.revision_id = ur.id
-  AND crt.lang = sut.lang;
+UPDATE content_item ci
+SET published_revision_id = cr.id
+FROM content_revision cr
+WHERE cr.item_id = ci.id
+  AND ci.type_code = 'TOPIC'
+  AND ci.external_key = '2'
+  AND cr.revision_no = 1;
+
+-- ----------------------------------------------------------------------------
+-- TOPIC 3 - Finance
+-- ----------------------------------------------------------------------------
+INSERT INTO content_item (type_code, external_key)
+VALUES ('TOPIC', '3');
+
+INSERT INTO content_revision (
+  item_id, revision_no, status, source_lang, data_extra, published_at
+)
+SELECT
+  ci.id,
+  1,
+  'PUBLISHED',
+  'en',
+  jsonb_build_object(
+    'icon',
+    'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZmlsbC1ydWxlPSJldmVub2RkIiBjbGlwLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik0xMiAyMkMxNy41MjI4IDIyIDIyIDE3LjUyMjggMjIgMTJDMjIgNi40NzcxNSAxNy41MjI4IDIgMTIgMkM2LjQ3NzE1IDIgMiA2LjQ3NzE1IDIgMTJDMiAxNy41MjI4IDYuNDc3MTUgMjIgMTIgMjJaTTE0LjA1MjQgMTYuMTE1OEMxMy42NjAyIDE2LjIxNTEgMTMuMTkyMSAxNi4yNjQ4IDEyLjY0ODIgMTYuMjY0OEMxMS45MjcxIDE2LjI2NDggMTEuMjc1NiAxNi4wODQ3IDEwLjY5MzcgMTUuNzI0N0MxMC4xMjQ1IDE1LjM1MjIgOS43MzIzMSAxNC43MzE0IDkuNTE3MjUgMTMuODYyM0gxNC4xODUyVjEyLjcyNjNIOS4yODk1NUM5LjI3NjkgMTIuNTQwMSA5LjI3MDU3IDEyLjM5MTEgOS4yNzA1NyAxMi4yNzkzVjExLjkyNTVWMTEuNzAySDE0LjE4NTJWMTAuNTY2SDkuNDIyMzhDOS40OTgyOCAxMC4wNjkzIDkuNjM3NDMgOS42NDcyMSA5LjgzOTgzIDkuMjk5NTdDMTAuMDU0OSA4LjkzOTUyIDEwLjMwNzkgOC42NDc3NSAxMC41OTg4IDguNDI0MjdDMTAuOTAyNSA4LjE4ODM3IDExLjIzMTQgOC4wMTQ1NSAxMS41ODU2IDcuOTAyODFDMTEuOTUyNCA3Ljc5MTA3IDEyLjMzMTkgNy43MzUyIDEyLjcyNDEgNy43MzUyQzEzLjE5MjEgNy43MzUyIDEzLjYxNTkgNy43OTEwNyAxMy45OTU0IDcuOTAyODFDMTQuMzg3NiA4LjAxNDU1IDE0Ljc3MzQgOC4xNjM1NCAxNS4xNTI5IDguMzQ5NzhMMTUuNjg0MiA2LjYzNjQyQzE1LjMxNzQgNi40NTAxOCAxNC44ODczIDYuMjg4NzggMTQuMzkzOSA2LjE1MjIxQzEzLjkxMzIgNi4wMTU2MyAxMy4yNjggNS45NDczNSAxMi40NTg0IDUuOTQ3MzVDMTAuOTQwNCA1Ljk0NzM1IDkuNzEzMzMgNi4zNTA4NiA4Ljc3NzIxIDcuMTU3ODdDNy44NDExIDcuOTY0ODkgNy4yNDY1NCA5LjEwMDkyIDYuOTkzNTMgMTAuNTY2SDUuNjg0MjNWMTEuNzAySDYuODQxNzNWMTEuOTgxNFYxMi4zMTY2QzYuODQxNzMgMTIuNDE1OSA2Ljg0ODA1IDEyLjU1MjUgNi44NjA3MSAxMi43MjYzSDUuNjg0MjNWMTMuODYyM0g3LjAzMTQ4QzcuMTgzMjkgMTQuNTU3NiA3LjQxNzMyIDE1LjE2NiA3LjczMzU3IDE1LjY4NzRDOC4wNjI0OCAxNi4yMDg5IDguNDYwOTYgMTYuNjQzNCA4LjkyOTAyIDE2Ljk5MTFDOS4zOTcwOCAxNy4zMzg3IDkuOTIyMDYgMTcuNjA1NiAxMC41MDQgMTcuNzkxOUMxMS4wOTg1IDE3Ljk2NTcgMTEuNzMxIDE4LjA1MjYgMTIuNDAxNSAxOC4wNTI2QzEzLjE4NTggMTguMDUyNiAxMy44MzEgMTcuOTkwNSAxNC4zMzcgMTcuODY2NEMxNC44NTU2IDE3Ljc0MjIgMTUuMjkyMSAxNy41OTMyIDE1LjY0NjMgMTcuNDE5NEwxNS4xNTI5IDE1LjcwNjFDMTQuODI0IDE1Ljg3OTkgMTQuNDU3MiAxNi4wMTY0IDE0LjA1MjQgMTYuMTE1OFoiIGZpbGw9IiM1QzgxQTIiLz4KPC9zdmc+Cg=='
+  ),
+  NOW()
+FROM content_item ci
+WHERE ci.type_code = 'TOPIC'
+  AND ci.external_key = '3';
+
+INSERT INTO content_revision_translation (
+  revision_id, lang, title, description, t_status
+)
+SELECT cr.id, 'en', 'Finance', NULL, 'PUBLISHED'
+FROM content_item ci
+JOIN content_revision cr ON cr.item_id = ci.id
+WHERE ci.type_code = 'TOPIC'
+  AND ci.external_key = '3'
+  AND cr.revision_no = 1;
+
+UPDATE content_item ci
+SET published_revision_id = cr.id
+FROM content_revision cr
+WHERE cr.item_id = ci.id
+  AND ci.type_code = 'TOPIC'
+  AND ci.external_key = '3'
+  AND cr.revision_no = 1;
+
+-- ----------------------------------------------------------------------------
+-- TOPIC 4 - House
+-- ----------------------------------------------------------------------------
+INSERT INTO content_item (type_code, external_key)
+VALUES ('TOPIC', '4');
+
+INSERT INTO content_revision (
+  item_id, revision_no, status, source_lang, data_extra, published_at
+)
+SELECT
+  ci.id,
+  1,
+  'PUBLISHED',
+  'en',
+  jsonb_build_object(
+    'icon',
+    'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTE3LjA0ODggMTFWM0g3VjdIM1YyMUgxMVYxN0gxM1YyMUgyMVYxMUgxNy4wNDg4Wk03IDE5LjA0ODhINVYxNy4wNDg4SDdWMTkuMDQ4OFpNNyAxNS4wNDg4SDVWMTMuMDQ4OEg3VjE1LjA0ODhaTTcgMTFINVY5SDdWMTFaTTExIDE1LjA0ODhIOVYxMy4wNDg4SDExVjE1LjA0ODhaTTExIDExSDlWOUgxMVYxMVpNMTEgN0g5VjVIMTFWN1pNMTUuMDQ4OCAxNS4wNDg4SDEzLjA0ODhWMTMuMDQ4OEgxNS4wNDg4VjE1LjA0ODhaTTE1LjA0ODggMTFIMTMuMDQ4OFY5SDE1LjA0ODhWMTFaTTE1LjA0ODggN0gxMy4wNDg4VjVIMTUuMDQ4OFY3Wk0xOS4wNDg4IDE5LjA0ODhIMTcuMDQ4OFYxNy4wNDg4SDE5LjA0ODhWMTkuMDQ4OFpNMTkuMDQ4OCAxNS4wNDg4SDE3LjA0ODhWMTMuMDQ4OEgxOS4wNDg4VjE1LjA0ODhaIiBmaWxsPSIjNUM4MUEyIi8+Cjwvc3ZnPgo='
+  ),
+  NOW()
+FROM content_item ci
+WHERE ci.type_code = 'TOPIC'
+  AND ci.external_key = '4';
+
+INSERT INTO content_revision_translation (
+  revision_id, lang, title, description, t_status
+)
+SELECT cr.id, 'en', 'House', NULL, 'PUBLISHED'
+FROM content_item ci
+JOIN content_revision cr ON cr.item_id = ci.id
+WHERE ci.type_code = 'TOPIC'
+  AND ci.external_key = '4'
+  AND cr.revision_no = 1;
+
+INSERT INTO content_revision_translation (
+  revision_id, lang, title, description, t_status
+)
+SELECT cr.id, 'it', 'Casa', NULL, 'PUBLISHED'
+FROM content_item ci
+JOIN content_revision cr ON cr.item_id = ci.id
+WHERE ci.type_code = 'TOPIC'
+  AND ci.external_key = '4'
+  AND cr.revision_no = 1;
+
+INSERT INTO content_revision_translation (
+  revision_id, lang, title, description, t_status
+)
+SELECT cr.id, 'de', 'aggiornato', NULL, 'PUBLISHED'
+FROM content_item ci
+JOIN content_revision cr ON cr.item_id = ci.id
+WHERE ci.type_code = 'TOPIC'
+  AND ci.external_key = '4'
+  AND cr.revision_no = 1;
+
+UPDATE content_item ci
+SET published_revision_id = cr.id
+FROM content_revision cr
+WHERE cr.item_id = ci.id
+  AND ci.type_code = 'TOPIC'
+  AND ci.external_key = '4'
+  AND cr.revision_no = 1;
+
+-- ----------------------------------------------------------------------------
+-- TOPIC 5 - Health
+-- ----------------------------------------------------------------------------
+INSERT INTO content_item (type_code, external_key)
+VALUES ('TOPIC', '5');
+
+INSERT INTO content_revision (
+  item_id, revision_no, status, source_lang, data_extra, published_at
+)
+SELECT
+  ci.id,
+  1,
+  'PUBLISHED',
+  'en',
+  jsonb_build_object(
+    'icon',
+    'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEyIDIwLjczNjFDMTEuODA4IDIwLjczNjEgMTEuNjY0IDIwLjY4ODEgMTEuNTIgMjAuNTkyMUM3LjgyNDA1IDE4LjA0ODEgNS4xODQwNSAxNS40NTYxIDMuNjk2MDUgMTIuOTEyMUg2LjcyMDA1QzcuMDU2MDUgMTIuOTEyMSA3LjM0NDA1IDEyLjcyMDEgNy40NDAwNSAxMi40MzIxTDguMzA0MDUgMTAuMTc2MUw5Ljc0NDA1IDE1Ljg4ODFDOS44NDAwNSAxNi4yMjQxIDEwLjA4IDE2LjQ2NDEgMTAuNDE2IDE2LjQ2NDFDMTAuNDY0IDE2LjQ2NDEgMTAuNDY0IDE2LjQ2NDEgMTAuNTEyIDE2LjQ2NDFDMTAuOCAxNi40NjQxIDExLjA4OCAxNi4zMjAxIDExLjIzMiAxNi4wMzIxTDEyLjgxNiAxMi45MTIxSDE1Ljg4OEMxNi4wOCAxMi45MTIxIDE2LjMyIDEyLjgxNjEgMTYuNDY0IDEyLjY3MjFDMTYuNjA4IDEyLjUyODEgMTYuNzA0IDEyLjMzNjEgMTYuNzA0IDEyLjA5NjFDMTYuNzA0IDExLjY2NDEgMTYuMzIgMTEuMzI4MSAxNS44ODggMTEuMzI4MUgxMi4zMzZDMTIuMDQ4IDExLjMyODEgMTEuNzYgMTEuNDcyMSAxMS42MTYgMTEuNzYwMUwxMC43NTIgMTMuNDQwMUw5LjI2NDA1IDcuMzkyMDdDOS4xNjgwNSA3LjEwNDA2IDguOTI4MDUgNi44NjQwNyA4LjY0MDA1IDYuNzY4MDdDOC41OTIwNSA2Ljc2ODA3IDguNTQ0MDUgNi43NjgwNyA4LjQ5NjA1IDYuNzY4MDdDOC4xNjAwNSA2Ljc2ODA3IDcuODcyMDUgNi45NjAwNyA3Ljc3NjA1IDcuMjQ4MDdMNi4xOTIwNSAxMS4zMjgxSDIuOTI4MDVDMi4wNjQwNSA5LjEyMDA3IDIuMTYwMDUgNy4wNTYwNyAzLjIxNjA1IDUuNDcyMDZDNC4xNzYwNSA0LjAzMjA2IDUuODA4MDUgMy4yMTYwNiA3LjYzMjA1IDMuMjE2MDZDOS4xNjgwNSAzLjIxNjA2IDEwLjY1NiAzLjg0MDA2IDExLjg1NiA0Ljk0NDA2TDEyLjA0OCA1LjA4ODA3TDEyLjI0IDQuOTQ0MDZDMTMuMzkyIDMuODQwMDYgMTQuODggMy4yNjQwNiAxNi40MTYgMy4yNjQwNkMxOC43NjggMy4yNjQwNiAyMC43ODQgNC43MDQwNiAyMS40MDggNi44MTYwN0MyMi42NTYgMTAuODAwMSAxOS4yOTYgMTUuOTM2MSAxMi40OCAyMC41OTIxQzEyLjMzNiAyMC42ODgxIDEyLjE5MiAyMC43MzYxIDEyIDIwLjczNjFaIiBmaWxsPSIjNUM4MUEyIi8+Cjwvc3ZnPgo='
+  ),
+  NOW()
+FROM content_item ci
+WHERE ci.type_code = 'TOPIC'
+  AND ci.external_key = '5';
+
+INSERT INTO content_revision_translation (
+  revision_id, lang, title, description, t_status
+)
+SELECT cr.id, 'en', 'Health', NULL, 'PUBLISHED'
+FROM content_item ci
+JOIN content_revision cr ON cr.item_id = ci.id
+WHERE ci.type_code = 'TOPIC'
+  AND ci.external_key = '5'
+  AND cr.revision_no = 1;
+
+UPDATE content_item ci
+SET published_revision_id = cr.id
+FROM content_revision cr
+WHERE cr.item_id = ci.id
+  AND ci.type_code = 'TOPIC'
+  AND ci.external_key = '5'
+  AND cr.revision_no = 1;
+
+-- ----------------------------------------------------------------------------
+-- TOPIC 6 - Education
+-- ----------------------------------------------------------------------------
+INSERT INTO content_item (type_code, external_key)
+VALUES ('TOPIC', '6');
+
+INSERT INTO content_revision (
+  item_id, revision_no, status, source_lang, data_extra, published_at
+)
+SELECT
+  ci.id,
+  1,
+  'PUBLISHED',
+  'en',
+  jsonb_build_object(
+    'icon',
+    'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZmlsbC1ydWxlPSJldmVub2RkIiBjbGlwLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik0xLjIwODU4IDkuMjk1NDRDMC45MzA1MjggOS4xNDM5IDAuOTMwNDU4IDguNzQ0NyAxLjIwODQ2IDguNTkzMDZMMTEuMzcyOSAzLjA0ODg0QzExLjQ5MjMgMi45ODM3MiAxMS42MzY2IDIuOTgzNzIgMTEuNzU1OSAzLjA0ODg0TDIyLjM1NTkgOC44MzA2NkMyMi40ODQ0IDguOTAwNzUgMjIuNTY0NCA5LjAzNTQ0IDIyLjU2NDQgOS4xODE4MlYxNi41NDQ0QzIyLjU2NDQgMTYuNzY1MyAyMi4zODUzIDE2Ljk0NDQgMjIuMTY0NCAxNi45NDQ0SDIwLjk2NDRDMjAuNzQzNSAxNi45NDQ0IDIwLjU2NDQgMTYuNzY1MyAyMC41NjQ0IDE2LjU0NDRWMTAuNzA3OUMyMC41NjQ0IDEwLjQwNDQgMjAuMjM5NSAxMC4yMTE0IDE5Ljk3MyAxMC4zNTY3TDE4Ljc3MyAxMS4wMTA3QzE4LjY0NDQgMTEuMDgwOCAxOC41NjQ0IDExLjIxNTUgMTguNTY0NCAxMS4zNjE5VjE2Ljg4N0MxOC41NjQ0IDE3LjAzMzMgMTguNDg0NSAxNy4xNjggMTguMzU2IDE3LjIzODFMMTEuNzU2IDIwLjgzOThDMTEuNjM2NiAyMC45MDUgMTEuNDkyMiAyMC45MDUgMTEuMzcyOCAyMC44Mzk4TDQuNzcyNzkgMTcuMjM4MUM0LjY0NDMyIDE3LjE2OCA0LjU2NDQgMTcuMDMzMyA0LjU2NDQgMTYuODg3VjExLjM2MTlDNC41NjQ0IDExLjIxNTUgNC40ODQzOSAxMS4wODA4IDQuMzU1ODIgMTEuMDEwN0wxLjIwODU4IDkuMjk1NDRaTTExLjM3MjcgMTguNTU5N0MxMS40OTIyIDE4LjYyNDkgMTEuNjM2NiAxOC42MjQ5IDExLjc1NjEgMTguNTU5N0wxNi4zNTYxIDE2LjA0ODFDMTYuNDg0NSAxNS45NzggMTYuNTY0NCAxNS44NDMzIDE2LjU2NDQgMTUuNjk3VjEyLjg4ODVDMTYuNTY0NCAxMi41ODQ4IDE2LjIzOTMgMTIuMzkxOSAxNS45NzI3IDEyLjUzNzRMMTEuNzU2MSAxNC44Mzk3QzExLjYzNjYgMTQuOTA0OSAxMS40OTIyIDE0LjkwNDkgMTEuMzcyNyAxNC44Mzk3TDcuMTU2MDkgMTIuNTM3NEM2Ljg4OTU0IDEyLjM5MTkgNi41NjQ0IDEyLjU4NDggNi41NjQ0IDEyLjg4ODVWMTUuNjk3QzYuNTY0NCAxNS44NDMzIDYuNjQ0MjkgMTUuOTc4IDYuNzcyNzEgMTYuMDQ4MUwxMS4zNzI3IDE4LjU1OTdaIiBmaWxsPSIjNUM4MUEyIi8+Cjwvc3ZnPgo='
+  ),
+  NOW()
+FROM content_item ci
+WHERE ci.type_code = 'TOPIC'
+  AND ci.external_key = '6';
+
+INSERT INTO content_revision_translation (
+  revision_id, lang, title, description, t_status
+)
+SELECT cr.id, 'en', 'Education', NULL, 'PUBLISHED'
+FROM content_item ci
+JOIN content_revision cr ON cr.item_id = ci.id
+WHERE ci.type_code = 'TOPIC'
+  AND ci.external_key = '6'
+  AND cr.revision_no = 1;
+
+UPDATE content_item ci
+SET published_revision_id = cr.id
+FROM content_revision cr
+WHERE cr.item_id = ci.id
+  AND ci.type_code = 'TOPIC'
+  AND ci.external_key = '6'
+  AND cr.revision_no = 1;
+
+-- ----------------------------------------------------------------------------
+-- TOPIC 7 - Employment
+-- ----------------------------------------------------------------------------
+INSERT INTO content_item (type_code, external_key)
+VALUES ('TOPIC', '7');
+
+INSERT INTO content_revision (
+  item_id, revision_no, status, source_lang, data_extra, published_at
+)
+SELECT
+  ci.id,
+  1,
+  'PUBLISHED',
+  'en',
+  jsonb_build_object(
+    'icon',
+    'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEyLjU2NDIgMTQuOTI4NkgxMS4yNzQ2QzEwLjYyOTkgMTQuOTI4NiAxMC4xNDYzIDE0LjQ0NSAxMC4wOTI1IDEzLjg1MzlMMyAxMi43NzkzVjE4LjM2NzRDMyAxOS40OTU3IDMuOTEzNDMgMjAuMzU1NCA0Ljk4ODA2IDIwLjM1NTRIMTguOTU4MkMyMC4wODY2IDIwLjM1NTQgMjAuOTQ2MyAxOS40NDIgMjAuOTQ2MyAxOC4zNjc0VjEyLjc3OTNMMTMuNzQ2MyAxMy44NTM5QzEzLjY5MjUgMTQuNDk4NyAxMy4yMDkgMTQuOTI4NiAxMi41NjQyIDE0LjkyODZaIiBmaWxsPSIjNUM4MUEyIi8+CjxwYXRoIGQ9Ik0xOC45NTgyIDcuMDgzNThIMTUuOTQ5M1Y1Ljc5NDAzQzE1Ljk0OTMgNC4yMzU4MiAxNC43MTM0IDMgMTMuMTU1MiAzSDEwLjczNzNDOS4xNzkxMSAzIDcuOTQzMjggNC4yMzU4MiA3Ljk0MzI4IDUuNzk0MDNWNy4wODM1OEg0Ljk4ODA2QzMuODU5NyA3LjA4MzU4IDMgNy45OTcwMiAzIDkuMDcxNjRWMTEuOTczMUwxMC4zMDc1IDEzLjA0NzhDMTAuNTIyNCAxMi43MjU0IDEwLjg5ODUgMTIuNTEwNCAxMS4zMjg0IDEyLjUxMDRIMTIuNjE3OUMxMy4wNDc4IDEyLjUxMDQgMTMuNDIzOSAxMi43MjU0IDEzLjYzODggMTMuMTAxNUwyMSAxMS45NzMxVjkuMDcxNjRDMjAuOTQ2MyA3Ljk5NzAyIDIwLjAzMjggNy4wODM1OCAxOC45NTgyIDcuMDgzNThaTTkuNTAxNDkgNS43OTQwM0M5LjUwMTQ5IDUuMTQ5MjUgMTAuMDM4OCA0LjYxMTk0IDEwLjY4MzYgNC42MTE5NEgxMy4xMDE1QzEzLjc0NjMgNC42MTE5NCAxNC4yODM2IDUuMTQ5MjUgMTQuMjgzNiA1Ljc5NDAzVjcuMDgzNThIOS40NDc3NlY1Ljc5NDAzSDkuNTAxNDlaIiBmaWxsPSIjNUM4MUEyIi8+Cjwvc3ZnPgo='
+  ),
+  NOW()
+FROM content_item ci
+WHERE ci.type_code = 'TOPIC'
+  AND ci.external_key = '7';
+
+INSERT INTO content_revision_translation (
+  revision_id, lang, title, description, t_status
+)
+SELECT cr.id, 'en', 'Employment', NULL, 'PUBLISHED'
+FROM content_item ci
+JOIN content_revision cr ON cr.item_id = ci.id
+WHERE ci.type_code = 'TOPIC'
+  AND ci.external_key = '7'
+  AND cr.revision_no = 1;
+
+INSERT INTO content_revision_translation (
+  revision_id, lang, title, description, t_status
+)
+SELECT cr.id, 'it', 'Lavoro', NULL, 'PUBLISHED'
+FROM content_item ci
+JOIN content_revision cr ON cr.item_id = ci.id
+WHERE ci.type_code = 'TOPIC'
+  AND ci.external_key = '7'
+  AND cr.revision_no = 1;
+
+INSERT INTO content_revision_translation (
+  revision_id, lang, title, description, t_status
+)
+SELECT cr.id, 'de', 'Werk', NULL, 'PUBLISHED'
+FROM content_item ci
+JOIN content_revision cr ON cr.item_id = ci.id
+WHERE ci.type_code = 'TOPIC'
+  AND ci.external_key = '7'
+  AND cr.revision_no = 1;
+
+UPDATE content_item ci
+SET published_revision_id = cr.id
+FROM content_revision cr
+WHERE cr.item_id = ci.id
+  AND ci.type_code = 'TOPIC'
+  AND ci.external_key = '7'
+  AND cr.revision_no = 1;
+
+-- ----------------------------------------------------------------------------
+-- TOPIC RELATIONS
+-- 1 Administration
+--   2 Cultural
+--     3 Finance
+--       4 House
+--   5 Health
+--   6 Education
+-- ----------------------------------------------------------------------------
+INSERT INTO content_item_relation (relation_type, parent_item_id, child_item_id, sort_order)
+SELECT 'parent', p.id, c.id, 0
+FROM content_item p, content_item c
+WHERE p.type_code = 'TOPIC' AND p.external_key = '1'
+  AND c.type_code = 'TOPIC' AND c.external_key = '2';
+
+INSERT INTO content_item_relation (relation_type, parent_item_id, child_item_id, sort_order)
+SELECT 'parent', p.id, c.id, 0
+FROM content_item p, content_item c
+WHERE p.type_code = 'TOPIC' AND p.external_key = '2'
+  AND c.type_code = 'TOPIC' AND c.external_key = '3';
+
+INSERT INTO content_item_relation (relation_type, parent_item_id, child_item_id, sort_order)
+SELECT 'parent', p.id, c.id, 0
+FROM content_item p, content_item c
+WHERE p.type_code = 'TOPIC' AND p.external_key = '3'
+  AND c.type_code = 'TOPIC' AND c.external_key = '4';
+
+INSERT INTO content_item_relation (relation_type, parent_item_id, child_item_id, sort_order)
+SELECT 'parent', p.id, c.id, 0
+FROM content_item p, content_item c
+WHERE p.type_code = 'TOPIC' AND p.external_key = '1'
+  AND c.type_code = 'TOPIC' AND c.external_key = '5';
+
+INSERT INTO content_item_relation (relation_type, parent_item_id, child_item_id, sort_order)
+SELECT 'parent', p.id, c.id, 0
+FROM content_item p, content_item c
+WHERE p.type_code = 'TOPIC' AND p.external_key = '1'
+  AND c.type_code = 'TOPIC' AND c.external_key = '6';
+
+-- ============================================================================
+-- USER_TYPE
+-- external_key riordinate:
+-- 1 Refugee       (old 1)
+-- 2 Migrant       (old 7)
+-- 3 Asylum Seeker (old 9)
+-- ============================================================================
+
+-- ----------------------------------------------------------------------------
+-- USER_TYPE 1 - Refugee
+-- ----------------------------------------------------------------------------
+INSERT INTO content_item (type_code, external_key)
+VALUES ('USER_TYPE', '1');
+
+INSERT INTO content_revision (
+  item_id, revision_no, status, source_lang, data_extra, published_at
+)
+SELECT
+  ci.id,
+  1,
+  'PUBLISHED',
+  'en',
+  jsonb_build_object(
+    'icon',
+    'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTExLjcxMiAxNC4yNTU5SDkuNjk2VjE5LjY3OTlINlY0LjMxOTk1SDEyLjA0OEMxMy44NzIgNC4zMTk5NSAxNS4zMTIgNC43MDM5NSAxNi4zMiA1LjUxOTk1QzE3LjMyOCA2LjMzNTk1IDE3Ljg1NiA3LjQ4Nzk1IDE3Ljg1NiA4LjkyNzk1QzE3Ljg1NiA5Ljk4Mzk1IDE3LjYxNiAxMC44OTU5IDE3LjE4NCAxMS41Njc5QzE2Ljc1MiAxMi4yMzk5IDE2LjA4IDEyLjgxNTkgMTUuMTY4IDEzLjI5NTlMMTguMzg0IDE5LjQ4NzlWMTkuNjc5OUgxNC40TDExLjcxMiAxNC4yNTU5Wk05LjY5NiAxMS4zNzU5SDEyLjA0OEMxMi43NjggMTEuMzc1OSAxMy4yOTYgMTEuMTgzOSAxMy42MzIgMTAuNzk5OUMxMy45NjggMTAuNDE1OSAxNC4xNiA5LjkzNTk1IDE0LjE2IDkuMjYzOTVDMTQuMTYgOC41OTE5NSAxMy45NjggOC4wNjM5NSAxMy42MzIgNy43Mjc5NUMxMy4yOTYgNy4zOTE5NSAxMi43NjggNy4xNTE5NSAxMi4wNDggNy4xNTE5NUg5LjY5NlYxMS4zNzU5WiIgZmlsbD0iI0ZCQTU1QSIvPgo8L3N2Zz4K'
+  ),
+  NOW()
+FROM content_item ci
+WHERE ci.type_code = 'USER_TYPE'
+  AND ci.external_key = '1';
+
+INSERT INTO content_revision_translation (
+  revision_id, lang, title, description, t_status
+)
+SELECT cr.id, 'en', 'Refugee', '<p>Refugee</p>', 'PUBLISHED'
+FROM content_item ci
+JOIN content_revision cr ON cr.item_id = ci.id
+WHERE ci.type_code = 'USER_TYPE'
+  AND ci.external_key = '1'
+  AND cr.revision_no = 1;
+
+INSERT INTO content_revision_translation (
+  revision_id, lang, title, description, t_status
+)
+SELECT cr.id, 'it', 'Rifugiato', ' ', 'PUBLISHED'
+FROM content_item ci
+JOIN content_revision cr ON cr.item_id = ci.id
+WHERE ci.type_code = 'USER_TYPE'
+  AND ci.external_key = '1'
+  AND cr.revision_no = 1;
+
+INSERT INTO content_revision_translation (
+  revision_id, lang, title, description, t_status
+)
+SELECT cr.id, 'de', 'Flüchtling', '<p>Flüchtling</p>', 'PUBLISHED'
+FROM content_item ci
+JOIN content_revision cr ON cr.item_id = ci.id
+WHERE ci.type_code = 'USER_TYPE'
+  AND ci.external_key = '1'
+  AND cr.revision_no = 1;
+
+INSERT INTO content_revision_translation (
+  revision_id, lang, title, description, t_status
+)
+SELECT cr.id, 'nl', 'Vluchteling', '<p>Vluchteling</p>', 'PUBLISHED'
+FROM content_item ci
+JOIN content_revision cr ON cr.item_id = ci.id
+WHERE ci.type_code = 'USER_TYPE'
+  AND ci.external_key = '1'
+  AND cr.revision_no = 1;
+
+UPDATE content_item ci
+SET published_revision_id = cr.id
+FROM content_revision cr
+WHERE cr.item_id = ci.id
+  AND ci.type_code = 'USER_TYPE'
+  AND ci.external_key = '1'
+  AND cr.revision_no = 1;
+
+-- ----------------------------------------------------------------------------
+-- USER_TYPE 2 - Migrant
+-- ----------------------------------------------------------------------------
+INSERT INTO content_item (type_code, external_key)
+VALUES ('USER_TYPE', '2');
+
+INSERT INTO content_revision (
+  item_id, revision_no, status, source_lang, data_extra, published_at
+)
+SELECT
+  ci.id,
+  1,
+  'PUBLISHED',
+  'en',
+  jsonb_build_object(
+    'icon',
+    'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTguODk2IDRMMTIuMzA0IDE0LjcwNEwxNS43MTIgNEgyMC42MDhWMTkuMzZIMTYuOTEyVjE1Ljc2TDE3LjI0OCA4LjQxNkwxMy41MDQgMTkuMzZIMTEuMDU2TDcuMzEyIDguNDE2TDcuNjQ4IDE1Ljc2VjE5LjM2SDRWNEg4Ljg5NloiIGZpbGw9IiNGQkE1NUEiLz4KPC9zdmc+Cg=='
+  ),
+  NOW()
+FROM content_item ci
+WHERE ci.type_code = 'USER_TYPE'
+  AND ci.external_key = '2';
+
+INSERT INTO content_revision_translation (
+  revision_id, lang, title, description, t_status
+)
+SELECT cr.id, 'en', 'Migrant ', '', 'PUBLISHED'
+FROM content_item ci
+JOIN content_revision cr ON cr.item_id = ci.id
+WHERE ci.type_code = 'USER_TYPE'
+  AND ci.external_key = '2'
+  AND cr.revision_no = 1;
+
+INSERT INTO content_revision_translation (
+  revision_id, lang, title, description, t_status
+)
+SELECT cr.id, 'it', 'Migrante ', '', 'PUBLISHED'
+FROM content_item ci
+JOIN content_revision cr ON cr.item_id = ci.id
+WHERE ci.type_code = 'USER_TYPE'
+  AND ci.external_key = '2'
+  AND cr.revision_no = 1;
+
+UPDATE content_item ci
+SET published_revision_id = cr.id
+FROM content_revision cr
+WHERE cr.item_id = ci.id
+  AND ci.type_code = 'USER_TYPE'
+  AND ci.external_key = '2'
+  AND cr.revision_no = 1;
+
+-- ----------------------------------------------------------------------------
+-- USER_TYPE 3 - Asylum Seeker
+-- ----------------------------------------------------------------------------
+INSERT INTO content_item (type_code, external_key)
+VALUES ('USER_TYPE', '3');
+
+INSERT INTO content_revision (
+  item_id, revision_no, status, source_lang, data_extra, published_at
+)
+SELECT
+  ci.id,
+  1,
+  'PUBLISHED',
+  'en',
+  jsonb_build_object(
+    'icon',
+    'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTE0LjkzNiAxNi40OEg5Ljg0OEw4Ljk4NCAxOS4zNkg1TDEwLjYxNiA0SDE0LjEyTDE5Ljc4NCAxOS4zNkgxNS44TDE0LjkzNiAxNi40OFpNMTAuNzEyIDEzLjY0OEgxNC4wMjRMMTIuMzkyIDguMzJMMTAuNzEyIDEzLjY0OFoiIGZpbGw9IiNGQkE1NUEiLz4KPC9zdmc+Cg=='
+  ),
+  NOW()
+FROM content_item ci
+WHERE ci.type_code = 'USER_TYPE'
+  AND ci.external_key = '3';
+
+INSERT INTO content_revision_translation (
+  revision_id, lang, title, description, t_status
+)
+SELECT cr.id, 'en', 'Asylum Seeker', '<p>Asylum Seeker</p>', 'PUBLISHED'
+FROM content_item ci
+JOIN content_revision cr ON cr.item_id = ci.id
+WHERE ci.type_code = 'USER_TYPE'
+  AND ci.external_key = '3'
+  AND cr.revision_no = 1;
+
+INSERT INTO content_revision_translation (
+  revision_id, lang, title, description, t_status
+)
+SELECT cr.id, 'de', 'Asylsuchender', '<p>Asylsuchender</p>', 'PUBLISHED'
+FROM content_item ci
+JOIN content_revision cr ON cr.item_id = ci.id
+WHERE ci.type_code = 'USER_TYPE'
+  AND ci.external_key = '3'
+  AND cr.revision_no = 1;
+
+INSERT INTO content_revision_translation (
+  revision_id, lang, title, description, t_status
+)
+SELECT cr.id, 'nl', 'Asielzoeker', '<p>Asielzoeker</p>', 'PUBLISHED'
+FROM content_item ci
+JOIN content_revision cr ON cr.item_id = ci.id
+WHERE ci.type_code = 'USER_TYPE'
+  AND ci.external_key = '3'
+  AND cr.revision_no = 1;
+
+UPDATE content_item ci
+SET published_revision_id = cr.id
+FROM content_revision cr
+WHERE cr.item_id = ci.id
+  AND ci.type_code = 'USER_TYPE'
+  AND ci.external_key = '3'
+  AND cr.revision_no = 1;
 
 COMMIT;
 
