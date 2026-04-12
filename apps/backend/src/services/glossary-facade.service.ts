@@ -343,7 +343,7 @@ export class GlossaryFacadeService {
     // ── Migrant frontend ──────────────────────────────────────────────────────
 
     async getTranslatedForFrontend(
-        defaultLang = 'it',
+        defaultLang: string,
         currentLang = 'it',
     ): Promise<Array<Record<string, unknown>>> {
         const items = await this.contentItemRepository.find({
@@ -381,7 +381,7 @@ export class GlossaryFacadeService {
      * Endpoint: GET /glossary-items (already referenced in micado-entities.api.ts)
      */
     async getForMentionPicker(
-        defaultLang = 'it',
+        defaultLang: string,
         currentLang = 'it',
         includeDraft = true,
     ): Promise<Array<{ id: number; title: string; description: string; lang: string; published: boolean }>> {

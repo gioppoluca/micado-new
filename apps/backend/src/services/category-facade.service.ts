@@ -347,9 +347,9 @@ export class CategoryFacadeService {
     // ── Migrant frontend ──────────────────────────────────────────────────────
 
     async getTranslatedForFrontend(
+        defaultLang: string,
+        currentLang: string,
         subtype?: 'event' | 'information',
-        defaultLang = 'it',
-        currentLang = 'it',
     ): Promise<Array<{ id: number; title: string; lang: string; subtype: string }>> {
         const items = await this.contentItemRepository.find({
             where: { typeCode: CATEGORY_CODE, publishedRevisionId: { neq: null as unknown as string } },

@@ -432,7 +432,7 @@ export class DocumentTypeFacadeService {
     // ── Migrant frontend ──────────────────────────────────────────────────────
 
     async getTranslatedForFrontend(
-        defaultLang = 'it',
+        defaultLang: string,
         currentLang = 'it',
     ): Promise<Array<Record<string, unknown>>> {
         const items = await this.contentItemRepository.find({

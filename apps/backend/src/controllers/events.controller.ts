@@ -31,6 +31,7 @@
 
 import {
     CountSchema,
+    repository,
 } from '@loopback/repository';
 import {
     del,
@@ -49,6 +50,7 @@ import { WinstonLogger, LoggingBindings } from '@loopback/logging';
 import { EventLegacy } from '../models/event-legacy.model';
 import { EventFull } from '../models/event-full.model';
 import { EventFacadeService, type EventListFilter } from '../services/event-facade.service';
+import { LanguageRepository } from '../repositories/language.repository';
 
 const STATUS_SCHEMA = { type: 'string' as const, enum: ['DRAFT', 'APPROVED', 'PUBLISHED', 'ARCHIVED'] };
 const TRANSLATIONS_MAP_SCHEMA = {
@@ -82,7 +84,17 @@ export class EventsController {
 
         @inject(LoggingBindings.WINSTON_LOGGER)
         protected logger: WinstonLogger,
+
+        @repository(LanguageRepository)
+        protected languageRepository: LanguageRepository,
     ) { }
+
+    /** Returns the platform default language from the languages table. */
+    protected async resolveDefaultLang(requested?: string): Promise<string> {
+        if (requested) return requested;
+        const def = await this.languageRepository.findOne({ where: { isDefault: true } });
+        return def?.lang ?? 'en';
+    }
 
     // ── Create ────────────────────────────────────────────────────────────────
 
@@ -313,8 +325,8 @@ export class EventsController {
         },
     })
     async translatedEvents(
-        @param.query.string('defaultlang') defaultlang = 'it',
-        @param.query.string('currentlang') currentlang = 'it',
+        @param.query.string('defaultlang') defaultlang?: string,
+        @param.query.string('currentlang') currentlang?: string,
         @param.query.number('categoryId') categoryId?: number,
         @param.query.string('topicIds') topicIds?: string,
         @param.query.string('userTypeIds') userTypeIds?: string,
@@ -322,7 +334,8 @@ export class EventsController {
         @param.query.number('pageSize') pageSize?: number,
     ): Promise<Array<Record<string, unknown>>> {
         const filter = this.parseFilter({ categoryId, topicIds, userTypeIds, page, pageSize });
-        return this.eventFacadeService.getTranslatedForFrontend(defaultlang, currentlang, filter);
+        const resolvedDefault = await this.resolveDefaultLang(defaultlang);
+        return this.eventFacadeService.getTranslatedForFrontend(resolvedDefault, currentlang ?? resolvedDefault, filter);
     }
 
     // ── Query param helpers ───────────────────────────────────────────────────

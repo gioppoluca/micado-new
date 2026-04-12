@@ -36,7 +36,7 @@
  *     Frontend re-fetches GET /graph afterwards to get stable numeric IDs.
  */
 
-import { CountSchema } from '@loopback/repository';
+import { CountSchema, repository } from '@loopback/repository';
 import {
     del, get, getModelSchemaRef, param,
     patch, post, put, requestBody,
@@ -49,6 +49,7 @@ import { ProcessLegacy } from '../models/process-legacy.model';
 import { ProcessFull } from '../models/process-full.model';
 import { ProcessGraph } from '../models/process-graph.model';
 import { ProcessFacadeService, type ProcessListFilter } from '../services/process-facade.service';
+import { LanguageRepository } from '../repositories/language.repository';
 
 // ── Shared JSON schema fragments ──────────────────────────────────────────────
 
@@ -120,7 +121,17 @@ export class ProcessesController {
 
         @inject(LoggingBindings.WINSTON_LOGGER)
         protected logger: WinstonLogger,
+
+        @repository(LanguageRepository)
+        protected languageRepository: LanguageRepository,
     ) { }
+
+    /** Returns the platform default language from the languages table. */
+    protected async resolveDefaultLang(requested?: string): Promise<string> {
+        if (requested) return requested;
+        const def = await this.languageRepository.findOne({ where: { isDefault: true } });
+        return def?.lang ?? 'en';
+    }
 
     // ── Create ────────────────────────────────────────────────────────────────
 
@@ -366,15 +377,16 @@ export class ProcessesController {
         },
     })
     async translatedProcesses(
-        @param.query.string('defaultlang') defaultlang = 'it',
-        @param.query.string('currentlang') currentlang = 'it',
+        @param.query.string('defaultlang') defaultlang?: string,
+        @param.query.string('currentlang') currentlang?: string,
         @param.query.string('topicIds') topicIds?: string,
         @param.query.string('userTypeIds') userTypeIds?: string,
         @param.query.number('page') page?: number,
         @param.query.number('pageSize') pageSize?: number,
     ): Promise<Array<Record<string, unknown>>> {
         const filter = this.parseFilter({ topicIds, userTypeIds, page, pageSize });
-        return this.processFacadeService.getTranslatedForFrontend(defaultlang, currentlang, filter);
+        const resolvedDefault = await this.resolveDefaultLang(defaultlang);
+        return this.processFacadeService.getTranslatedForFrontend(resolvedDefault, currentlang ?? resolvedDefault, filter);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

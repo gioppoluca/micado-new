@@ -406,7 +406,7 @@ export class UserTypeFacadeService {
     // ── Migrant frontend ──────────────────────────────────────────────────────
 
     async getTranslatedForFrontend(
-        defaultLang = 'en',
+        defaultLang: string,
         currentLang = 'en',
     ): Promise<Array<Record<string, unknown>>> {
         const items = await this.contentItemRepository.find({

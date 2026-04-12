@@ -38,6 +38,7 @@ import {
     Filter,
     FilterExcludingWhere,
     Where,
+    repository
 } from '@loopback/repository';
 import {
     del,
@@ -55,6 +56,7 @@ import { inject, service } from '@loopback/core';
 import { WinstonLogger, LoggingBindings } from '@loopback/logging';
 import { UserTypeLegacy } from '../models';
 import { UserTypeFull } from '../models/user-type-full.model';
+import { LanguageRepository } from '../repositories';
 import { UserTypeFacadeService } from '../services/user-type-facade.service';
 
 // ─── Reusable inline schema fragments ─────────────────────────────────────────
@@ -102,7 +104,17 @@ export class UserTypesController {
 
         @inject(LoggingBindings.WINSTON_LOGGER)
         protected logger: WinstonLogger,
+
+        @repository(LanguageRepository)
+        protected languageRepository: LanguageRepository,
     ) { }
+
+    /** Returns the platform default language from the languages table. */
+    protected async resolveDefaultLang(requested?: string): Promise<string> {
+        if (requested) return requested;
+        const def = await this.languageRepository.findOne({ where: { isDefault: true } });
+        return def?.lang ?? 'en';
+    }
 
     // ── Create ────────────────────────────────────────────────────────────────
 
@@ -339,12 +351,13 @@ export class UserTypesController {
         },
     })
     async translatedunion(
-        @param.query.string('defaultlang') defaultlang = 'en',
-        @param.query.string('currentlang') currentlang = 'en',
+        @param.query.string('defaultlang') defaultlang?: string,
+        @param.query.string('currentlang') currentlang?: string,
     ): Promise<Array<Record<string, unknown>>> {
+        const resolvedDefault = await this.resolveDefaultLang(defaultlang);
         return this.userTypeFacadeService.getTranslatedForFrontend(
-            defaultlang,
-            currentlang,
+            resolvedDefault,
+            currentlang ?? resolvedDefault,
         );
     }
 

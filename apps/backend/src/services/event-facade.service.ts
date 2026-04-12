@@ -474,7 +474,7 @@ export class EventFacadeService {
     // ── Migrant frontend ──────────────────────────────────────────────────────
 
     async getTranslatedForFrontend(
-        defaultLang = 'it',
+        defaultLang: string,
         currentLang = 'it',
         filter: EventListFilter = {},
     ): Promise<Array<Record<string, unknown>>> {

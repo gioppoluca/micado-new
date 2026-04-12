@@ -431,7 +431,7 @@ export class ProcessFacadeService {
     // ── Migrant frontend ──────────────────────────────────────────────────────
 
     async getTranslatedForFrontend(
-        defaultLang = 'it',
+        defaultLang: string,
         currentLang = 'it',
         filter: ProcessListFilter = {},
     ): Promise<Array<Record<string, unknown>>> {

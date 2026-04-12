@@ -392,7 +392,7 @@ export class InformationFacadeService {
     // ── Migrant frontend ──────────────────────────────────────────────────────
 
     async getTranslatedForFrontend(
-        defaultLang = 'it',
+        defaultLang: string,
         currentLang = 'it',
         filter: InformationListFilter = {},
     ): Promise<Array<Record<string, unknown>>> {
