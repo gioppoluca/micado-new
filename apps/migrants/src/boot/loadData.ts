@@ -5,42 +5,25 @@
  *
  * Boot order: envvar → mock → i18n → axios → loadData → keycloak → router-guard
  *
- * WHY this order matters
- * ──────────────────────
- * • envvar has already populated RuntimeConfig, so apiClient has the correct
- *   baseURL before we fire any requests.
+ * ── Language selection priority ───────────────────────────────────────────────
  *
- * • i18n must be installed first so this boot can mutate the active locale on
- *   the already-mounted plugin instance (we do NOT reinstall it).
+ *   1. localStorage key "micado:lang" — persisted user choice (wins on refresh)
+ *   2. Backend setting default_language — server-configured default
+ *   3. 'en' — hardcoded fallback
  *
- * • Both endpoints called here are PUBLIC — no Bearer token needed.  We run
- *   before keycloak so locale and tenant values are ready even on anonymous
- *   page loads.
+ *   When the user explicitly picks a language (MainLayout.selectLanguage),
+ *   the key is written to localStorage.  On next page load this boot reads it
+ *   back and restores the choice before any component renders.
  *
- * • keycloak runs after us so its redirect-back URL processing happens in an
- *   already-localised app.
- *
- * Failure strategy
- * ────────────────
- * If either API call fails the boot catches, logs, and continues:
- *   • language list  → empty  (components handle this gracefully)
- *   • default locale → 'en-US' (the i18n fallback set in boot/i18n.ts)
- *   • tenant values  → empty strings
- *
- * Locale mapping
- * ──────────────
- * The backend stores a short lang tag (e.g. 'en', 'fr', 'ar').
- * The i18n messages bundle uses BCP-47 keys ('en-US', 'fr-FR', …).
- * LANG_TO_LOCALE maps known short tags → message keys; unmapped tags fall
- * back to 'en-US'.
+ * ── Failure strategy ──────────────────────────────────────────────────────────
+ *   If either API call fails the boot catches, logs, and continues:
+ *     • language list  → empty  (components handle this gracefully)
+ *     • default locale → 'en-US' (the i18n fallback set in boot/i18n.ts)
+ *     • tenant values  → empty strings
  */
 
 import { defineBoot } from '#q-app/wrappers';
 import type { WritableComputedRef } from 'vue';
-// Import the i18n instance directly from the boot file that created it.
-// With legacy: false, vue-i18n does NOT register $i18n on globalProperties,
-// so app.config.globalProperties.$i18n is undefined at runtime.
-// The named export from boot/i18n.ts is the correct way to share the instance.
 import { i18n } from 'src/boot/i18n';
 import { languageApi } from 'src/api/language.api';
 import { settingsApi } from 'src/api/settings.api';
@@ -48,6 +31,11 @@ import { useLanguageStore } from 'src/stores/language-store';
 import { useAppStore } from 'src/stores/app-store';
 import type { TranslationStateEntry } from 'src/stores/app-store';
 import { logger } from 'src/services/Logger';
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+/** localStorage key used to persist the user's language choice across sessions. */
+export const LANG_STORAGE_KEY = 'micado:lang';
 
 // ─── Locale mapping ───────────────────────────────────────────────────────────
 
@@ -78,7 +66,7 @@ export default defineBoot(async () => {
 
     const [languagesResult, settingsResult] = await Promise.allSettled([
         languageApi.list(),
-        settingsApi.list(),   // no prefix filter — returns all settings
+        settingsApi.list(),
     ]);
 
     // ── 2. Populate language store ────────────────────────────────────────────
@@ -98,29 +86,53 @@ export default defineBoot(async () => {
 
     if (settingsResult.status === 'rejected') {
         logger.error('[boot:loadData] failed to load settings', settingsResult.reason);
-        return;   // continue with store defaults — no white screen
+        // Continue with defaults — no white screen.
     }
 
-    const settings = settingsResult.value;
+    const settings = settingsResult.status === 'fulfilled' ? settingsResult.value : [];
     const get = (key: string): string =>
         settings.find(s => s.key === key)?.value ?? '';
 
-    // ── 4. Derive default language ────────────────────────────────────────────
+    // ── 4. Derive effective language ──────────────────────────────────────────
+    //
+    //   Priority:
+    //     a) user's persisted choice from localStorage  ← wins on page refresh
+    //     b) server-configured default_language setting
+    //     c) hardcoded fallback 'en'
+    //
+    //   We also validate that the persisted lang actually exists in the active
+    //   language list (in case an admin removed it after the user's last visit).
 
-    const defaultLangKey = get('default_language') || 'en';
-    const defaultLangObject = langStore.languages.find(l => l.lang === defaultLangKey);
-    const defaultLangName = defaultLangObject?.name ?? defaultLangKey;
+    const serverDefaultLang = get('default_language') || 'en';
 
-    langStore.setDefaultByLang(defaultLangKey);
+    const storedLang = (() => {
+        try {
+            return localStorage.getItem(LANG_STORAGE_KEY);
+        } catch {
+            // localStorage blocked by browser privacy settings — ignore
+            return null;
+        }
+    })();
+
+    const availableLangs = langStore.languages.map(l => l.lang);
+
+    // Validate the stored lang is still active; fall back to server default if not.
+    const effectiveLang = (storedLang && availableLangs.includes(storedLang))
+        ? storedLang
+        : serverDefaultLang;
+
+    logger.info('[boot:loadData] language resolution', {
+        storedLang,
+        serverDefaultLang,
+        effectiveLang,
+        available: availableLangs,
+    });
+
+    langStore.setDefaultByLang(effectiveLang);
 
     // ── 5. Switch i18n locale ─────────────────────────────────────────────────
-    // i18n.global.locale is a Ref<string> in Composition API mode (legacy: false).
-    // Assigning .value switches the active locale for the entire app instantly.
 
-    const localeKey = toLocaleKey(defaultLangKey);
-    // Cast needed: WritableComputedRef<Locales> is narrowed to known message keys
-    // by vue-i18n, but we switch locale at runtime to keys that may not yet
-    // have a bundle (graceful fallback to en-US via vue-i18n fallback config).
+    const localeKey = toLocaleKey(effectiveLang);
     (i18n.global.locale as WritableComputedRef<string>).value = localeKey;
     logger.info('[boot:loadData] i18n locale set', { localeKey });
 
@@ -138,8 +150,11 @@ export default defineBoot(async () => {
 
     // ── 7. Populate app store ─────────────────────────────────────────────────
 
+    const defaultLangObject = langStore.languages.find(l => l.lang === serverDefaultLang);
+    const defaultLangName = defaultLangObject?.name ?? serverDefaultLang;
+
     appStore.bootstrap({
-        defaultLang: defaultLangKey,
+        defaultLang: serverDefaultLang,   // canonical server default — never overridden
         defaultLangName,
         paTenant: get('pa_tenant'),
         migrantTenant: get('migrant_tenant'),
@@ -147,5 +162,5 @@ export default defineBoot(async () => {
         translationStates,
     });
 
-    logger.info('[boot:loadData] done', { defaultLangKey, localeKey });
+    logger.info('[boot:loadData] done', { serverDefaultLang, effectiveLang, localeKey });
 });
