@@ -35,6 +35,8 @@ import { useGlossaryStore } from 'src/stores/glossary-store';
 import { useContentStore } from 'src/stores/content-store';
 import { isEnabled } from 'src/features/feature-flipping';
 import { logger } from 'src/services/Logger';
+import ApiDebugOverlay from 'src/components/ApiDebugOverlay.vue';
+import { LANG_STORAGE_KEY } from 'src/boot/loadData';
 
 // ─── Stores ───────────────────────────────────────────────────────────────────
 
@@ -126,7 +128,14 @@ function selectLanguage(langCode: string): void {
   const lang = languageStore.languages.find(l => l.lang === langCode);
   if (!lang) return;
   languageStore.select(lang);
-  logger.info('[MainLayout] language selected', { lang: langCode });
+  // Persist the user's choice so it survives page refresh.
+  // The loadData boot reads this key back before any component renders.
+  try {
+    localStorage.setItem(LANG_STORAGE_KEY, langCode);
+  } catch {
+    logger.warn('[MainLayout] localStorage unavailable — language choice will not persist');
+  }
+  logger.info('[MainLayout] language selected + persisted', { lang: langCode });
   languageDialog.value = false;
 }
 
@@ -218,8 +227,7 @@ onMounted(() => {
               </q-item-section>
               <q-item-section side>
                 <q-icon v-if="languageStore.selected?.lang === language.lang ||
-                  (!languageStore.selected && language.isDefault)" name="check_circle"
-                  color="positive" />
+                  (!languageStore.selected && language.isDefault)" name="check_circle" color="positive" />
               </q-item-section>
             </q-item>
           </q-list>
@@ -232,6 +240,8 @@ onMounted(() => {
       <q-btn fab-mini color="negative" icon="logout" @click="doLogout" aria-label="Logout" />
     </q-page-sticky>
 
+    <!-- Development API debug overlay — activate with ?debug=1 -->
+    <ApiDebugOverlay />
   </q-layout>
 </template>
 
