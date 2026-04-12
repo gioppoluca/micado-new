@@ -26,6 +26,7 @@ import { useContentStore } from 'src/stores/content-store';
 import type { UnifiedContentItem } from 'src/stores/content-store';
 import { logger } from 'src/services/Logger';
 import type { MigrantTopic } from 'src/api/topic.api';
+import TopicIcon from 'src/components/TopicIcon.vue';
 
 // ─── Stores & router ─────────────────────────────────────────────────────────
 
@@ -190,7 +191,7 @@ watch(
     <div v-if="visibleTopics.length" class="row topic-grid q-px-sm q-mb-sm">
       <div v-for="topic in visibleTopics" :key="topic.id" class="topic-box column items-center justify-center q-ma-xs"
         @click="drillInto(topic)">
-        <q-icon :name="topic.icon ?? 'label'" size="28px" color="secondary" class="q-mb-xs" />
+        <TopicIcon :icon="topic.icon" size="28px" color="secondary" class="q-mb-xs" />
         <div class="topic-box-label ellipsis text-center">{{ topic.topic }}</div>
       </div>
     </div>

@@ -29,6 +29,7 @@ import { useTopicStore } from 'src/stores/topic-store';
 import { useSettingsStore } from 'src/stores/settings-store';
 import { isEnabled } from 'src/features/feature-flipping';
 import { logger } from 'src/services/Logger';
+import TopicIcon from 'src/components/TopicIcon.vue';
 
 // ─── Stores ───────────────────────────────────────────────────────────────────
 
@@ -130,14 +131,14 @@ onMounted(async () => {
             <div class="row no-wrap q-gutter-sm q-px-sm">
                 <div v-for="topic in rootTopics" :key="topic.id" class="topic-chip column items-center justify-center"
                     @click="openTopicId = topic.id">
-                    <q-icon :name="topic.icon ?? 'label'" size="28px" color="secondary" class="q-mb-xs" />
+                    <TopicIcon :icon="topic.icon" size="28px" color="secondary" class="q-mb-xs" />
                     <div class="topic-chip-label ellipsis text-center">{{ topic.topic }}</div>
 
                     <!-- Quick-info dialog for the topic -->
                     <q-dialog :model-value="openTopicId === topic.id" @hide="openTopicId = null">
                         <q-card style="min-width: 280px; max-width: 90vw;">
                             <q-card-section class="row items-center q-pb-none">
-                                <q-icon :name="topic.icon ?? 'label'" color="primary" size="2rem" class="q-mr-sm" />
+                                <TopicIcon :icon="topic.icon" size="2rem" color="primary" class="q-mr-sm" />
                                 <div class="text-h6">{{ topic.topic }}</div>
                                 <q-space />
                                 <q-btn icon="close" flat round dense v-close-popup />
