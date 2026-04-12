@@ -60,8 +60,8 @@ export const settingsApi = {
 const MOCK_SETTINGS: PublicSetting[] = [
     { key: 'app_name', value: 'Micado PA' },
     // ── App-bootstrap keys (read by loadData boot) ──────────────────────────
-    // The value matches a `lang` primary key in the languages table.
-    { key: 'default_language', value: 'en' },
+    // NOTE: default_language removed — single source of truth is
+    // languages.is_default in the languages table, not the settings table.
     { key: 'pa_tenant', value: 'micado_pa' },
     { key: 'migrant_tenant', value: 'micado_migrant' },
     { key: 'migrant_domain_name', value: 'migrants.micado.local' },

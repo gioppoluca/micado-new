@@ -27,6 +27,15 @@
  *   • default locale → 'en-US' (the i18n fallback set in boot/i18n.ts)
  *   • tenant values  → empty strings
  *
+ * Default language source of truth
+ * ─────────────────────────────────
+ * The default language is read exclusively from the languages table
+ * (languages.is_default = true), NOT from the settings table.
+ * The settings table previously held a 'default_language' key which is now
+ * removed to avoid dual sources of truth that can drift out of sync.
+ * The PA settings UI (ActiveLanguageSelector) writes isDefault via
+ * PATCH /languages/:lang — the languages table is the single source.
+ *
  * Locale mapping
  * ──────────────
  * The backend stores a short lang tag (e.g. 'en', 'fr', 'ar').
@@ -42,7 +51,6 @@ import type { WritableComputedRef } from 'vue';
 // so app.config.globalProperties.$i18n is undefined at runtime.
 // The named export from boot/i18n.ts is the correct way to share the instance.
 import { i18n } from 'src/boot/i18n';
-import { languageApi } from 'src/api/language.api';
 import { settingsApi } from 'src/api/settings.api';
 import { useLanguageStore } from 'src/stores/language-store';
 import { useAppStore } from 'src/stores/app-store';
@@ -74,76 +82,78 @@ function toLocaleKey(lang: string): string {
 export default defineBoot(async () => {
     logger.info('[boot:loadData] starting');
 
-    // ── 1. Fetch languages and settings in parallel ───────────────────────────
-
-    const [languagesResult, settingsResult] = await Promise.allSettled([
-        languageApi.list(),
-        settingsApi.list(),   // no prefix filter — returns all settings
-    ]);
-
-    // ── 2. Populate language store ────────────────────────────────────────────
-
     const langStore = useLanguageStore();
-
-    if (languagesResult.status === 'fulfilled') {
-        await langStore.fetchAll();
-        logger.info('[boot:loadData] languages loaded', { count: languagesResult.value.length });
-    } else {
-        logger.error('[boot:loadData] failed to load languages', languagesResult.reason);
-    }
-
-    // ── 3. Process settings ───────────────────────────────────────────────────
-
     const appStore = useAppStore();
 
-    if (settingsResult.status === 'rejected') {
-        logger.error('[boot:loadData] failed to load settings', settingsResult.reason);
-        return;   // continue with store defaults — no white screen
-    }
+    // ── 1. Fetch languages and settings in parallel ───────────────────────────
+    // Languages are always needed first: the default language is determined
+    // exclusively from languages.is_default, not from the settings table.
 
-    const settings = settingsResult.value;
-    const get = (key: string): string =>
-        settings.find(s => s.key === key)?.value ?? '';
+    const [, settingsResult] = await Promise.allSettled([
+        langStore.fetchAll(),
+        settingsApi.list(),
+    ]);
 
-    // ── 4. Derive default language ────────────────────────────────────────────
+    // ── 2. Derive default language from languages table ───────────────────────
+    // Single source of truth: languages.is_default = true.
+    // Fallback chain: is_default row → first active language → hard 'en'.
 
-    const defaultLangKey = get('default_language') || 'en';
-    const defaultLangObject = langStore.languages.find(l => l.lang === defaultLangKey);
+    const defaultLangObject =
+        langStore.defaultLanguage ??
+        langStore.activeLanguages[0] ??
+        null;
+
+    const defaultLangKey = defaultLangObject?.lang ?? 'en';
     const defaultLangName = defaultLangObject?.name ?? defaultLangKey;
 
-    langStore.setDefaultByLang(defaultLangKey);
+    logger.info('[boot:loadData] default language resolved', {
+        lang: defaultLangKey,
+        source: langStore.defaultLanguage ? 'is_default' : langStore.activeLanguages[0] ? 'first_active' : 'hardcoded_fallback',
+    });
 
-    // ── 5. Switch i18n locale ─────────────────────────────────────────────────
+    // ── 3. Switch i18n locale ─────────────────────────────────────────────────
     // i18n.global.locale is a Ref<string> in Composition API mode (legacy: false).
-    // Assigning .value switches the active locale for the entire app instantly.
 
     const localeKey = toLocaleKey(defaultLangKey);
-    // Cast needed: WritableComputedRef<Locales> is narrowed to known message keys
-    // by vue-i18n, but we switch locale at runtime to keys that may not yet
-    // have a bundle (graceful fallback to en-US via vue-i18n fallback config).
     (i18n.global.locale as WritableComputedRef<string>).value = localeKey;
     logger.info('[boot:loadData] i18n locale set', { localeKey });
 
-    // ── 6. Parse translationState ─────────────────────────────────────────────
+    // ── 4. Process remaining settings (tenant config, translationState) ────────
 
     let translationStates: TranslationStateEntry[] = [];
-    const rawTranslationState = get('translationState');
-    if (rawTranslationState) {
-        try {
-            translationStates = JSON.parse(rawTranslationState) as TranslationStateEntry[];
-        } catch (e) {
-            logger.error('[boot:loadData] failed to parse translationState JSON', e);
+    let paTenant = '';
+    let migrantTenant = '';
+    let migrantDomain = '';
+
+    if (settingsResult.status === 'rejected') {
+        logger.error('[boot:loadData] failed to load settings — tenant values will be empty', settingsResult.reason);
+    } else {
+        const settings = settingsResult.value;
+        const get = (key: string): string =>
+            settings.find(s => s.key === key)?.value ?? '';
+
+        paTenant = get('pa_tenant');
+        migrantTenant = get('migrant_tenant');
+        migrantDomain = get('migrant_domain_name');
+
+        const rawTranslationState = get('translationState');
+        if (rawTranslationState) {
+            try {
+                translationStates = JSON.parse(rawTranslationState) as TranslationStateEntry[];
+            } catch (e) {
+                logger.error('[boot:loadData] failed to parse translationState JSON', e);
+            }
         }
     }
 
-    // ── 7. Populate app store ─────────────────────────────────────────────────
+    // ── 5. Populate app store ─────────────────────────────────────────────────
 
     appStore.bootstrap({
         defaultLang: defaultLangKey,
         defaultLangName,
-        paTenant: get('pa_tenant'),
-        migrantTenant: get('migrant_tenant'),
-        migrantDomain: get('migrant_domain_name'),
+        paTenant,
+        migrantTenant,
+        migrantDomain,
         translationStates,
     });
 

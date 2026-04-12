@@ -52,8 +52,8 @@
  * Migration notes from Vue 2:
  *  - mapGetters / mapActions → useLanguageStore() (Pinia)
  *  - this.$defaultLang → appStore.defaultLang
- *  - updateSetting (settings Vuex action) → settingsApi.patch (not in OpenAPI yet,
- *    stubbed with a TODO — see saveDefaultLang)
+ *  - updateSetting (settings Vuex action) → langStore.patch({ isDefault: true })
+ *    (writes directly to languages table — no settings table involved)
  *  - weblateClient removed (not in new API spec; send-to-translation is separate)
  *  - @input on q-select → handled via v-model + watcher
  *  - IconWithTooltip removed, standard q-btn used
@@ -103,20 +103,22 @@ async function toggleActive(language: Language): Promise<void> {
 /**
  * Save the selected language as the new platform default.
  *
- * TODO: The new backend OpenAPI does not yet expose a PATCH /settings endpoint.
- * When it is available, replace the notify stub below with:
- *   await settingsApi.patch('default_language', selectedDefaultLang.value)
- * and update appStore.bootstrap({ defaultLang: selectedDefaultLang.value, ... })
+ * Writes isDefault via PATCH /languages/:lang — the languages table is the
+ * single source of truth for the platform default language.
+ * The old default is explicitly unset first to guarantee exactly one default.
+ * appStore is updated in memory so the rest of the app sees the change
+ * immediately without a full page reload.
  */
 async function saveDefaultLang(): Promise<void> {
     saving.value = true;
     try {
-        // Mark the new default in the language store
-        await langStore.patch(selectedDefaultLang.value, { isDefault: true });
-        // Unmark the old default
-        if (appStore.defaultLang !== selectedDefaultLang.value) {
+        // Unmark the old default first (avoid momentary dual-default state)
+        if (appStore.defaultLang && appStore.defaultLang !== selectedDefaultLang.value) {
             await langStore.patch(appStore.defaultLang, { isDefault: false });
         }
+        // Mark the new default in the languages table
+        await langStore.patch(selectedDefaultLang.value, { isDefault: true });
+        // Sync app store so all reactive consumers update immediately
         appStore.setUserLang(selectedDefaultLang.value);
 
         $q.notify({
