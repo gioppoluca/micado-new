@@ -37,6 +37,7 @@ export default defineBoot(async () => {
     const { registerEventMocks } = await import('src/api/event.api');
     const { registerInformationMocks } = await import('src/api/information.api');
     const { registerProcessMocks } = await import('src/api/process.api');
+    const { registerTranslationMonitorMocks } = await import('src/api/translation-monitor.api');
 
     registerLanguageMocks(adapter);
     registerSettingsMocks(adapter);
@@ -49,6 +50,7 @@ export default defineBoot(async () => {
     registerEventMocks(adapter);
     registerInformationMocks(adapter);
     registerProcessMocks(adapter);
+    registerTranslationMonitorMocks(adapter);
 
     logger.warn('[boot:mock] all mock handlers registered');
 });

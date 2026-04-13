@@ -24,6 +24,14 @@ const routes: RouteRecordRaw[] = [
         meta: { requiresAuth: true },
       },
 
+      // ── Analytics dashboard ──────────────────────────────────────────────
+      {
+        path: 'dashboard',
+        name: 'dashboard',
+        component: () => import('pages/UsageDashboardPage.vue'),
+        meta: { requiresAuth: true, roles: ['pa_admin', 'pa_operator', 'micado_superadmin'] },
+      },
+
       // ── Glossary ─────────────────────────────────────────────────────────
       // Sidebar entry: menu.glossary → /glossary (MainLayout, not SettingsLayout)
       {

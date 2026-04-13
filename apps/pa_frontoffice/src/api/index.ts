@@ -5,6 +5,7 @@
  *
  * ── MODIFICA rispetto all'originale ─────────────────────────────────────────
  * Aggiunti gli export di micado-entities.api (nuovo modulo per il rich-text editor).
+ * Aggiunto translation-monitor.api (monitor pagina Settings → Translations).
  *
  * Examples:
  *   import { languageApi }              from 'src/api';
@@ -109,6 +110,7 @@ export type {
     GraphEdgeTranslation,
     RequiredDocument,
 } from './process.api';
+
 export { informationApi, informationStatusKey } from './information.api';
 export type {
     Information,
@@ -119,3 +121,16 @@ export type {
     CreateInformationPayload,
     PatchInformationPayload,
 } from './information.api';
+
+export * from './analytics.api';
+export { analyticsApi } from './analytics.api';
+
+// ── Translation workflow monitor ──────────────────────────────────────────────
+export { translationMonitorApi } from './translation-monitor.api';
+export type {
+    TranslationStatus,
+    LangStatusEntry,
+    WorkflowSummary,
+    StagedCommitSummary,
+    TranslationMonitorSnapshot,
+} from './translation-monitor.api';
