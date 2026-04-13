@@ -369,3 +369,63 @@ CREATE INDEX IF NOT EXISTS idx_content_item_relation_type_child
 
 CREATE INDEX IF NOT EXISTS idx_content_item_relation_extra_gin
   ON content_item_relation USING GIN (relation_extra);
+
+--
+-- Staging table for Weblate COMMIT webhook events (ActionEvents.COMMIT = 17).
+--
+-- Flow:
+--   1. Weblate fires POST /api/webhooks/weblate/translation-committed
+--      for every component commit (one per language).
+--      → Row inserted with status = 'NEW'.
+--
+--   2. Weblate fires POST /api/webhooks/weblate/translation-pushed
+--      when the whole repo is pushed to Gitea (component-level, no language).
+--      → Handler does SELECT ... FOR UPDATE on all NEW rows for that component,
+--        stamps them with a unique worker_hash, processes them (signals DBOS),
+--        then deletes them by worker_hash.
+--
+-- This decouples the fast per-language commit events from the slower push event,
+-- and makes the push handler idempotent: concurrent pushes get different hashes
+-- and operate on different row sets without interfering.
+--
+-- Status lifecycle:
+--   NEW        → row arrived, not yet picked up by a push handler
+--   PROCESSING → selected by a push handler (stamped with worker_hash)
+--   (deleted)  → after successful processing
+--
+-- worker_hash is a random UUID generated once per push-handler invocation.
+-- Rows are deleted by worker_hash so only the rows THIS handler claimed are removed.
+
+CREATE TABLE IF NOT EXISTS micado.weblate_commit_event (
+    id              UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+
+    -- Raw Weblate webhook payload (full body as received)
+    payload         JSONB       NOT NULL,
+
+    -- Routing fields extracted from payload for efficient querying
+    project         TEXT        NOT NULL,   -- e.g. 'micado'
+    component       TEXT        NOT NULL,   -- e.g. 'user-types' (= Gitea category)
+    lang            TEXT        NOT NULL,   -- e.g. 'it'
+    change_id       INTEGER     NOT NULL,   -- Weblate change PK
+    action          TEXT        NOT NULL,   -- e.g. 'Changes committed'
+
+    -- Lifecycle
+    status          TEXT        NOT NULL DEFAULT 'NEW'
+                                CHECK (status IN ('NEW', 'PROCESSING')),
+    worker_hash     TEXT,                   -- set during SELECT FOR UPDATE, used for deletion
+
+    -- Timestamps
+    weblate_ts      TIMESTAMPTZ NOT NULL,   -- timestamp from Weblate payload
+    received_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Index for the push handler's SELECT FOR UPDATE
+CREATE INDEX IF NOT EXISTS idx_weblate_commit_event_component_status
+    ON micado.weblate_commit_event (component, status);
+
+-- Index for time-based cleanup / monitoring
+CREATE INDEX IF NOT EXISTS idx_weblate_commit_event_received_at
+    ON micado.weblate_commit_event (received_at);
+
+COMMENT ON TABLE micado.weblate_commit_event IS
+    'Staging table for Weblate COMMIT events awaiting the next PUSH event to process.';
