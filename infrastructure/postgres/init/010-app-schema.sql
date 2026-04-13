@@ -379,10 +379,12 @@ CREATE INDEX IF NOT EXISTS idx_content_item_relation_extra_gin
 --      → Row inserted with status = 'NEW'.
 --
 --   2. Weblate fires POST /api/webhooks/weblate/translation-pushed
---      when the whole repo is pushed to Gitea (component-level, no language).
---      → Handler does SELECT ... FOR UPDATE on all NEW rows for that component,
---        stamps them with a unique worker_hash, processes them (signals DBOS),
---        then deletes them by worker_hash.
+--      when the repo is pushed to Gitea (project-level addon, no language field).
+--      → Handler does SELECT ... FOR UPDATE SKIP LOCKED on ALL NEW rows
+--        (no component filter — the component in the PUSH body is unreliable;
+--        each row carries the correct component+lang from its COMMIT event).
+--        Stamps rows with a unique worker_hash, processes each (component, lang),
+--        then deletes by worker_hash.
 --
 -- This decouples the fast per-language commit events from the slower push event,
 -- and makes the push handler idempotent: concurrent pushes get different hashes
@@ -419,9 +421,14 @@ CREATE TABLE IF NOT EXISTS micado.weblate_commit_event (
     received_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Index for the push handler's SELECT FOR UPDATE
-CREATE INDEX IF NOT EXISTS idx_weblate_commit_event_component_status
-    ON micado.weblate_commit_event (component, status);
+-- Index for the push handler's SELECT FOR UPDATE SKIP LOCKED (claims by status only)
+CREATE INDEX IF NOT EXISTS idx_weblate_commit_event_status
+    ON micado.weblate_commit_event (status)
+    WHERE status = 'NEW';
+
+-- Index on (component, lang) for diagnostics and monitoring queries
+CREATE INDEX IF NOT EXISTS idx_weblate_commit_event_component_lang
+    ON micado.weblate_commit_event (component, lang);
 
 -- Index for time-based cleanup / monitoring
 CREATE INDEX IF NOT EXISTS idx_weblate_commit_event_received_at
