@@ -1,6 +1,7 @@
 {
   "realm": "pa_frontoffice",
   "enabled": true,
+  "loginTheme": "micado-pa",
   "displayName": "PA Frontoffice",
   "sslRequired": "external",
   "roles": {
