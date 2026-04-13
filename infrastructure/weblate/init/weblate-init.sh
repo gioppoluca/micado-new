@@ -83,7 +83,8 @@ mask_secret() {
 : "${WEBLATE_PROJECT_WEB:=http://weblate.local}"
 
 # Webhook settings
-: "${WEBLATE_WEBHOOK_URL:=}"
+: "${WEBLATE_WEBHOOK_URL_COMMITTED:=}"   # component-level, COMMIT events (17)
+: "${WEBLATE_WEBHOOK_URL_PUSHED:=}"      # project-level, PUSH events (18)
 : "${WEBLATE_WEBHOOK_SECRET:=}"
 # Events for the webhook add-on — comma-separated integers from ActionEvents
 # (weblate/trans/actions.py), NOT from AddonEvent. These are translation history
@@ -98,7 +99,10 @@ mask_secret() {
 # We use PUSH (18) + COMMIT (17) so the backend is notified whenever
 # Weblate writes to Gitea. Commits happen first; push follows.
 # The backend then pulls the full translated catalog from Gitea.
-: "${WEBLATE_WEBHOOK_EVENTS:=17,18}"
+# Per-component addon: COMMIT events only (ActionEvents.COMMIT = 17)
+: "${WEBLATE_WEBHOOK_EVENTS_COMMITTED:=17}"
+# Project-level addon: PUSH events only (ActionEvents.PUSH = 18)
+: "${WEBLATE_WEBHOOK_EVENTS_PUSHED:=18}"
 
 : "${WEBLATE_GIT_REPO:=http://gitea:3000/weblate-bot/translations.git}"
 : "${WEBLATE_GIT_BRANCH:=main}"
@@ -188,9 +192,11 @@ log_env() {
   info "  WEBLATE_GIT_REPO=${WEBLATE_GIT_REPO}"
   info "  WEBLATE_GIT_BRANCH=${WEBLATE_GIT_BRANCH}"
   info "  WEBLATE_FILE_FORMAT=${WEBLATE_FILE_FORMAT}"
-  info "  WEBLATE_WEBHOOK_URL=${WEBLATE_WEBHOOK_URL:-<not set>}"
+  info "  WEBLATE_WEBHOOK_URL_COMMITTED=${WEBLATE_WEBHOOK_URL_COMMITTED:-<not set>}"
+  info "  WEBLATE_WEBHOOK_URL_PUSHED=${WEBLATE_WEBHOOK_URL_PUSHED:-<not set>}"
   info "  WEBLATE_WEBHOOK_SECRET=$(mask_secret "${WEBLATE_WEBHOOK_SECRET:-}")"
-  info "  WEBLATE_WEBHOOK_EVENTS=${WEBLATE_WEBHOOK_EVENTS} (ActionEvents: 2=CHANGE,17=COMMIT,18=PUSH,36=APPROVE)"
+  info "  WEBLATE_WEBHOOK_EVENTS_COMMITTED=${WEBLATE_WEBHOOK_EVENTS_COMMITTED} (17=COMMIT, per-component)"
+  info "  WEBLATE_WEBHOOK_EVENTS_PUSHED=${WEBLATE_WEBHOOK_EVENTS_PUSHED} (18=PUSH, project-level)"
   info "  MICADO_SOURCE_LANG=${MICADO_SOURCE_LANG}"
   info "  MICADO_CATEGORIES=${MICADO_CATEGORIES:-<none>}"
   info "  MICADO_TARGET_LANGS=${MICADO_TARGET_LANGS:-<none>}"
@@ -382,14 +388,12 @@ component_exists() {
 # (confirmed from Weblate source: @action(detail=True, methods=["post"])).
 # GET on that URL returns 405 Method Not Allowed.
 #
-# To check whether the webhook add-on is already installed we use the global
-# GET /api/addons/ endpoint and filter by component URL client-side.
+# To find the project-level webhook addon, filter /api/addons/ by project URL.
 # ---------------------------------------------------------------------------
-find_component_webhook_addon_id() {
-  comp_slug="$1"
-  comp_url="${WEBLATE_URL}/api/components/${WEBLATE_PROJECT_SLUG}/${comp_slug}/"
+find_project_webhook_addon_id() {
+  project_url="${WEBLATE_URL}/api/projects/${WEBLATE_PROJECT_SLUG}/"
 
-  info "  Checking global add-ons list for component '${comp_slug}'"
+  info "  Checking global add-ons list for project-level webhook"
   debug "    GET ${WEBLATE_URL}/api/addons/?page_size=200"
 
   addons_json=$(curl -sS \
@@ -398,7 +402,7 @@ find_component_webhook_addon_id() {
     "${WEBLATE_URL}/api/addons/?page_size=200" 2>/dev/null || true)
 
   if [ -z "$addons_json" ]; then
-    warn "  No response from /api/addons/ — cannot check existing add-ons"
+    warn "  No response from /api/addons/"
     printf ''
     return 0
   fi
@@ -407,48 +411,41 @@ find_component_webhook_addon_id() {
 
   if command -v jq >/dev/null 2>&1; then
     addon_id=$(printf '%s' "$addons_json" \
-      | jq -r --arg comp "$comp_url" \
-        '.results[]? | select(.name == "weblate.webhook.webhook" and .component == $comp) | .id' \
+      | jq -r --arg proj "$project_url" \
+        '.results[]? | select(.name == "weblate.webhook.webhook" and .project == $proj) | .id' \
         2>/dev/null | head -n1 || true)
-    info "  jq found addon_id='${addon_id:-<none>}'"
+    info "  jq found project addon_id='${addon_id:-<none>}'"
     printf '%s' "${addon_id:-}"
     return 0
   fi
 
   if command -v python3 >/dev/null 2>&1; then
     addon_id=$(printf '%s' "$addons_json" | python3 -c \
-      "import sys,json; data=json.load(sys.stdin); comp=sys.argv[1]; [print(a['id']) for a in data.get('results',[]) if a.get('name')=='weblate.webhook.webhook' and a.get('component')==comp]" \
-      "$comp_url" 2>/dev/null | head -1 || true)
-    info "  python3 found addon_id='${addon_id:-<none>}'"
+      "import sys,json; data=json.load(sys.stdin); proj=sys.argv[1]; [print(a['id']) for a in data.get('results',[]) if a.get('name')=='weblate.webhook.webhook' and a.get('project')==proj]" \
+      "$project_url" 2>/dev/null | head -1 || true)
+    info "  python3 found project addon_id='${addon_id:-<none>}'"
     printf '%s' "${addon_id:-}"
     return 0
   fi
 
-  # Last resort: grep (only works if no other webhook addon is installed)
   addon_id=$(printf '%s' "$addons_json" \
     | grep -o '"id":[0-9]*' | head -1 | grep -o '[0-9]*' || true)
-  info "  grep fallback found addon_id='${addon_id:-<none>}'"
+  info "  grep fallback found project addon_id='${addon_id:-<none>}'"
   printf '%s' "${addon_id:-}"
 }
 
 # ---------------------------------------------------------------------------
-# Webhook add-on payload builder
+# Webhook add-on payload builders
 #
-# Correct field names (validated from Weblate API error messages):
-#   webhook_url  — destination URL  (NOT "url")
-#   secret       — Standard Webhooks secret (base64-encoded, may be empty)
-#   events       — array of INTEGERS from ActionEvents enum (NOT AddonEvent, NOT strings)
+# Two separate builders — one for COMMIT (component-level) and one for PUSH
+# (project-level). Each uses its own URL and event set.
 #
-# ActionEvents integers (weblate/trans/actions.py):
-#   2  = CHANGE    — string edited by translator
-#   17 = COMMIT    — changes committed to local git
-#   18 = PUSH      — changes pushed to Gitea  ← primary trigger
-#   36 = APPROVE   — translation approved
-#
-# WEBLATE_WEBHOOK_EVENTS: comma-separated integers, e.g. "17,18"
+# ActionEvents integers (weblate/trans/actions.py — NOT AddonEvent):
+#   17 = COMMIT — Weblate commits translated strings to local git
+#   18 = PUSH   — Weblate pushes to Gitea (content available for reading)
 # ---------------------------------------------------------------------------
-build_addon_payload() {
-  events_csv="${WEBLATE_WEBHOOK_EVENTS}"
+build_events_json() {
+  events_csv="$1"
   events_json="["
   first=1
   IFS=','
@@ -459,61 +456,116 @@ build_addon_payload() {
       ''|*[!0-9]*) warn "  Ignoring non-integer event value: '${ev}'"; continue ;;
     esac
     if [ "$first" = "1" ]; then
-      events_json="${events_json}${ev}"
-      first=0
+      events_json="${events_json}${ev}"; first=0
     else
       events_json="${events_json},${ev}"
     fi
   done
   unset IFS
   events_json="${events_json}]"
-
-  printf '{"name":"weblate.webhook.webhook","configuration":{"webhook_url":"%s","secret":"%s","events":%s}}' \
-    "${WEBLATE_WEBHOOK_URL}" \
-    "${WEBLATE_WEBHOOK_SECRET:-}" \
-    "${events_json}"
+  printf '%s' "$events_json"
 }
 
-ensure_webhook_addon() {
+build_committed_payload() {
+  events_json=$(build_events_json "${WEBLATE_WEBHOOK_EVENTS_COMMITTED}")
+  printf '{"name":"weblate.webhook.webhook","configuration":{"webhook_url":"%s","secret":"%s","events":%s}}' \
+    "${WEBLATE_WEBHOOK_URL_COMMITTED}" "${WEBLATE_WEBHOOK_SECRET:-}" "${events_json}"
+}
+
+build_pushed_payload() {
+  events_json=$(build_events_json "${WEBLATE_WEBHOOK_EVENTS_PUSHED}")
+  printf '{"name":"weblate.webhook.webhook","configuration":{"webhook_url":"%s","secret":"%s","events":%s}}' \
+    "${WEBLATE_WEBHOOK_URL_PUSHED}" "${WEBLATE_WEBHOOK_SECRET:-}" "${events_json}"
+}
+
+# ---------------------------------------------------------------------------
+# Component-level COMMIT webhook — per category
+# ---------------------------------------------------------------------------
+ensure_component_commit_addon() {
   comp_slug="$1"
 
-  if [ -z "${WEBLATE_WEBHOOK_URL:-}" ]; then
-    info "  WEBLATE_WEBHOOK_URL not set — skipping webhook add-on for '${comp_slug}'"
+  if [ -z "${WEBLATE_WEBHOOK_URL_COMMITTED:-}" ]; then
+    info "  WEBLATE_WEBHOOK_URL_COMMITTED not set — skipping commit addon for '${comp_slug}'"
     return 0
   fi
 
-  info "Ensuring webhook add-on on component '${comp_slug}'"
-  info "  Webhook URL: ${WEBLATE_WEBHOOK_URL}"
-  info "  Events:      ${WEBLATE_WEBHOOK_EVENTS} (ActionEvents: 17=COMMIT,18=PUSH)"
+  info "Ensuring COMMIT webhook add-on on component '${comp_slug}'"
+  info "  URL: ${WEBLATE_WEBHOOK_URL_COMMITTED}"
+  info "  Events: ${WEBLATE_WEBHOOK_EVENTS_COMMITTED} (17=COMMIT)"
 
-  addon_id=$(find_component_webhook_addon_id "$comp_slug" || true)
+  # Find existing commit addon on this component
+  comp_url="${WEBLATE_URL}/api/components/${WEBLATE_PROJECT_SLUG}/${comp_slug}/"
+  addons_json=$(curl -sS     -H "Authorization: Token ${WEBLATE_ADMIN_API_TOKEN}"     -H "Accept: application/json"     "${WEBLATE_URL}/api/addons/?page_size=200" 2>/dev/null || true)
 
-  payload=$(build_addon_payload)
-  debug "  Addon payload: ${payload}"
+  addon_id=""
+  if command -v jq >/dev/null 2>&1; then
+    addon_id=$(printf '%s' "$addons_json"       | jq -r --arg comp "$comp_url" --arg url "${WEBLATE_WEBHOOK_URL_COMMITTED}"         '.results[]? | select(.name == "weblate.webhook.webhook" and .component == $comp and .configuration.webhook_url == $url) | .id'         2>/dev/null | head -1 || true)
+  elif command -v python3 >/dev/null 2>&1; then
+    addon_id=$(printf '%s' "$addons_json" | python3 -c       "import sys,json; data=json.load(sys.stdin); comp='$comp_url'; url='${WEBLATE_WEBHOOK_URL_COMMITTED}'; [print(a['id']) for a in data.get('results',[]) if a.get('name')=='weblate.webhook.webhook' and a.get('component')==comp and a.get('configuration',{}).get('webhook_url')==url]"       2>/dev/null | head -1 || true)
+  fi
+
+  payload=$(build_committed_payload)
+  debug "  Commit addon payload: ${payload}"
 
   if [ -n "${addon_id}" ]; then
-    info "  Add-on already exists (id=${addon_id}) — updating via PATCH"
+    info "  Commit addon exists (id=${addon_id}) — updating"
     api_patch_json "/api/addons/${addon_id}/" "$payload" >/dev/null
-    info "  Webhook add-on updated for '${comp_slug}' (id=${addon_id})"
+    info "  Commit addon updated for '${comp_slug}' (id=${addon_id})"
   else
-    info "  Installing new webhook add-on on '${comp_slug}'"
+    info "  Installing commit addon on '${comp_slug}'"
     result=$(api_post_json "/api/components/${WEBLATE_PROJECT_SLUG}/${comp_slug}/addons/" "$payload")
     if command -v jq >/dev/null 2>&1; then
       new_id=$(printf '%s' "$result" | jq -r '.id // empty' 2>/dev/null || true)
     elif command -v python3 >/dev/null 2>&1; then
-      new_id=$(printf '%s' "$result" \
-        | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('id',''))" 2>/dev/null || true)
+      new_id=$(printf '%s' "$result"         | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('id',''))" 2>/dev/null || true)
     else
       new_id=$(printf '%s' "$result" | grep -o '"id":[0-9]*' | head -1 | grep -o '[0-9]*' || true)
     fi
-    info "  Webhook add-on installed for '${comp_slug}' (new id=${new_id:-unknown})"
+    info "  Commit addon installed for '${comp_slug}' (id=${new_id:-unknown})"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Project-level PUSH webhook — one for all components
+# ---------------------------------------------------------------------------
+ensure_project_webhook_addon() {
+  if [ -z "${WEBLATE_WEBHOOK_URL_PUSHED:-}" ]; then
+    info "WEBLATE_WEBHOOK_URL_PUSHED not set — skipping project push webhook add-on"
+    return 0
   fi
 
-  verify_id=$(find_component_webhook_addon_id "$comp_slug" || true)
-  if [ -n "$verify_id" ]; then
-    info "  Verification OK: add-on id=${verify_id} is present on '${comp_slug}'"
+  info "Ensuring project-level PUSH webhook add-on on '${WEBLATE_PROJECT_SLUG}'"
+  info "  URL: ${WEBLATE_WEBHOOK_URL_PUSHED}"
+  info "  Events: ${WEBLATE_WEBHOOK_EVENTS_PUSHED} (18=PUSH)"
+  info "  Scope: project — catches PUSH for all components"
+
+  addon_id=$(find_project_webhook_addon_id || true)
+
+  payload=$(build_pushed_payload)
+  debug "  Push addon payload: ${payload}"
+
+  if [ -n "${addon_id}" ]; then
+    info "  Project push addon exists (id=${addon_id}) — updating"
+    api_patch_json "/api/addons/${addon_id}/" "$payload" >/dev/null
+    info "  Project push addon updated (id=${addon_id})"
   else
-    warn "  Verification: add-on not found in global list — check Weblate admin UI to confirm"
+    info "  Installing project-level push addon"
+    result=$(api_post_json "/api/projects/${WEBLATE_PROJECT_SLUG}/addons/" "$payload")
+    if command -v jq >/dev/null 2>&1; then
+      new_id=$(printf '%s' "$result" | jq -r '.id // empty' 2>/dev/null || true)
+    elif command -v python3 >/dev/null 2>&1; then
+      new_id=$(printf '%s' "$result"         | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('id',''))" 2>/dev/null || true)
+    else
+      new_id=$(printf '%s' "$result" | grep -o '"id":[0-9]*' | head -1 | grep -o '[0-9]*' || true)
+    fi
+    info "  Project push addon installed (id=${new_id:-unknown})"
+  fi
+
+  verify_id=$(find_project_webhook_addon_id || true)
+  if [ -n "$verify_id" ]; then
+    info "  Verification OK: project push addon id=${verify_id}"
+  else
+    warn "  Verification: project push addon not found — check Weblate admin UI"
   fi
 }
 
@@ -863,6 +915,11 @@ main() {
 
   ensure_project
 
+  # Install ONE project-level webhook addon that catches ALL components.
+  # PUSH events (ActionEvents.PUSH=18) fire per-component but the project-level
+  # addon receives them all — no need to reinstall for every new category.
+  ensure_project_webhook_addon
+
   # ── Create one Weblate component per content-type category ───────────────
   #
   # Path convention (NO backend/ prefix):
@@ -902,7 +959,7 @@ main() {
 
       ensure_component "$comp_name" "$comp_slug" "$filemask" "$template"
       ensure_component_languages "$comp_slug"
-      ensure_webhook_addon "$comp_slug"
+      ensure_component_commit_addon "$comp_slug"
       refresh_component "$comp_slug"
     done
   else
