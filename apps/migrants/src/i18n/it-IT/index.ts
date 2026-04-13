@@ -57,6 +57,7 @@ export default {
 
     button: {
         go_back: 'Torna indietro',
+        back: 'Torna alla home',
     },
 
     glossary: {
@@ -121,5 +122,24 @@ export default {
         category: 'Categoria',
         topics: 'Argomenti',
         user_types: 'Tipi di utente',
+    },
+
+    // ── Event detail labels ──────────────────────────────────────────────────
+    event_detail: {
+        start_date: 'Data di inizio',
+        finish_date: 'Data di fine',
+        cost: 'Costo',
+        cost_free: 'Gratuito',
+        location: 'Luogo',
+        organizer: 'Organizzatore',
+        category: 'Categoria',
+        topics: 'Argomenti',
+        user_types: 'Tipi di utente',
+    },
+
+    // ── Features ──────────────────────────────────────────────────
+    features: {
+        documents_coming_soon: 'Il portafoglio documenti sarà disponibile a breve. Ti permetterà di archiviare e gestire i tuoi documenti personali in modo sicuro.',
+        tasks_coming_soon: 'Il piano di integrazione sarà disponibile a breve. Ti aiuterà a seguire il tuo percorso di integrazione personalizzato passo dopo passo.',
     },
 };

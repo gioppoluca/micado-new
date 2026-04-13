@@ -1,18 +1,11 @@
 <script setup lang="ts">
 /**
- * src/pages/InformationDetailPage.vue
+ * src/pages/EventDetailPage.vue
  *
- * Detail view for a single published information item.
+ * Detail view for a single published event.
+ * Mirrors InformationDetailPage data strategy (cache-first, API fallback).
  *
- * ── Data strategy ─────────────────────────────────────────────────────────────
- *   1. Cache hit  — look up id in contentStore.items (loaded by HomePage)
- *   2. Cache miss — call informationApi.listForMigrant() page=1&pageSize=100
- *      and find by id (same strategy as legacy app)
- *   If still not found → 404.
- *
- * ── Fix vs previous version ───────────────────────────────────────────────────
- *   • retry button now passes itemId.value (number), not the ComputedRef
- *   • `not-found` replaced with catchAll route name to avoid missing-route error
+ * Legacy: src/pages/EventItem.vue + components/single_items/SingleItemEvent.vue
  */
 
 import { ref, computed, onMounted, watch } from 'vue';
@@ -20,11 +13,11 @@ import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useContentStore } from 'src/stores/content-store';
 import { useTopicStore } from 'src/stores/topic-store';
-import { informationApi } from 'src/api/information.api';
+import { eventApi } from 'src/api/event.api';
 import { useAppStore } from 'src/stores/app-store';
 import { useLanguageStore } from 'src/stores/language-store';
 import { logger } from 'src/services/Logger';
-import type { MigrantInformation } from 'src/api/information.api';
+import type { MigrantEvent } from 'src/api/event.api';
 
 const { t } = useI18n();
 const route = useRoute();
@@ -34,7 +27,7 @@ const topicStore = useTopicStore();
 const appStore = useAppStore();
 const langStore = useLanguageStore();
 
-const item = ref<MigrantInformation | null>(null);
+const item = ref<MigrantEvent | null>(null);
 const loading = ref(true);
 const error = ref<string | null>(null);
 
@@ -45,6 +38,20 @@ const topicLabels = computed(() =>
         .map(id => topicStore.getById(id)?.topic)
         .filter((l): l is string => Boolean(l)),
 );
+
+/** Format an ISO date string using the current locale. */
+function formatDate(iso: string | undefined): string {
+    if (!iso) return '';
+    const lang = langStore.selected?.lang ?? 'en';
+    try {
+        return new Date(iso).toLocaleString(lang, {
+            weekday: 'long', day: '2-digit', month: 'long',
+            year: 'numeric', hour: '2-digit', minute: '2-digit',
+        });
+    } catch {
+        return new Date(iso).toLocaleString('en');
+    }
+}
 
 function getLangParams() {
     return {
@@ -59,33 +66,38 @@ async function load(id: number): Promise<void> {
     item.value = null;
 
     try {
-        // 1 — cache
-        const cached = contentStore.items.find(i => i.type === 'info' && i.id === id);
+        // 1 — cache hit
+        const cached = contentStore.items.find(i => i.type === 'event' && i.id === id);
         if (cached) {
             item.value = {
                 id: cached.id, title: cached.title, description: cached.description,
-                lang: cached.lang, categoryId: cached.categoryId ?? null,
+                lang: cached.lang,
+                startDate: cached.startDate ?? '',
+                endDate: cached.endDate ?? '',
+                location: cached.location ?? null,
+                cost: null, isFree: true,
+                categoryId: cached.categoryId ?? null,
                 topicIds: cached.topicIds, userTypeIds: [],
             };
-            logger.info('[InformationDetailPage] cache hit', { id });
+            logger.info('[EventDetailPage] cache hit', { id });
             return;
         }
 
         // 2 — API fallback
-        logger.info('[InformationDetailPage] cache miss, fetching', { id });
-        const list = await informationApi.listForMigrant({
+        logger.info('[EventDetailPage] cache miss, fetching', { id });
+        const list = await eventApi.listForMigrant({
             ...getLangParams(), page: 1, pageSize: 100,
         });
         const found = list.find(i => i.id === id) ?? null;
         if (!found) {
-            logger.warn('[InformationDetailPage] not found', { id });
+            logger.warn('[EventDetailPage] not found', { id });
             void router.replace('/home');
             return;
         }
         item.value = found;
     } catch (e) {
         error.value = e instanceof Error ? e.message : 'Unexpected error';
-        logger.error('[InformationDetailPage] load failed', { id, error: error.value });
+        logger.error('[EventDetailPage] load failed', { id, error: error.value });
     } finally {
         loading.value = false;
     }
@@ -115,10 +127,9 @@ watch(itemId, (newId) => { void load(newId); });
         </q-banner>
 
         <template v-else-if="item">
+
             <!-- Title -->
             <div class="detail-title q-mb-sm">{{ item.title }}</div>
-
-            <!-- Orange separator -->
             <div class="detail-separator q-mb-md" />
 
             <!-- Description -->
@@ -128,9 +139,54 @@ watch(itemId, (newId) => { void load(newId); });
 
             <q-separator class="q-mb-md" />
 
+            <!-- Event metadata rows -->
+            <q-list dense class="q-mb-md">
+                <q-item v-if="item.startDate">
+                    <q-item-section avatar>
+                        <q-icon name="event" color="primary" />
+                    </q-item-section>
+                    <q-item-section>
+                        <q-item-label caption>{{ t('event_detail.start_date') }}</q-item-label>
+                        <q-item-label>{{ formatDate(item.startDate) }}</q-item-label>
+                    </q-item-section>
+                </q-item>
+
+                <q-item v-if="item.endDate">
+                    <q-item-section avatar>
+                        <q-icon name="event_available" color="primary" />
+                    </q-item-section>
+                    <q-item-section>
+                        <q-item-label caption>{{ t('event_detail.finish_date') }}</q-item-label>
+                        <q-item-label>{{ formatDate(item.endDate) }}</q-item-label>
+                    </q-item-section>
+                </q-item>
+
+                <q-item>
+                    <q-item-section avatar>
+                        <q-icon name="euro" color="primary" />
+                    </q-item-section>
+                    <q-item-section>
+                        <q-item-label caption>{{ t('event_detail.cost') }}</q-item-label>
+                        <q-item-label>
+                            {{ item.isFree ? t('event_detail.cost_free') : (item.cost ?? t('event_detail.cost_free')) }}
+                        </q-item-label>
+                    </q-item-section>
+                </q-item>
+
+                <q-item v-if="item.location">
+                    <q-item-section avatar>
+                        <q-icon name="place" color="primary" />
+                    </q-item-section>
+                    <q-item-section>
+                        <q-item-label caption>{{ t('event_detail.location') }}</q-item-label>
+                        <q-item-label>{{ item.location }}</q-item-label>
+                    </q-item-section>
+                </q-item>
+            </q-list>
+
             <!-- Topic chips -->
             <div v-if="topicLabels.length" class="q-mb-md">
-                <div class="text-caption text-grey-6 q-mb-xs">{{ t('information_centre.topics') }}</div>
+                <div class="text-caption text-grey-6 q-mb-xs">{{ t('event_detail.topics') }}</div>
                 <div class="row q-gutter-xs">
                     <q-chip v-for="label in topicLabels" :key="label" dense color="primary" text-color="white"
                         :label="label" />
@@ -142,8 +198,8 @@ watch(itemId, (newId) => { void load(newId); });
                 <q-btn outline rounded no-caps icon="arrow_back" :label="t('button.go_back')" class="go-back-btn"
                     @click="router.back()" />
             </div>
-        </template>
 
+        </template>
     </q-page>
 </template>
 

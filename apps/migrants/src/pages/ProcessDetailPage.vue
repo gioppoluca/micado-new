@@ -1,18 +1,22 @@
 <script setup lang="ts">
 /**
- * src/pages/InformationDetailPage.vue
+ * src/pages/ProcessDetailPage.vue
  *
- * Detail view for a single published information item.
+ * Detail view for a single published process / step-by-step guide.
  *
- * ── Data strategy ─────────────────────────────────────────────────────────────
- *   1. Cache hit  — look up id in contentStore.items (loaded by HomePage)
- *   2. Cache miss — call informationApi.listForMigrant() page=1&pageSize=100
- *      and find by id (same strategy as legacy app)
- *   If still not found → 404.
+ * ── Note on the process graph ─────────────────────────────────────────────────
+ *   The legacy app rendered an interactive Mermaid diagram (vue-mermaid) with
+ *   clickable steps pulled from the graph endpoint. That endpoint
+ *   (GET /processes/:id/graph) is PA-authenticated only and the dependency
+ *   vue-mermaid is not in the new stack.
  *
- * ── Fix vs previous version ───────────────────────────────────────────────────
- *   • retry button now passes itemId.value (number), not the ComputedRef
- *   • `not-found` replaced with catchAll route name to avoid missing-route error
+ *   This page renders:
+ *   • Title + description  (from the migrant list endpoint)
+ *   • Topic chips
+ *   • A note that the full step-by-step diagram requires login (if it is ever
+ *     exposed as a public migrant endpoint, wire it here).
+ *
+ * Legacy: src/pages/ProcessViewer.vue + Processes.vue
  */
 
 import { ref, computed, onMounted, watch } from 'vue';
@@ -20,11 +24,11 @@ import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useContentStore } from 'src/stores/content-store';
 import { useTopicStore } from 'src/stores/topic-store';
-import { informationApi } from 'src/api/information.api';
+import { processApi } from 'src/api/process.api';
 import { useAppStore } from 'src/stores/app-store';
 import { useLanguageStore } from 'src/stores/language-store';
 import { logger } from 'src/services/Logger';
-import type { MigrantInformation } from 'src/api/information.api';
+import type { MigrantProcess } from 'src/api/process.api';
 
 const { t } = useI18n();
 const route = useRoute();
@@ -34,7 +38,7 @@ const topicStore = useTopicStore();
 const appStore = useAppStore();
 const langStore = useLanguageStore();
 
-const item = ref<MigrantInformation | null>(null);
+const item = ref<MigrantProcess | null>(null);
 const loading = ref(true);
 const error = ref<string | null>(null);
 
@@ -59,33 +63,32 @@ async function load(id: number): Promise<void> {
     item.value = null;
 
     try {
-        // 1 — cache
-        const cached = contentStore.items.find(i => i.type === 'info' && i.id === id);
+        // 1 — cache hit
+        const cached = contentStore.items.find(i => i.type === 'process' && i.id === id);
         if (cached) {
             item.value = {
                 id: cached.id, title: cached.title, description: cached.description,
-                lang: cached.lang, categoryId: cached.categoryId ?? null,
-                topicIds: cached.topicIds, userTypeIds: [],
+                lang: cached.lang, topicIds: cached.topicIds, userTypeIds: [],
             };
-            logger.info('[InformationDetailPage] cache hit', { id });
+            logger.info('[ProcessDetailPage] cache hit', { id });
             return;
         }
 
         // 2 — API fallback
-        logger.info('[InformationDetailPage] cache miss, fetching', { id });
-        const list = await informationApi.listForMigrant({
+        logger.info('[ProcessDetailPage] cache miss, fetching', { id });
+        const list = await processApi.listForMigrant({
             ...getLangParams(), page: 1, pageSize: 100,
         });
         const found = list.find(i => i.id === id) ?? null;
         if (!found) {
-            logger.warn('[InformationDetailPage] not found', { id });
+            logger.warn('[ProcessDetailPage] not found', { id });
             void router.replace('/home');
             return;
         }
         item.value = found;
     } catch (e) {
         error.value = e instanceof Error ? e.message : 'Unexpected error';
-        logger.error('[InformationDetailPage] load failed', { id, error: error.value });
+        logger.error('[ProcessDetailPage] load failed', { id, error: error.value });
     } finally {
         loading.value = false;
     }
@@ -115,10 +118,9 @@ watch(itemId, (newId) => { void load(newId); });
         </q-banner>
 
         <template v-else-if="item">
+
             <!-- Title -->
             <div class="detail-title q-mb-sm">{{ item.title }}</div>
-
-            <!-- Orange separator -->
             <div class="detail-separator q-mb-md" />
 
             <!-- Description -->
@@ -142,8 +144,8 @@ watch(itemId, (newId) => { void load(newId); });
                 <q-btn outline rounded no-caps icon="arrow_back" :label="t('button.go_back')" class="go-back-btn"
                     @click="router.back()" />
             </div>
-        </template>
 
+        </template>
     </q-page>
 </template>
 

@@ -55,7 +55,7 @@ const displayEmail = computed<string>(() => {
 
 function goDocuments(): void {
   logger.info('[ProfilePage] navigate to documents');
-  void router.push({ name: 'documents' });
+  void router.push({ name: 'document-wallet' });
 }
 
 function goTasks(): void {

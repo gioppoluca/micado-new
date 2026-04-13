@@ -63,6 +63,7 @@ export default {
   // ── Buttons ───────────────────────────────────────────────────────────────
   button: {
     go_back: 'Go back',
+    back: 'Go Home',
   },
 
   // ── Glossary ──────────────────────────────────────────────────────────────
@@ -130,5 +131,24 @@ export default {
     category: 'Category',
     topics: 'Topics',
     user_types: 'User types',
+  },
+
+  // ── Event detail labels ──────────────────────────────────────────────────
+  event_detail: {
+    start_date: 'Start date',
+    finish_date: 'End date',
+    cost: 'Cost',
+    cost_free: 'Free',
+    location: 'Location',
+    organizer: 'Organizer',
+    category: 'Category',
+    topics: 'Topics',
+    user_types: 'User types',
+  },
+
+  // ── Features ──────────────────────────────────────────────────
+  features: {
+    documents_coming_soon: 'The document wallet feature is coming soon. It will allow you to securely store and manage your personal documents.',
+    tasks_coming_soon: 'The integration plan feature is coming soon. It will help you track your personalised integration journey step by step.',
   },
 };

@@ -2,21 +2,21 @@
  * src/router/routes.ts
  *
  * ── Public ────────────────────────────────────────────────────────────────────
- *   /            WelcomePage           one-shot intro
- *   /home        HomePage              topic tree + unified content list
- *   /glossary    GlossaryPage          alphabetic glossary
- *   /about       AboutPage             navigation menu
- *   /privacy     PrivacyPage           policy text + consent state
- *   /powered-by  PoweredByPage         EU funding + partner list
- *   /info/:id    InformationDetailPage single information item
+ *   /              WelcomePage
+ *   /home          HomePage
+ *   /glossary      GlossaryPage
+ *   /about         AboutPage
+ *   /privacy       PrivacyPage
+ *   /powered-by    PoweredByPage
+ *   /info/:id      InformationDetailPage
+ *   /event/:id     EventDetailPage
+ *   /process/:id   ProcessDetailPage
  *
  * ── Auth-gated ────────────────────────────────────────────────────────────────
- *   /profile     ProfilePage           user hub (docs / tasks / settings / logout)
- *   /settings    SettingsPage
- *
- * ── Placeholders (port progressively) ─────────────────────────────────────────
- *   /process/:id → TODO ProcessDetailPage
- *   /event/:id   → TODO EventDetailPage
+ *   /profile        ProfilePage
+ *   /settings       SettingsPage
+ *   /document-wallet DocumentWalletPage  (FEAT_DOCUMENTS)
+ *   /tasks           TasksPage           (FEAT_TASKS)
  */
 
 import type { RouteRecordRaw } from 'vue-router';
@@ -29,54 +29,18 @@ const routes: RouteRecordRaw[] = [
 
       // ── Public ───────────────────────────────────────────────────────
 
-      {
-        path: '',
-        name: 'welcome',
-        component: () => import('pages/WelcomePage.vue'),
-      },
-      {
-        path: 'home',
-        name: 'home',
-        component: () => import('pages/HomePage.vue'),
-      },
-      {
-        path: 'glossary',
-        name: 'glossary',
-        component: () => import('pages/GlossaryPage.vue'),
-      },
-      {
-        path: 'about',
-        name: 'about',
-        component: () => import('pages/AboutPage.vue'),
-      },
-      {
-        path: 'privacy',
-        name: 'privacy',
-        component: () => import('pages/PrivacyPage.vue'),
-      },
-      {
-        path: 'powered-by',
-        name: 'powered-by',
-        component: () => import('pages/PoweredByPage.vue'),
-      },
+      { path: '', name: 'welcome', component: () => import('pages/WelcomePage.vue') },
+      { path: 'home', name: 'home', component: () => import('pages/HomePage.vue') },
+      { path: 'glossary', name: 'glossary', component: () => import('pages/GlossaryPage.vue') },
+      { path: 'about', name: 'about', component: () => import('pages/AboutPage.vue') },
+      { path: 'privacy', name: 'privacy', component: () => import('pages/PrivacyPage.vue') },
+      { path: 'powered-by', name: 'powered-by', component: () => import('pages/PoweredByPage.vue') },
 
-      // ── Content detail pages ───────────────────────────────────────
+      // ── Content detail pages ──────────────────────────────────────────
 
-      {
-        path: 'info/:id',
-        name: 'info-detail',
-        component: () => import('pages/InformationDetailPage.vue'),
-      },
-      {
-        path: 'process/:id',
-        name: 'process-detail',
-        component: () => import('pages/HomePage.vue'),   // TODO: ProcessDetailPage
-      },
-      {
-        path: 'event/:id',
-        name: 'event-detail',
-        component: () => import('pages/HomePage.vue'),   // TODO: EventDetailPage
-      },
+      { path: 'info/:id', name: 'info-detail', component: () => import('pages/InformationDetailPage.vue') },
+      { path: 'event/:id', name: 'event-detail', component: () => import('pages/EventDetailPage.vue') },
+      { path: 'process/:id', name: 'process-detail', component: () => import('pages/ProcessDetailPage.vue') },
 
       // ── Auth-gated ────────────────────────────────────────────────────
 
@@ -93,10 +57,19 @@ const routes: RouteRecordRaw[] = [
         meta: { requiresAuth: true },
       },
       {
-        path: 'login',
-        name: 'login',
-        component: () => import('pages/LoginPage.vue'),
+        path: 'document-wallet',
+        name: 'document-wallet',
+        component: () => import('pages/DocumentWalletPage.vue'),
+        meta: { requiresAuth: true },
       },
+      {
+        path: 'tasks',
+        name: 'tasks',
+        component: () => import('pages/TasksPage.vue'),
+        meta: { requiresAuth: true },
+      },
+
+      { path: 'login', name: 'login', component: () => import('pages/LoginPage.vue') },
     ],
   },
 

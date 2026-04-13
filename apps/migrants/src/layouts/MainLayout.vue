@@ -96,12 +96,12 @@ const navTabs = computed<NavTab[]>(() => {
   const tabs: NavTab[] = [
     { name: 'home', icon: 'apps', label: t('menu.home'), to: '/home', authRequired: false },
     { name: 'glossary', icon: 'sort_by_alpha', label: t('menu.glossary'), to: '/glossary', authRequired: false },
-    { name: 'feedback', icon: 'thumb_up', label: t('menu.feedback'), to: '/feedback', authRequired: false },
+    { name: 'about', icon: 'more_horiz', label: t('menu.about'), to: '/about', authRequired: false },
   ];
 
   // Feature-flagged tabs
   if (isEnabled('FEAT_MIGRANT_LOGIN') && isEnabled('FEAT_DOCUMENTS')) {
-    tabs.push({ name: 'documents', icon: 'folder', label: t('menu.documents'), to: '/documents', authRequired: true });
+    tabs.push({ name: 'documents', icon: 'folder', label: t('menu.documents'), to: '/document-wallet', authRequired: true });
   }
 
   // Profile / login always last
