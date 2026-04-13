@@ -84,6 +84,7 @@ services:
     volumes:
       - keycloak_data:/opt/keycloak/data
       - ./infrastructure/keycloak/realms:/opt/keycloak/data/import:ro
+      - ./infrastructure/keycloak/themes:/opt/keycloak/themes:ro
     labels:
       - traefik.enable=true
       - traefik.http.routers.keycloak.rule=Host(`auth.${BASE_DOMAIN}`)

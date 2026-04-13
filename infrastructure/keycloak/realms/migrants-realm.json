@@ -1,6 +1,7 @@
 {
   "realm": "migrants",
   "enabled": true,
+  "loginTheme": "micado-migrants",
   "displayName": "Migrants",
   "sslRequired": "external",
   "roles": {
