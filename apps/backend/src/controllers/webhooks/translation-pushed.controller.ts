@@ -3,23 +3,31 @@
  *
  * Receives Weblate PUSH webhook events (ActionEvents.PUSH = 18).
  *
- * ── What this does ────────────────────────────────────────────────────────────
+ * ── Design ───────────────────────────────────────────────────────────────────
  *
- *  1. Generate a unique workerHash for this invocation
- *  2. SELECT FOR UPDATE SKIP LOCKED — claim all NEW staging rows for this component
- *  3. For each claimed row (component + lang): pull the Gitea catalog and
- *     signal the matching DBOS child workflow
- *  4. DELETE all rows with this workerHash (success path)
+ * The PUSH event signals that Weblate has written translated strings to Gitea.
+ * At this point the Gitea catalog is guaranteed to be up-to-date.
  *
- * If the handler crashes before step 4, rows remain in PROCESSING status.
- * A background cleanup (or the next push event) resets them to NEW after a
- * timeout. See WeblateCommitEventRepository.resetStuckEvents().
+ * This handler:
+ *  1. Claims ALL NEW rows from weblate_commit_event regardless of component.
+ *     The `component` field in the PUSH webhook payload is unreliable —
+ *     Weblate may report any component for a project-level push. Each staged
+ *     row carries its own reliable (component, lang) from the COMMIT event.
  *
- * ── Why this is safe with concurrent pushes ───────────────────────────────────
+ *  2. For each claimed row, reads the translated catalog from Gitea using
+ *     the (component, lang) from the row itself.
  *
- * SKIP LOCKED means two concurrent push handlers for the same component get
- * disjoint row sets. Each processes its own rows and deletes by its own
- * workerHash. They never interfere.
+ *  3. For each item in the catalog, extracts revisionId and sourceHash from
+ *     the Gitea catalog meta (written by pushSourceFieldsToGitea in
+ *     translation.steps.ts). Uses these to signal the DBOS child workflow
+ *     DIRECTLY — without using the in-memory active workflow registry.
+ *     This survives server restarts correctly.
+ *
+ *  4. Falls back to the registry-based path (signalTranslationReceivedByItemId)
+ *     for items whose Gitea catalog was written before the meta fields were added.
+ *
+ *  5. Deletes all rows claimed by this worker (by workerHash) after processing.
+ *     Concurrent push handlers use SKIP LOCKED — they get disjoint row sets.
  *
  * ── Weblate payload shape (5.16, ActionEvents.PUSH = 18) ─────────────────────
  *
@@ -30,7 +38,7 @@
  *     "url":        "/projects/micado/categories/",
  *     "user":       "admin",
  *     "project":    "micado",
- *     "component":  "categories"   ← language is absent (push is component-level)
+ *     "component":  "categories"   ← NOT RELIABLE — do not use for routing
  *   }
  *
  * ── Addon configuration ───────────────────────────────────────────────────────
@@ -44,7 +52,7 @@ import { post, Request, RestBindings, requestBody } from '@loopback/rest';
 import { inject } from '@loopback/core';
 import { repository } from '@loopback/repository';
 import { authenticate } from '@loopback/authentication';
-//import { authorize } from '@loopback/authorization';
+import { authorize } from '@loopback/authorization';
 import { LoggingBindings } from '@loopback/logging';
 import { randomUUID } from 'node:crypto';
 import type { Logger } from 'winston';
@@ -57,6 +65,7 @@ interface WeblatePushBody {
     action?: string;
     timestamp?: string;
     project?: string;
+    /** NOT reliable for routing — present but may be wrong component slug */
     component?: string;
     url?: string;
     user?: string;
@@ -85,11 +94,11 @@ export class TranslationPushedController {
 
     @post('/api/webhooks/weblate/translation-pushed')
     @authenticate.skip()
-    //@authorize({ allowedRoles: ['$everyone'] })
+    @authorize({ allowedRoles: ['$everyone'] })
     async receive(
         @inject(RestBindings.Http.REQUEST) req: Request,
         @requestBody({
-            description: 'Weblate PUSH webhook body',
+            description: 'Weblate PUSH webhook body (ActionEvents.PUSH = 18)',
             required: false,
             content: {
                 'application/json': {
@@ -98,153 +107,179 @@ export class TranslationPushedController {
             },
         })
         body: WeblatePushBody,
-    ): Promise<{ ok: boolean; processed?: number; signaled?: number; message?: string }> {
+    ): Promise<{ ok: boolean; claimed?: number; signaled?: number; message?: string }> {
 
         const tag = '[WeblatePush]';
 
         this.logger.info(`${tag} INCOMING  remote=${req.ip}`);
         this.logger.info(`${tag} body=${JSON.stringify(body)}`);
-
-        const component = body?.component ?? null;
-
-        if (!component) {
-            this.logger.warn(`${tag} SKIPPED — no component in push payload`);
-            return { ok: true, message: 'no component — skipped' };
-        }
-
-        // ── Step 1: Generate worker identity ──────────────────────────────────
-        const workerHash = randomUUID();
-
+        // Note: body.component is logged for diagnostics but NOT used for routing
         this.logger.info(
-            `${tag} starting  component=${component}  workerHash=${workerHash}`,
+            `${tag} push event — will claim ALL new staged commits` +
+            `  (ignoring body.component='${body?.component ?? '(none)'}' — unreliable)`,
         );
 
-        // ── Step 2: Atomically claim all NEW staging rows for this component ──
+        // ── Step 1: Generate unique worker identity ────────────────────────────
+        const workerHash = randomUUID();
+
+        this.logger.info(`${tag} workerHash=${workerHash}`);
+
+        // ── Step 2: Claim ALL NEW staging rows (no component filter) ─────────
+        // SKIP LOCKED means concurrent pushes get disjoint row sets.
+        // Each row carries its own (component, lang) from the original COMMIT event.
         let claimedRows: Awaited<ReturnType<typeof this.commitEventRepo.claimNewEvents>>;
         try {
-            claimedRows = await this.commitEventRepo.claimNewEvents(component, workerHash);
+            claimedRows = await this.commitEventRepo.claimNewEvents(workerHash);
         } catch (err) {
             this.logger.error(
-                `${tag} DB claim FAILED  component=${component}  workerHash=${workerHash}` +
-                `  error=${String(err)}`,
+                `${tag} DB claim FAILED  workerHash=${workerHash}  error=${String(err)}`,
             );
             return { ok: true, message: 'db claim failed — logged' };
         }
 
         if (claimedRows.length === 0) {
-            this.logger.info(
-                `${tag} no staged commits for component=${component} — nothing to do`,
-            );
-            return { ok: true, processed: 0, signaled: 0 };
+            this.logger.info(`${tag} no staged commits to process — nothing to do`);
+            return { ok: true, claimed: 0, signaled: 0 };
         }
 
         this.logger.info(
-            `${tag} claimed ${claimedRows.length} staged commit(s)` +
-            `  component=${component}  workerHash=${workerHash}` +
-            `  langs=[${claimedRows.map(r => r.lang).join(',')}]`,
+            `${tag} claimed ${claimedRows.length} row(s)  workerHash=${workerHash}` +
+            `  rows=${JSON.stringify(claimedRows.map(r => `${r.component}/${r.lang}`))}`,
         );
 
         // ── Step 3: Process each claimed row ──────────────────────────────────
-        // Each row corresponds to one (component, lang) commit event.
-        // Now that Gitea has been pushed, we fetch the translated catalog
-        // and signal the DBOS child workflow.
-        const category = component; // component slug = Gitea folder = category
         let signaled = 0;
         let skipped = 0;
         let errors = 0;
 
         for (const row of claimedRows) {
-            const rowTag = `${tag}[${row.lang}|${row.changeId}]`;
+            const rowTag = `${tag}[${row.component}/${row.lang}|${row.changeId}]`;
 
             this.logger.info(
-                `${rowTag} processing  category=${category}  lang=${row.lang}` +
+                `${rowTag} processing  component=${row.component}  lang=${row.lang}` +
                 `  changeId=${row.changeId}  weblateTs=${row.weblateTs}`,
             );
 
-            // ── 3a. Pull translated catalog from Gitea ─────────────────────────
-            let catalogEntries: Record<string, Record<string, string>>;
+            // ── 3a. Read translated catalog from Gitea ─────────────────────────
+            // Use component+lang from the ROW (from the COMMIT event), not from
+            // the PUSH body — the row values are always correct.
+            let catalogItems: Record<string, {
+                fields: Record<string, string>;
+                revisionId: string | null;
+                sourceHash: string | null;
+            }>;
+
             try {
-                catalogEntries = await this.giteaImport.loadTranslatedFields({
-                    category,
+                catalogItems = await this.giteaImport.loadTranslatedFieldsWithMeta({
+                    category: row.component,   // component slug = Gitea folder = category
                     isoCode: row.lang,
                 });
             } catch (err) {
-                this.logger.error(
-                    `${rowTag} Gitea fetch FAILED  error=${String(err)}`,
-                );
+                this.logger.error(`${rowTag} Gitea fetch FAILED  error=${String(err)}`);
                 errors++;
                 continue;
             }
 
-            const itemCount = Object.keys(catalogEntries).length;
-            this.logger.info(
-                `${rowTag} catalog loaded  items=${itemCount}`,
-            );
-            this.logger.debug(`${rowTag} catalog=${JSON.stringify(catalogEntries)}`);
+            const itemCount = Object.keys(catalogItems).length;
+            this.logger.info(`${rowTag} catalog loaded  items=${itemCount}`);
+            this.logger.debug(`${rowTag} catalog=${JSON.stringify(catalogItems)}`);
 
             if (itemCount === 0) {
                 this.logger.warn(
                     `${rowTag} empty catalog — no items to signal.` +
-                    ` Expected until backend pushes real translation keys.`,
+                    ` Normal until backend pushes real translation keys via approval flow.`,
                 );
                 skipped++;
                 continue;
             }
 
-            // ── 3b. Signal each item's DBOS child workflow ─────────────────────
-            for (const [itemId, fields] of Object.entries(catalogEntries)) {
+            // ── 3b. Signal DBOS child workflow per catalog item ────────────────
+            for (const [itemId, item] of Object.entries(catalogItems)) {
+                const itemTag = `${rowTag}[item=${itemId}]`;
+
+                this.logger.info(
+                    `${itemTag} revisionId=${item.revisionId ?? '(null)'}` +
+                    `  sourceHash=${item.sourceHash ?? '(null)'}` +
+                    `  fieldKeys=${JSON.stringify(Object.keys(item.fields))}`,
+                );
+
+                if (!item.revisionId || !item.sourceHash) {
+                    // Catalog was pushed before meta was added — fall back to
+                    // registry-based lookup (works if server hasn't restarted).
+                    this.logger.warn(
+                        `${itemTag} no revisionId/sourceHash in Gitea meta — ` +
+                        `falling back to registry lookup (may fail after restart)`,
+                    );
+
+                    try {
+                        const result = await this.orchestrator.signalTranslationReceivedByItemId({
+                            category: row.component,
+                            itemId,
+                            lang: row.lang,
+                            fields: item.fields,
+                        });
+
+                        if (result.signaled) {
+                            this.logger.info(
+                                `${itemTag} signaled via registry  revisionId=${result.revisionId}`,
+                            );
+                            signaled++;
+                        } else {
+                            this.logger.warn(
+                                `${itemTag} registry lookup failed  reason=${result.reason}` +
+                                ` — re-push source to Gitea to write meta fields`,
+                            );
+                            skipped++;
+                        }
+                    } catch (err) {
+                        this.logger.error(`${itemTag} registry signal FAILED  error=${String(err)}`);
+                        errors++;
+                    }
+                    continue;
+                }
+
+                // ── Primary path: signal directly by revisionId (no registry needed) ──
                 try {
-                    const result = await this.orchestrator.signalTranslationReceivedByItemId({
-                        category,
-                        itemId,
+                    await this.orchestrator.signalTranslationByRevisionId({
+                        revisionId: item.revisionId,
                         lang: row.lang,
-                        fields,
+                        sourceHash: item.sourceHash,
+                        fields: item.fields,
                     });
 
-                    if (result.signaled) {
-                        this.logger.info(
-                            `${rowTag} signaled  itemId=${itemId}` +
-                            `  revisionId=${result.revisionId}`,
-                        );
-                        signaled++;
-                    } else {
-                        this.logger.warn(
-                            `${rowTag} no active workflow  itemId=${itemId}` +
-                            `  reason=${result.reason}`,
-                        );
-                        skipped++;
-                    }
+                    this.logger.info(
+                        `${itemTag} signaled directly  revisionId=${item.revisionId}`,
+                    );
+                    signaled++;
                 } catch (err) {
                     this.logger.error(
-                        `${rowTag} signal FAILED  itemId=${itemId}  error=${String(err)}`,
+                        `${itemTag} direct signal FAILED  revisionId=${item.revisionId}` +
+                        `  error=${String(err)}`,
                     );
                     errors++;
                 }
             }
         }
 
-        // ── Step 4: Delete processed rows ─────────────────────────────────────
-        // Only delete rows with OUR workerHash — rows claimed by concurrent
-        // push handlers (or new rows that arrived during processing) are untouched.
+        // ── Step 4: Delete processed rows by workerHash ────────────────────────
+        // Only touches rows this worker claimed — concurrent handlers unaffected.
         let deleted = 0;
         try {
             deleted = await this.commitEventRepo.deleteByWorkerHash(workerHash);
-            this.logger.info(
-                `${tag} deleted ${deleted} row(s)  workerHash=${workerHash}`,
-            );
+            this.logger.info(`${tag} deleted ${deleted} row(s)  workerHash=${workerHash}`);
         } catch (err) {
-            // Log but don't fail — rows will be reset by resetStuckEvents later
+            // Non-fatal — rows stay as PROCESSING and will be reset by resetStuckEvents
             this.logger.error(
                 `${tag} DB delete FAILED  workerHash=${workerHash}  error=${String(err)}`,
             );
         }
 
         this.logger.info(
-            `${tag} complete  component=${component}  workerHash=${workerHash}` +
+            `${tag} complete  workerHash=${workerHash}` +
             `  claimed=${claimedRows.length}  signaled=${signaled}` +
             `  skipped=${skipped}  errors=${errors}  deleted=${deleted}`,
         );
 
-        return { ok: true, processed: claimedRows.length, signaled };
+        return { ok: true, claimed: claimedRows.length, signaled };
     }
 }

@@ -237,6 +237,7 @@ export class TranslationSteps {
     static async pushSourceFieldsToGitea(input: {
         category: string;
         itemId: string;
+        revisionId: string;          // stored in Gitea meta for push-controller reconciliation
         sourceLang: string;
         fields: Record<string, string>;
         aiTranslation: boolean;
@@ -272,13 +273,21 @@ export class TranslationSteps {
                 continue;
             }
 
-            // Push source language
+            // Push source language — include revisionId and sourceHash in meta so the push
+            // controller can signal the DBOS child workflow directly from
+            // the Gitea catalog, without needing the in-memory registry.
             const result = await svc.exportTranslationEntry({
                 category: input.category,
                 isoCode: input.sourceLang,
                 itemId: input.itemId,
                 fieldKey,
                 value,
+                meta: {
+                    revisionId: input.revisionId,
+                    // sourceHash stored here so push controller can build the
+                    // DBOS idempotency key without re-computing from source fields
+                    sourceHash: TranslationSteps.computeSourceHash(input.fields),
+                },
             });
 
             DBOS.logger.debug(

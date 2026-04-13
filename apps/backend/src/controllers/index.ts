@@ -18,6 +18,7 @@ export * from './events.controller';
 export * from './information.controller';
 export * from './processes.controller';
 export * from './user-types.controller';
+export * from './analytics-usage.controller';
 
 // ── Webhook receivers ─────────────────────────────────────────────────────────
 //
@@ -37,6 +38,15 @@ export * from './user-types.controller';
 //
 export * from './webhooks/translation-committed.controller';
 export * from './webhooks/translation-pushed.controller';
+
+// ── Monitoring ────────────────────────────────────────────────────────────────
+//
+// TranslationMonitorController
+//   GET /api/translation-monitor
+//   PA admin only — aggregates all active DBOS workflows + staging table.
+//   Consumed by the Settings → Translations monitor page.
+//
+export * from './translation-monitor.controller';
 
 // ── DEV controllers ──────────────────────────────────────────────────────────
 // ⚠  Remove or guard with NODE_ENV check before production.

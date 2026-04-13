@@ -83,7 +83,10 @@ export const FLAG_TTS = 'tts';
 
 type ActiveWorkflowEntry = {
     revisionId: string;
+    category: string;
+    itemId: string;
     sourceFields: Record<string, string>;
+    targetLangs: string[];
     startedAt: string;
 };
 
@@ -233,7 +236,10 @@ export class TranslationWorkflowOrchestratorService {
         const registryKey = `${category}:${itemId}`;
         const entry: ActiveWorkflowEntry = {
             revisionId,
+            category,
+            itemId,
             sourceFields: filteredFields,
+            targetLangs,
             startedAt: new Date().toISOString(),
         };
         this.activeWorkflows.set(registryKey, entry);
@@ -267,6 +273,35 @@ export class TranslationWorkflowOrchestratorService {
         });
 
         return { workflowID };
+    }
+
+    // ── Direct signal by revisionId (push controller path) ───────────────────
+
+    /**
+     * Signals a DBOS child workflow directly using a known revisionId.
+     *
+     * Called by the push controller when revisionId is available in the
+     * Gitea catalog meta (written there by pushSourceFieldsToGitea).
+     * This path does NOT use the in-memory registry — works after server restart.
+     *
+     * @param revisionId  UUID of the content_revision (from Gitea catalog meta)
+     * @param lang        ISO language code (from staged commit row)
+     * @param sourceHash  SHA-256 of source fields (from Gitea meta) — DBOS idempotency key
+     * @param fields      Translated field values read from Gitea translated catalog
+     */
+    async signalTranslationByRevisionId(input: {
+        revisionId: string;
+        lang: string;
+        sourceHash: string;
+        fields: Record<string, string>;
+    }): Promise<void> {
+        const { revisionId, lang, sourceHash, fields } = input;
+
+        this.logger.info('[TranslationOrchestrator] signalTranslationByRevisionId', {
+            revisionId, lang, sourceHash, fieldKeys: Object.keys(fields),
+        });
+
+        await this.signalTranslationReceived({ revisionId, lang, sourceHash, fields });
     }
 
     // ── Weblate webhook handler — by itemId ───────────────────────────────────

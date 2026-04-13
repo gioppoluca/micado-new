@@ -100,6 +100,7 @@ export class TranslationMasterWorkflow {
         await TranslationSteps.pushSourceFieldsToGitea({
             category,
             itemId,
+            revisionId,
             sourceLang,
             fields,
             aiTranslation: flags.aiTranslation,

@@ -54,11 +54,29 @@ type CatalogEntry = {
         isoCode?: string;
         itemId?: string;
         fieldKey?: string;
+        /** Written by pushSourceFieldsToGitea — used for direct DBOS signaling */
+        revisionId?: string;
+        /** SHA-256 of source fields — used as DBOS.send() idempotency key */
+        sourceHash?: string;
         [key: string]: unknown;
     };
 };
 
 type RawCatalog = Record<string, CatalogEntry>;
+
+/** Per-item result including translated fields AND the revisionId from meta */
+export type CatalogItemResult = {
+    fields: Record<string, string>;
+    /** revisionId embedded by pushSourceFieldsToGitea — null if not written yet */
+    revisionId: string | null;
+    /**
+     * sourceHash of the source fields, embedded by pushSourceFieldsToGitea.
+     * Used as the DBOS idempotency key for DBOS.send() — prevents duplicate
+     * signal delivery on Weblate webhook re-deliveries.
+     * Null if the catalog was written before this field was added.
+     */
+    sourceHash: string | null;
+};
 
 @injectable({ scope: BindingScope.SINGLETON })
 export class GiteaTranslationImportService {
@@ -119,6 +137,41 @@ export class GiteaTranslationImportService {
         return result;
     }
 
+
+    /**
+     * Like loadTranslatedFields() but also returns the revisionId stored in
+     * the catalog meta for each item (written by pushSourceFieldsToGitea).
+     *
+     * Returns a map:  itemId → { fields: { fieldKey → value }, revisionId }
+     *
+     * revisionId is null for items that were pushed before the meta was added.
+     * The push controller uses this to signal DBOS child workflows directly
+     * without needing the in-memory active workflow registry.
+     */
+    async loadTranslatedFieldsWithMeta(input: {
+        category: string;
+        isoCode: string;
+    }): Promise<Record<string, CatalogItemResult>> {
+
+        const config = this.readRequiredConfig();
+        const path = this.computeRepoPath(input.category, input.isoCode);
+
+        this.logger.info('[GiteaImport] Loading catalog with meta', {
+            category: input.category,
+            isoCode: input.isoCode,
+            path,
+        });
+
+        const raw = await this.fetchCatalog(config, path);
+
+        if (!raw) {
+            this.logger.warn('[GiteaImport] Catalog file not found — returning empty map', { path });
+            return {};
+        }
+
+        return this.groupByItemWithMeta(raw);
+    }
+
     /**
      * Load the full raw catalog (key → entry) without grouping.
      * Useful for diagnostics and the test controller.
@@ -168,6 +221,45 @@ export class GiteaTranslationImportService {
 
             if (!result[itemId]) result[itemId] = {};
             result[itemId][fieldKey] = entry.value ?? '';
+        }
+
+        return result;
+    }
+
+    /**
+     * Like groupByItem() but also collects revisionId and sourceHash from the
+     * first entry's meta for each item. All entries for a given itemId share
+     * the same meta values (written by pushSourceFieldsToGitea), so we take
+     * the first non-null one we see.
+     */
+    private groupByItemWithMeta(raw: RawCatalog): Record<string, CatalogItemResult> {
+        const result: Record<string, CatalogItemResult> = {};
+
+        for (const [compositeKey, entry] of Object.entries(raw)) {
+            const colonIdx = compositeKey.indexOf(':');
+            if (colonIdx === -1) {
+                this.logger.warn('[GiteaImport] Skipping entry with unexpected key format', {
+                    key: compositeKey,
+                });
+                continue;
+            }
+
+            const itemId = compositeKey.slice(0, colonIdx);
+            const fieldKey = compositeKey.slice(colonIdx + 1);
+            const revisionId = (entry.meta?.revisionId as string | undefined) ?? null;
+            const sourceHash = (entry.meta?.sourceHash as string | undefined) ?? null;
+
+            if (!result[itemId]) {
+                result[itemId] = { fields: {}, revisionId, sourceHash };
+            }
+            result[itemId].fields[fieldKey] = entry.value ?? '';
+            // Take first non-null values found for this item
+            if (!result[itemId].revisionId && revisionId) {
+                result[itemId].revisionId = revisionId;
+            }
+            if (!result[itemId].sourceHash && sourceHash) {
+                result[itemId].sourceHash = sourceHash;
+            }
         }
 
         return result;

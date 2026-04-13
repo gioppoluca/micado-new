@@ -569,7 +569,7 @@ export class TranslationWorkflowTestController {
             return { error: 'WeblateCommitEventRepository not available' };
         }
 
-        const claimed = await this.commitEventRepo.claimNewEvents(body.component, workerHash);
+        const claimed = await this.commitEventRepo.claimNewEvents(workerHash);
 
         this.logger.info('[DevController] simulate-push claimed', {
             component: body.component, workerHash, count: claimed.length,
@@ -584,20 +584,32 @@ export class TranslationWorkflowTestController {
 
         if (this.orchestrator && this.giteaImport) {
             for (const row of claimed) {
-                const catalog = await this.giteaImport.loadTranslatedFields({
-                    category: body.component,
+                // Use row.component (from the COMMIT event) — not body.component
+                const catalogItems = await this.giteaImport.loadTranslatedFieldsWithMeta({
+                    category: row.component,
                     isoCode: row.lang,
-                }).catch(() => ({}));
+                }).catch(() => ({} as Record<string, import('../../services/gitea-translation-import.service').CatalogItemResult>));
 
-                for (const [itemId, fields] of Object.entries(catalog)) {
-                    const result = await this.orchestrator.signalTranslationReceivedByItemId({
-                        category: body.component,
-                        itemId,
-                        lang: row.lang,
-                        fields,
-                    }).catch(() => ({ signaled: false, reason: 'error' } as const));
-
-                    result.signaled ? signaled++ : skipped++;
+                for (const [itemId, item] of Object.entries(catalogItems)) {
+                    // Primary path: use revisionId+sourceHash from Gitea meta
+                    if (item.revisionId && item.sourceHash && this.orchestrator) {
+                        await this.orchestrator.signalTranslationByRevisionId({
+                            revisionId: item.revisionId,
+                            lang: row.lang,
+                            sourceHash: item.sourceHash,
+                            fields: item.fields,
+                        }).catch(() => null);
+                        signaled++;
+                    } else {
+                        // Fallback: registry lookup
+                        const result = await this.orchestrator!.signalTranslationReceivedByItemId({
+                            category: row.component,
+                            itemId,
+                            lang: row.lang,
+                            fields: item.fields,
+                        }).catch(() => ({ signaled: false, reason: 'error' } as const));
+                        result.signaled ? signaled++ : skipped++;
+                    }
                 }
             }
         }

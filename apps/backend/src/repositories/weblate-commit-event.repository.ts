@@ -53,11 +53,17 @@ export class WeblateCommitEventRepository extends DefaultCrudRepository<
      *
      * Returns the claimed rows. If none exist, returns [].
      */
-    async claimNewEvents(
-        component: string,
-        workerHash: string,
-    ): Promise<WeblateCommitEvent[]> {
-        // Access the underlying connector's execute method
+    /**
+     * Atomically claims ALL NEW rows across all components.
+     *
+     * Does NOT filter by component — the component field in the PUSH webhook
+     * payload can be unreliable (Weblate may report the wrong component slug).
+     * Each claimed row carries its own reliable component+lang from the COMMIT
+     * payload that was stored when the row was inserted.
+     *
+     * SKIP LOCKED ensures concurrent push handlers get disjoint row sets.
+     */
+    async claimNewEvents(workerHash: string): Promise<WeblateCommitEvent[]> {
         const connector = (this.dataSource as unknown as {
             connector: {
                 execute: (
@@ -70,19 +76,17 @@ export class WeblateCommitEventRepository extends DefaultCrudRepository<
         }).connector;
 
         return new Promise((resolve, reject) => {
-            // Step 1: BEGIN + SELECT FOR UPDATE SKIP LOCKED
             const selectSql = `
                 WITH claimed AS (
                     SELECT id
                     FROM micado.weblate_commit_event
-                    WHERE component = $1
-                      AND status = 'NEW'
+                    WHERE status = 'NEW'
                     FOR UPDATE SKIP LOCKED
                 ),
                 updated AS (
                     UPDATE micado.weblate_commit_event
                     SET    status = 'PROCESSING',
-                           worker_hash = $2
+                           worker_hash = $1
                     WHERE  id IN (SELECT id FROM claimed)
                     RETURNING *
                 )
@@ -101,20 +105,11 @@ export class WeblateCommitEventRepository extends DefaultCrudRepository<
                 FROM updated
             `;
 
-            connector.execute(
-                selectSql,
-                [component, workerHash],
-                {},
-                (err, result) => {
-                    if (err) return reject(err);
-                    const rows = (result as { rows?: unknown[] }).rows ?? [];
-                    resolve(
-                        rows.map(row => new WeblateCommitEvent(
-                            row as Partial<WeblateCommitEvent>,
-                        )),
-                    );
-                },
-            );
+            connector.execute(selectSql, [workerHash], {}, (err, result) => {
+                if (err) return reject(err);
+                const rows = (result as { rows?: unknown[] }).rows ?? [];
+                resolve(rows.map(row => new WeblateCommitEvent(row as Partial<WeblateCommitEvent>)));
+            });
         });
     }
 
