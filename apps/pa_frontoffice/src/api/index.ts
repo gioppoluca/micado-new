@@ -134,3 +134,10 @@ export type {
     StagedCommitSummary,
     TranslationMonitorSnapshot,
 } from './translation-monitor.api';
+export { paUsersApi } from './pa-users.api';
+export type {
+    PaUser,
+    KeycloakRealmRole,
+    CreatePaUserPayload,
+    UpdatePaUserRolesPayload,
+} from './pa-users.api';

@@ -288,7 +288,8 @@ export default {
     "view_model": "View model",
     "view_pics": "View details",
     "add_language": "Add language",
-    "new_doc_process": "Add new document type"
+    "new_doc_process": "Add new document type",
+    "refresh": "Refresh"
   },
   "data_settings": {
     "e_translation": "Credentials for the E-Translation service",
@@ -352,6 +353,7 @@ export default {
     "publication_date": "Publication Date",
     "event": "Event",
     "search": "Search",
+    "email": "Email",
     "event_checkbox": "Linkable to an integration plan?",
     "is_published": "Published",
     "intervention_category": "Intervention Category",
@@ -782,5 +784,27 @@ export default {
     "col_change_id": "Change ID",
     "col_status": "Status",
     "col_received": "Received"
+  }
+  , "pa_users": {
+    "subtitle": "Create PA users, assign realm roles, and remove accounts.",
+    "add_person": "Add person",
+    "delete_person": "Delete person",
+    "manage_roles": "Manage roles",
+    "temporary_password": "Temporary password",
+    "password_help": "The user will be asked by Keycloak to change this password at first login.",
+    "roles": "Roles",
+    "status": "Status",
+    "actions": "Actions",
+    "user": "User",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "user_enabled": "User enabled",
+    "last_name": "Last name",
+    "create_success": "PA user created successfully.",
+    "roles_update_success": "Roles updated successfully.",
+    "delete_success": "PA user removed successfully.",
+    "delete_confirmation": "Delete user {user}? This action cannot be undone.",
+    "no_users_found": "No PA users found.",
+    "total_users": "Users: {count}"
   }
 } as const;
