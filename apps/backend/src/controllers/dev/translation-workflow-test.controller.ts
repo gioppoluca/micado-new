@@ -80,6 +80,7 @@ import {
     TranslationWorkflowOrchestratorService,
 } from '../../services/translation-workflow-orchestrator.service';
 import { GiteaTranslationImportService } from '../../services/gitea-translation-import.service';
+import { WeblateCommitEventRepository } from '../../repositories/weblate-commit-event.repository';
 
 @api({ basePath: '/dev/workflows/translation' })
 export class TranslationWorkflowTestController {
@@ -93,6 +94,9 @@ export class TranslationWorkflowTestController {
 
         @inject('services.GiteaTranslationImportService', { optional: true })
         private readonly giteaImport: GiteaTranslationImportService | undefined,
+
+        @inject('repositories.WeblateCommitEventRepository', { optional: true })
+        private readonly commitEventRepo: WeblateCommitEventRepository | undefined,
     ) { }
 
     // ── Start a master workflow ───────────────────────────────────────────────
@@ -453,5 +457,172 @@ export class TranslationWorkflowTestController {
                 mp3Url,
             },
         };
+    }
+
+    // ── Staging table inspection ───────────────────────────────────────────────
+
+    /**
+     * List all rows currently in the weblate_commit_event staging table.
+     * Useful to verify COMMIT events were stored and check their status.
+     *
+     * Query params:
+     *   component   filter by component slug (optional)
+     *   status      filter by status: NEW | PROCESSING (optional)
+     */
+    @get('/staged-commits')
+    async listStagedCommits(
+        @param.query.string('component') component?: string,
+        @param.query.string('status') status?: string,
+    ): Promise<unknown> {
+        if (!this.commitEventRepo) {
+            return { error: 'WeblateCommitEventRepository not available' };
+        }
+
+        const where: Record<string, unknown> = {};
+        if (component) where.component = component;
+        if (status) where.status = status;
+
+        const rows = await this.commitEventRepo.find({ where, order: ['receivedAt DESC'] });
+
+        this.logger.info('[DevController] staged-commits query', {
+            component, status, count: rows.length,
+        });
+
+        return { count: rows.length, rows };
+    }
+
+    /**
+     * Simulate a Weblate COMMIT webhook POST to /translation-committed.
+     * Inserts a row into the staging table as if Weblate had sent a commit event.
+     */
+    @post('/simulate-commit')
+    async simulateCommit(
+        @requestBody({
+            description: 'Simulate a Weblate COMMIT webhook',
+            content: {
+                'application/json': {
+                    schema: {
+                        type: 'object',
+                        required: ['component', 'lang'],
+                        properties: {
+                            component: { type: 'string', description: 'e.g. user-types' },
+                            lang: { type: 'string', description: 'e.g. it' },
+                            changeId: { type: 'number', default: 999 },
+                            project: { type: 'string', default: 'micado' },
+                        },
+                    },
+                },
+            },
+        })
+        body: { component: string; lang: string; changeId?: number; project?: string },
+    ): Promise<unknown> {
+        if (!this.commitEventRepo) {
+            return { error: 'WeblateCommitEventRepository not available' };
+        }
+
+        const row = await this.commitEventRepo.create({
+            payload: { ...body, action: 'Changes committed', simulated: true },
+            project: body.project ?? 'micado',
+            component: body.component,
+            lang: body.lang,
+            changeId: body.changeId ?? 999,
+            action: 'Changes committed',
+            status: 'NEW',
+            weblateTs: new Date().toISOString(),
+        });
+
+        this.logger.info('[DevController] simulate-commit inserted', {
+            id: row.id, component: body.component, lang: body.lang,
+        });
+
+        return { ok: true, id: row.id };
+    }
+
+    /**
+     * Simulate a Weblate PUSH webhook POST to /translation-pushed.
+     * Claims any NEW staged rows for the component and processes them.
+     * This mirrors the exact path the real push webhook takes.
+     */
+    @post('/simulate-push')
+    async simulatePush(
+        @requestBody({
+            description: 'Simulate a Weblate PUSH webhook — processes staged commits',
+            content: {
+                'application/json': {
+                    schema: {
+                        type: 'object',
+                        required: ['component'],
+                        properties: {
+                            component: { type: 'string', description: 'e.g. user-types' },
+                            project: { type: 'string', default: 'micado' },
+                        },
+                    },
+                },
+            },
+        })
+        body: { component: string; project?: string },
+    ): Promise<unknown> {
+        const { randomUUID } = await import('node:crypto');
+        const workerHash = randomUUID();
+
+        if (!this.commitEventRepo) {
+            return { error: 'WeblateCommitEventRepository not available' };
+        }
+
+        const claimed = await this.commitEventRepo.claimNewEvents(body.component, workerHash);
+
+        this.logger.info('[DevController] simulate-push claimed', {
+            component: body.component, workerHash, count: claimed.length,
+        });
+
+        if (claimed.length === 0) {
+            return { ok: true, claimed: 0, message: 'no staged commits for this component' };
+        }
+
+        let signaled = 0;
+        let skipped = 0;
+
+        if (this.orchestrator && this.giteaImport) {
+            for (const row of claimed) {
+                const catalog = await this.giteaImport.loadTranslatedFields({
+                    category: body.component,
+                    isoCode: row.lang,
+                }).catch(() => ({}));
+
+                for (const [itemId, fields] of Object.entries(catalog)) {
+                    const result = await this.orchestrator.signalTranslationReceivedByItemId({
+                        category: body.component,
+                        itemId,
+                        lang: row.lang,
+                        fields,
+                    }).catch(() => ({ signaled: false, reason: 'error' } as const));
+
+                    result.signaled ? signaled++ : skipped++;
+                }
+            }
+        }
+
+        const deleted = await this.commitEventRepo.deleteByWorkerHash(workerHash);
+
+        return { ok: true, claimed: claimed.length, signaled, skipped, deleted, workerHash };
+    }
+
+    /**
+     * Reset any PROCESSING rows stuck for more than N minutes back to NEW.
+     * Useful after a backend crash during push processing.
+     *
+     * Query param:
+     *   minutes   how old a PROCESSING row must be to be reset (default 10)
+     */
+    @post('/reset-stuck')
+    async resetStuck(
+        @param.query.number('minutes') minutes?: number,
+    ): Promise<unknown> {
+        if (!this.commitEventRepo) {
+            return { error: 'WeblateCommitEventRepository not available' };
+        }
+        const count = await this.commitEventRepo.resetStuckEvents(minutes ?? 10);
+        this.logger.info('[DevController] reset-stuck', { count, minutes: minutes ?? 10 });
+        return { ok: true, reset: count };
     }
 }

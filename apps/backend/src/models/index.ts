@@ -1,5 +1,5 @@
+// src/models/index.ts
 export * from './language.model';
-export * from './user-type-legacy.model';
 export * from './setting.model';
 export * from './translation-export-request.model';
 export * from './feature-flag.model';
@@ -28,4 +28,6 @@ export * from './process-legacy.model';
 export * from './process-full.model';
 export * from './step-full.model';
 export * from './step-link-full.model';
-export * from './process-graph.model';
+
+// Weblate webhook staging model
+export * from './weblate-commit-event.model';
