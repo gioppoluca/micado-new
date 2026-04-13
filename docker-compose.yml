@@ -94,7 +94,13 @@ services:
     build:
       context: ./apps/backend
       dockerfile: Dockerfile
-    depends_on: [db, keycloak]
+    depends_on: 
+      db:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+      umami-init:
+        condition: service_completed_successfully
     environment:
       PORT: ${BACKEND_PORT}
       CORS_ORIGIN: ${CORS_ORIGIN}
@@ -118,6 +124,21 @@ services:
       GITEA_TRANSLATIONS_REPO: translations
       GITEA_TRANSLATIONS_BRANCH: main
       GITEA_TOKEN_FILE: /bootstrap/gitea-weblate.token
+      UMAMI_URL: http://umami:3000
+      UMAMI_ADMIN_USERNAME: ${UMAMI_ADMIN_USERNAME:-admin}
+      UMAMI_ADMIN_PASSWORD: ${UMAMI_ADMIN_PASSWORD:-umami}
+
+      UMAMI_MIGRANTS_WEBSITE_ID: ${UMAMI_MIGRANTS_WEBSITE_ID:-11111111-1111-4111-8111-111111111111}
+      UMAMI_PA_WEBSITE_ID: ${UMAMI_PA_WEBSITE_ID:-22222222-2222-4222-8222-222222222222}
+      UMAMI_NGO_WEBSITE_ID: ${UMAMI_NGO_WEBSITE_ID:-33333333-3333-4333-8333-333333333333}
+
+      UMAMI_MIGRANTS_NAME: ${UMAMI_MIGRANTS_NAME:-Migrants}
+      UMAMI_PA_NAME: ${UMAMI_PA_NAME:-PA}
+      UMAMI_NGO_NAME: ${UMAMI_NGO_NAME:-NGO}
+
+      UMAMI_MIGRANTS_DOMAIN: migrants.${BASE_DOMAIN}
+      UMAMI_PA_DOMAIN: pa.${BASE_DOMAIN}
+      UMAMI_NGO_DOMAIN: ngo.${BASE_DOMAIN}
     labels:
       - traefik.enable=true
       - traefik.http.routers.backend.rule=Host(`api.${BASE_DOMAIN}`)
@@ -352,6 +373,11 @@ services:
       WEBLATE_WEBHOOK_URL: ${WEBLATE_WEBHOOK_URL:-http://backend:3000/api/webhooks/weblate/translation-complete}
       MICADO_TARGET_LANGS: ${MICADO_TARGET_LANGS:-it,fr,ar,de,sq,mk}   # your actual languages
       WEBLATE_GIT_PUSH_REPO: ""                    # empty = same as WEBLATE_GIT_REPO      BOOTSTRAP_DIR: /bootstrap
+      WEBLATE_WEBHOOK_URL_COMMITTED: "http://backend:3000/api/webhooks/weblate/translation-committed"
+      WEBLATE_WEBHOOK_URL_PUSHED:    "http://backend:3000/api/webhooks/weblate/translation-pushed"
+      WEBLATE_WEBHOOK_SECRET: "bWljYWRvMjAyNm1pY2FkbzIwMjZtaWNhZG8yMDI2bWljYWRvMjAyNm1pY2FkbzIwMjY="          # set a base64 secret in production
+      WEBLATE_WEBHOOK_EVENTS_COMMITTED: "17"   # default, no need to set explicitly
+      WEBLATE_WEBHOOK_EVENTS_PUSHED:    "18"   # default, no need to set explicitly
       TOKEN_FILE: /bootstrap/gitea-weblate.token
     volumes:
       - weblate_data:/app/data
