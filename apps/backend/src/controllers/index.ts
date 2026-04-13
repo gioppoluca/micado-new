@@ -19,6 +19,7 @@ export * from './information.controller';
 export * from './processes.controller';
 export * from './user-types.controller';
 export * from './analytics-usage.controller';
+export * from './pa-users-admin.controller';
 
 // ── Webhook receivers ─────────────────────────────────────────────────────────
 //
