@@ -24,6 +24,14 @@ const routes: RouteRecordRaw[] = [
         meta: { requiresAuth: true },
       },
 
+      // ── CSO account management (pa_admin) ──────────────────────────────────
+      {
+        path: 'cso',
+        name: 'cso-management',
+        component: () => import('pages/CsoManagementPage.vue'),
+        meta: { requiresAuth: true, roles: ['pa_admin'] },
+      },
+
       // ── Analytics dashboard ──────────────────────────────────────────────
       {
         path: 'dashboard',

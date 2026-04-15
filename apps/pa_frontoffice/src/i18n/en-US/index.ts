@@ -649,6 +649,9 @@ export default {
   },
   "ngo": {
     "fulluser": "Admin name",
+    "firstAdminLabel": "First administrator account",
+    "create_success": "NGO organisation created successfully.",
+    "no_orgs_found": "No CSO organisations found. Click 'Add new CSO' to create the first one.",
     "addNgo": "Add new CSO",
     "adminMail": "Admin email",
     "ngoName": "CSO name",

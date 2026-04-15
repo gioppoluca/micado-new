@@ -130,7 +130,7 @@
               </div>
             </div>
             <div class="col-12">
-              <q-select v-model="createDialog.form.roles" outlined dense use-chips multiple emit-value map-options
+              <q-select v-model="createDialog.form.roleNames" outlined dense use-chips multiple emit-value map-options
                 :options="roleOptions" :label="t('pa_users.roles')" />
             </div>
             <div class="col-12">
@@ -311,7 +311,7 @@ function createEmptyCreateForm(): CreatePaUserPayload {
     firstName: '',
     lastName: '',
     password: '',
-    roles: [],
+    roleNames: [],
     enabled: true,
   };
 }
@@ -344,13 +344,11 @@ async function loadData(): Promise<void> {
 
     const roleEntries = await Promise.all(
       users.value.map(async (user) => {
+        // getUserRoles() returns string[] directly (backend envelope unwrapped in api layer)
         const currentRoles = await paUsersApi.getUserRoles(user.id);
         return [
           user.id,
-          currentRoles
-            .map((role) => role.name)
-            .filter((role): role is string => !!role)
-            .sort((a, b) => a.localeCompare(b)),
+          [...currentRoles].sort((a, b) => a.localeCompare(b)),
         ] as const;
       }),
     );
@@ -405,7 +403,7 @@ async function submitCreateDialog(): Promise<void> {
   }
 }
 
-function openRolesDialog(user: PaUser): void  {
+function openRolesDialog(user: PaUser): void {
   rolesDialog.user = user;
   rolesDialog.selectedRoles = [...roleNamesForUser(user.id)];
   rolesDialog.open = true;
@@ -423,8 +421,9 @@ async function submitRolesDialog(): Promise<void> {
 
   rolesDialog.saving = true;
   try {
+    // Backend expects { roleNames } to match ReplacePaUserRolesInput
     await paUsersApi.updateUserRoles(rolesDialog.user.id, {
-      roles: [...rolesDialog.selectedRoles].sort((a, b) => a.localeCompare(b)),
+      roleNames: [...rolesDialog.selectedRoles].sort((a, b) => a.localeCompare(b)),
     });
     userRolesMap.value = {
       ...userRolesMap.value,

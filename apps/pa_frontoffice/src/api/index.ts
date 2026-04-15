@@ -134,6 +134,15 @@ export type {
     StagedCommitSummary,
     TranslationMonitorSnapshot,
 } from './translation-monitor.api';
+export { ngoOrganizationsApi } from './ngo-organizations.api';
+export type {
+    NgoOrganization,
+    NgoUser,
+    CreateNgoOrganizationPayload,
+    CreateNgoUserPayload,
+    UpdateNgoUserRolesPayload,
+} from './ngo-organizations.api';
+
 export { paUsersApi } from './pa-users.api';
 export type {
     PaUser,
