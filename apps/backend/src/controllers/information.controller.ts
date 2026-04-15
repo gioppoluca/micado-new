@@ -30,7 +30,7 @@
 
 import { CountSchema, repository } from '@loopback/repository';
 import {
-    del, get, getModelSchemaRef, param,
+    del, get, getModelSchemaRef, HttpErrors, param,
     patch, post, put, requestBody,
 } from '@loopback/rest';
 import { authenticate } from '@loopback/authentication';
@@ -287,6 +287,46 @@ export class InformationController {
         return this.informationFacadeService.getTranslatedForFrontend(
             resolvedDefault, currentlang ?? resolvedDefault, filter,
         );
+    }
+
+    /**
+     * GET /information-migrant/:id
+     *
+     * Fetch a single published information item by its external key.
+     * Public — no authentication required.
+     * Enables direct URL access (bookmark, page refresh, shared link) without
+     * requiring the list to have been fetched first.
+     *
+     * Responds 404 when the item does not exist, has no published revision, or
+     * has no PUBLISHED translation in currentlang / defaultlang.
+     */
+    @authenticate.skip()
+    @get('/information-migrant/{id}', {
+        responses: {
+            '200': {
+                description: 'Single published information item for migrant frontend',
+                content: {
+                    'application/json': {
+                        schema: { type: 'object', additionalProperties: true },
+                    },
+                },
+            },
+            '404': { description: 'Item not found or not published in requested language' },
+        },
+    })
+    async translatedInformationById(
+        @param.path.number('id') id: number,
+        @param.query.string('defaultlang') defaultlang?: string,
+        @param.query.string('currentlang') currentlang?: string,
+    ): Promise<Record<string, unknown>> {
+        const resolvedDefault = await this.resolveDefaultLang(defaultlang);
+        const result = await this.informationFacadeService.getTranslatedItemForFrontend(
+            id, resolvedDefault, currentlang ?? resolvedDefault,
+        );
+        if (!result) {
+            throw new HttpErrors.NotFound(`Information ${id} not found or not published`);
+        }
+        return result;
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

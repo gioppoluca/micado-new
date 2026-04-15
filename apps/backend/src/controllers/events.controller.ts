@@ -37,6 +37,7 @@ import {
     del,
     get,
     getModelSchemaRef,
+    HttpErrors,
     param,
     patch,
     post,
@@ -336,6 +337,46 @@ export class EventsController {
         const filter = this.parseFilter({ categoryId, topicIds, userTypeIds, page, pageSize });
         const resolvedDefault = await this.resolveDefaultLang(defaultlang);
         return this.eventFacadeService.getTranslatedForFrontend(resolvedDefault, currentlang ?? resolvedDefault, filter);
+    }
+
+    /**
+     * GET /events-migrant/:id
+     *
+     * Fetch a single published event by its external key.
+     * Public — no authentication required.
+     * Enables direct URL access (bookmark, page refresh, shared link) without
+     * requiring the list to have been fetched first.
+     *
+     * Responds 404 when the item does not exist, has no published revision, or
+     * has no PUBLISHED translation in currentlang / defaultlang.
+     */
+    @authenticate.skip()
+    @get('/events-migrant/{id}', {
+        responses: {
+            '200': {
+                description: 'Single published event for migrant frontend',
+                content: {
+                    'application/json': {
+                        schema: { type: 'object', additionalProperties: true },
+                    },
+                },
+            },
+            '404': { description: 'Event not found or not published in requested language' },
+        },
+    })
+    async translatedEventById(
+        @param.path.number('id') id: number,
+        @param.query.string('defaultlang') defaultlang?: string,
+        @param.query.string('currentlang') currentlang?: string,
+    ): Promise<Record<string, unknown>> {
+        const resolvedDefault = await this.resolveDefaultLang(defaultlang);
+        const result = await this.eventFacadeService.getTranslatedItemForFrontend(
+            id, resolvedDefault, currentlang ?? resolvedDefault,
+        );
+        if (!result) {
+            throw new HttpErrors.NotFound(`Event ${id} not found or not published`);
+        }
+        return result;
     }
 
     // ── Query param helpers ───────────────────────────────────────────────────

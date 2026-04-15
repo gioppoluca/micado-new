@@ -546,6 +546,70 @@ export class EventFacadeService {
         return result.slice(offset, offset + pageSize);
     }
 
+    /**
+     * Fetch a single published event by its external key (legacy numeric id).
+     * Used by GET /events-migrant/:id — direct URL access and page refresh support.
+     *
+     * Returns null when:
+     *   • the item does not exist
+     *   • the item has no published revision
+     *   • no PUBLISHED translation exists in currentLang or defaultLang
+     */
+    async getTranslatedItemForFrontend(
+        id: number,
+        defaultLang: string,
+        currentLang: string,
+    ): Promise<Record<string, unknown> | null> {
+        this.logger.info('[EventFacadeService.getTranslatedItemForFrontend]', { id, defaultLang, currentLang });
+
+        const item = await this.contentItemRepository.findOne({
+            where: { typeCode: EVENT_CODE, externalKey: String(id) },
+        });
+        if (!item?.publishedRevisionId) return null;
+
+        const revision = await this.contentRevisionRepository
+            .findById(item.publishedRevisionId).catch(() => null);
+        if (!revision) return null;
+
+        const relations = await this.contentItemRelationRepository.find({ where: { childItemId: item.id! } });
+        const topicIds = await this.resolveExternalKeys(
+            relations.filter(r => r.relationType === REL_TOPIC).map(r => r.parentItemId),
+        );
+        const userTypeIds = await this.resolveExternalKeys(
+            relations.filter(r => r.relationType === REL_USER_TYPE).map(r => r.parentItemId),
+        );
+        const catRel = relations.find(r => r.relationType === REL_CATEGORY);
+        const catItem = catRel
+            ? await this.contentItemRepository.findById(catRel.parentItemId).catch(() => null)
+            : null;
+        const categoryId = catItem ? Number(catItem.externalKey) : null;
+
+        const tr =
+            (await this.contentRevisionTranslationRepository.findOne({
+                where: { revisionId: item.publishedRevisionId, lang: currentLang, tStatus: 'PUBLISHED' },
+            })) ??
+            (await this.contentRevisionTranslationRepository.findOne({
+                where: { revisionId: item.publishedRevisionId, lang: defaultLang, tStatus: 'PUBLISHED' },
+            }));
+        if (!tr) return null;
+
+        const dataExtra = revision.dataExtra as Partial<EventDataExtra> | undefined;
+        return {
+            id: Number(item.externalKey),
+            title: tr.title,
+            description: tr.description,
+            lang: tr.lang,
+            startDate: dataExtra?.startDate,
+            endDate: dataExtra?.endDate,
+            location: dataExtra?.location,
+            cost: dataExtra?.cost ?? null,
+            isFree: dataExtra?.isFree ?? true,
+            categoryId,
+            topicIds,
+            userTypeIds,
+        };
+    }
+
     // ── Translation workflow ──────────────────────────────────────────────────
 
     protected async startTranslationWorkflow(

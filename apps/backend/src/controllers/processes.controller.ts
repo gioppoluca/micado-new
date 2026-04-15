@@ -38,7 +38,7 @@
 
 import { CountSchema, repository } from '@loopback/repository';
 import {
-    del, get, getModelSchemaRef, param,
+    del, get, getModelSchemaRef, HttpErrors, param,
     patch, post, put, requestBody,
 } from '@loopback/rest';
 import { authenticate } from '@loopback/authentication';
@@ -387,6 +387,46 @@ export class ProcessesController {
         const filter = this.parseFilter({ topicIds, userTypeIds, page, pageSize });
         const resolvedDefault = await this.resolveDefaultLang(defaultlang);
         return this.processFacadeService.getTranslatedForFrontend(resolvedDefault, currentlang ?? resolvedDefault, filter);
+    }
+
+    /**
+     * GET /processes-migrant/:id
+     *
+     * Fetch a single published process by its external key.
+     * Public — no authentication required.
+     * Enables direct URL access (bookmark, page refresh, shared link) without
+     * requiring the list to have been fetched first.
+     *
+     * Responds 404 when the item does not exist, has no published revision, or
+     * has no PUBLISHED translation in currentlang / defaultlang.
+     */
+    @authenticate.skip()
+    @get('/processes-migrant/{id}', {
+        responses: {
+            '200': {
+                description: 'Single published process for migrant frontend',
+                content: {
+                    'application/json': {
+                        schema: { type: 'object', additionalProperties: true },
+                    },
+                },
+            },
+            '404': { description: 'Process not found or not published in requested language' },
+        },
+    })
+    async translatedProcessById(
+        @param.path.number('id') id: number,
+        @param.query.string('defaultlang') defaultlang?: string,
+        @param.query.string('currentlang') currentlang?: string,
+    ): Promise<Record<string, unknown>> {
+        const resolvedDefault = await this.resolveDefaultLang(defaultlang);
+        const result = await this.processFacadeService.getTranslatedItemForFrontend(
+            id, resolvedDefault, currentlang ?? resolvedDefault,
+        );
+        if (!result) {
+            throw new HttpErrors.NotFound(`Process ${id} not found or not published`);
+        }
+        return result;
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

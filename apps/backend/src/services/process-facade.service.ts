@@ -478,6 +478,54 @@ export class ProcessFacadeService {
         return result.slice(offset, offset + pageSize);
     }
 
+    /**
+     * Fetch a single published process by its external key (legacy numeric id).
+     * Used by GET /processes-migrant/:id — direct URL access and page refresh support.
+     *
+     * Returns null when:
+     *   • the item does not exist
+     *   • the item has no published revision
+     *   • no PUBLISHED translation exists in currentLang or defaultLang
+     */
+    async getTranslatedItemForFrontend(
+        id: number,
+        defaultLang: string,
+        currentLang: string,
+    ): Promise<Record<string, unknown> | null> {
+        this.logger.info('[ProcessFacadeService.getTranslatedItemForFrontend]', { id, defaultLang, currentLang });
+
+        const item = await this.contentItemRepository.findOne({
+            where: { typeCode: PROCESS_CODE, externalKey: String(id) },
+        });
+        if (!item?.publishedRevisionId) return null;
+
+        const relations = await this.contentItemRelationRepository.find({ where: { childItemId: item.id! } });
+        const topicIds = await this.resolveExternalKeys(
+            relations.filter(r => r.relationType === REL_TOPIC).map(r => r.parentItemId),
+        );
+        const userTypeIds = await this.resolveExternalKeys(
+            relations.filter(r => r.relationType === REL_USER_TYPE).map(r => r.parentItemId),
+        );
+
+        const tr =
+            (await this.contentRevisionTranslationRepository.findOne({
+                where: { revisionId: item.publishedRevisionId, lang: currentLang, tStatus: 'PUBLISHED' },
+            })) ??
+            (await this.contentRevisionTranslationRepository.findOne({
+                where: { revisionId: item.publishedRevisionId, lang: defaultLang, tStatus: 'PUBLISHED' },
+            }));
+        if (!tr) return null;
+
+        return {
+            id: Number(item.externalKey),
+            title: tr.title,
+            description: tr.description,
+            lang: tr.lang,
+            topicIds,
+            userTypeIds,
+        };
+    }
+
     // ════════════════════════════════════════════════════════════════════════════
     // GRAPH MANAGEMENT
     // ════════════════════════════════════════════════════════════════════════════
