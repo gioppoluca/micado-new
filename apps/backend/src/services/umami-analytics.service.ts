@@ -176,21 +176,22 @@ export class UmamiAnalyticsService {
       }
     }
 
+    // Env var names must match docker-compose: UMAMI_{APP}_WEBSITE_ID / UMAMI_{APP}_NAME
     const apps: AnalyticsAppDescriptor[] = [
       {
         key: 'migrants',
-        label: process.env.UMAMI_APP_LABEL_MIGRANTS ?? 'Migrants',
-        websiteId: process.env.UMAMI_WEBSITE_ID_MIGRANTS ?? '',
+        label: process.env.UMAMI_MIGRANTS_NAME ?? 'Migrants',
+        websiteId: process.env.UMAMI_MIGRANTS_WEBSITE_ID ?? '',
       },
       {
         key: 'pa',
-        label: process.env.UMAMI_APP_LABEL_PA ?? 'PA Frontoffice',
-        websiteId: process.env.UMAMI_WEBSITE_ID_PA ?? '',
+        label: process.env.UMAMI_PA_NAME ?? 'PA Frontoffice',
+        websiteId: process.env.UMAMI_PA_WEBSITE_ID ?? '',
       },
       {
         key: 'ngo',
-        label: process.env.UMAMI_APP_LABEL_NGO ?? 'NGO Frontoffice',
-        websiteId: process.env.UMAMI_WEBSITE_ID_NGO ?? '',
+        label: process.env.UMAMI_NGO_NAME ?? 'NGO Frontoffice',
+        websiteId: process.env.UMAMI_NGO_WEBSITE_ID ?? '',
       },
     ].filter(item => item.websiteId);
 
@@ -297,8 +298,9 @@ export class UmamiAnalyticsService {
     }
 
     const baseUrl = this.getBaseUrl();
-    const username = process.env.UMAMI_USERNAME;
-    const password = process.env.UMAMI_PASSWORD;
+    // Credentials env var names match docker-compose: UMAMI_URL / UMAMI_ADMIN_USERNAME / UMAMI_ADMIN_PASSWORD
+    const username = process.env.UMAMI_ADMIN_USERNAME;
+    const password = process.env.UMAMI_ADMIN_PASSWORD;
 
     if (!username || !password) {
       throw new HttpErrors.InternalServerError('Umami credentials are not configured');
@@ -336,9 +338,10 @@ export class UmamiAnalyticsService {
   }
 
   protected getBaseUrl(): string {
-    const baseUrl = process.env.UMAMI_BASE_URL?.replace(/\/$/, '');
+    // docker-compose exposes the Umami internal URL as UMAMI_URL
+    const baseUrl = process.env.UMAMI_URL?.replace(/\/$/, '');
     if (!baseUrl) {
-      throw new HttpErrors.InternalServerError('UMAMI_BASE_URL is not configured');
+      throw new HttpErrors.InternalServerError('UMAMI_URL is not configured');
     }
     return baseUrl;
   }
