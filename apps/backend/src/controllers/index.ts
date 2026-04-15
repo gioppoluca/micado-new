@@ -4,6 +4,9 @@
 // The boot artifact (bootOptions.controllers) discovers *.controller.js
 // from the compiled dist/, but this barrel allows clean explicit imports.
 //
+
+import exp from 'constants';
+
 // ── Content-type controllers (PA / NGO back-office) ──────────────────────────
 export * from './ping.controller';
 export * from './public-settings.controller';
@@ -20,6 +23,7 @@ export * from './processes.controller';
 export * from './user-types.controller';
 export * from './analytics-usage.controller';
 export * from './pa-users-admin.controller';
+export * from './ngo-organizations-admin.controller';
 
 // ── Webhook receivers ─────────────────────────────────────────────────────────
 //
