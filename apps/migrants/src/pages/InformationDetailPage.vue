@@ -5,14 +5,16 @@
  * Detail view for a single published information item.
  *
  * ── Data strategy ─────────────────────────────────────────────────────────────
- *   1. Cache hit  — look up id in contentStore.items (loaded by HomePage)
- *   2. Cache miss — call informationApi.listForMigrant() page=1&pageSize=100
- *      and find by id (same strategy as legacy app)
- *   If still not found → 404.
+ *   1. Cache hit  — look up id in contentStore.items (populated by HomePage)
+ *   2. Cache miss — call informationApi.getById(id) directly (supports direct
+ *      URL access, bookmarks, page refresh without the list being loaded first)
+ *   If 404 → redirect to /home.
  *
  * ── Fix vs previous version ───────────────────────────────────────────────────
- *   • retry button now passes itemId.value (number), not the ComputedRef
- *   • `not-found` replaced with catchAll route name to avoid missing-route error
+ *   • getById() replaces the list-scan fallback (list+pageSize:100+find) which
+ *     silently failed for items beyond position 100 and on direct URL loads.
+ *   • loading.value cleared via finally — no early-return before finally block
+ *     (previously the cache-hit branch returned early, leaving the spinner on).
  */
 
 import { ref, computed, onMounted, watch } from 'vue';
@@ -59,7 +61,7 @@ async function load(id: number): Promise<void> {
     item.value = null;
 
     try {
-        // 1 — cache
+        // 1 — in-memory cache (populated by HomePage list fetch)
         const cached = contentStore.items.find(i => i.type === 'info' && i.id === id);
         if (cached) {
             item.value = {
@@ -68,22 +70,20 @@ async function load(id: number): Promise<void> {
                 topicIds: cached.topicIds, userTypeIds: [],
             };
             logger.info('[InformationDetailPage] cache hit', { id });
-            return;
+            // ↑ loading cleared in finally — do NOT early-return before finally
+        } else {
+            // 2 — direct single-item fetch (covers direct URL / bookmark / refresh)
+            logger.info('[InformationDetailPage] cache miss, fetching by id', { id });
+            item.value = await informationApi.getById(id, getLangParams());
         }
-
-        // 2 — API fallback
-        logger.info('[InformationDetailPage] cache miss, fetching', { id });
-        const list = await informationApi.listForMigrant({
-            ...getLangParams(), page: 1, pageSize: 100,
-        });
-        const found = list.find(i => i.id === id) ?? null;
-        if (!found) {
+    } catch (e: unknown) {
+        // 404 from getById → item not found / not published
+        const status = (e as { status?: number })?.status;
+        if (status === 404) {
             logger.warn('[InformationDetailPage] not found', { id });
-            void router.replace('/home');
+            void router.replace({ name: 'home' });
             return;
         }
-        item.value = found;
-    } catch (e) {
         error.value = e instanceof Error ? e.message : 'Unexpected error';
         logger.error('[InformationDetailPage] load failed', { id, error: error.value });
     } finally {

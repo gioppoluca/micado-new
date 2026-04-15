@@ -78,6 +78,17 @@ export const informationApi = {
         logger.info('[information.api] listForMigrant', params);
         return apiGet<MigrantInformation[]>('/information-migrant', { params });
     },
+
+    /**
+     * Fetch a single published information item by its external key (numeric id).
+     * Unauthenticated — enables direct URL access (bookmark, refresh, shared link)
+     * without requiring the list to be loaded first.
+     * Throws on 404 if the item is not found or has no published translation.
+     */
+    async getById(id: number, params: Pick<InformationMigrantParams, 'defaultlang' | 'currentlang'>): Promise<MigrantInformation> {
+        logger.info('[information.api] getById', { id, ...params });
+        return apiGet<MigrantInformation>(`/information-migrant/${id}`, { params });
+    },
 };
 
 // ─── Mock handlers ────────────────────────────────────────────────────────────
@@ -146,5 +157,18 @@ export function registerInformationMocks(mock: MockRegistry): void {
         logger.debug('[mock] GET /information-migrant', { count: paged.length, page, pageSize });
         return [200, paged];
     });
+
+    // Single-item endpoint — matched by regex to capture the numeric id segment
+    mock.onGet(/^\/information-migrant\/(\d+)$/).reply((config: MockRequestConfig): MockReplyTuple => {
+        const id = Number(config.url?.split('/').pop());
+        const found = MOCK_INFORMATION.find(i => i.id === id);
+        if (!found) {
+            logger.debug('[mock] GET /information-migrant/:id — not found', { id });
+            return [404, { error: { message: `Information ${id} not found or not published` } }];
+        }
+        logger.debug('[mock] GET /information-migrant/:id', { id });
+        return [200, found];
+    });
+
     logger.debug('[mock] information handlers registered');
 }

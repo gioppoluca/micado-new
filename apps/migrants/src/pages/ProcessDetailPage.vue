@@ -63,7 +63,7 @@ async function load(id: number): Promise<void> {
     item.value = null;
 
     try {
-        // 1 — cache hit
+        // 1 — in-memory cache (populated by HomePage list fetch)
         const cached = contentStore.items.find(i => i.type === 'process' && i.id === id);
         if (cached) {
             item.value = {
@@ -71,22 +71,20 @@ async function load(id: number): Promise<void> {
                 lang: cached.lang, topicIds: cached.topicIds, userTypeIds: [],
             };
             logger.info('[ProcessDetailPage] cache hit', { id });
-            return;
+            // ↑ loading cleared in finally — do NOT early-return before finally
+        } else {
+            // 2 — direct single-item fetch (covers direct URL / bookmark / refresh)
+            logger.info('[ProcessDetailPage] cache miss, fetching by id', { id });
+            item.value = await processApi.getById(id, getLangParams());
         }
-
-        // 2 — API fallback
-        logger.info('[ProcessDetailPage] cache miss, fetching', { id });
-        const list = await processApi.listForMigrant({
-            ...getLangParams(), page: 1, pageSize: 100,
-        });
-        const found = list.find(i => i.id === id) ?? null;
-        if (!found) {
+    } catch (e: unknown) {
+        // 404 from getById → item not found / not published
+        const status = (e as { status?: number })?.status;
+        if (status === 404) {
             logger.warn('[ProcessDetailPage] not found', { id });
-            void router.replace('/home');
+            void router.replace({ name: 'home' });
             return;
         }
-        item.value = found;
-    } catch (e) {
         error.value = e instanceof Error ? e.message : 'Unexpected error';
         logger.error('[ProcessDetailPage] load failed', { id, error: error.value });
     } finally {

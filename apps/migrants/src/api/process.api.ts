@@ -75,6 +75,17 @@ export const processApi = {
         logger.info('[process.api] listForMigrant', params);
         return apiGet<MigrantProcess[]>('/processes-migrant', { params });
     },
+
+    /**
+     * Fetch a single published process by its external key (numeric id).
+     * Unauthenticated — enables direct URL access (bookmark, refresh, shared link)
+     * without requiring the list to be loaded first.
+     * Throws on 404 if the item is not found or has no published translation.
+     */
+    async getById(id: number, params: Pick<ProcessMigrantParams, 'defaultlang' | 'currentlang'>): Promise<MigrantProcess> {
+        logger.info('[process.api] getById', { id, ...params });
+        return apiGet<MigrantProcess>(`/processes-migrant/${id}`, { params });
+    },
 };
 
 // ─── Mock handlers ────────────────────────────────────────────────────────────
@@ -133,5 +144,18 @@ export function registerProcessMocks(mock: MockRegistry): void {
         logger.debug('[mock] GET /processes-migrant', { count: paged.length, page, pageSize });
         return [200, paged];
     });
+
+    // Single-item endpoint — matched by regex to capture the numeric id segment
+    mock.onGet(/^\/processes-migrant\/(\d+)$/).reply((config: MockRequestConfig): MockReplyTuple => {
+        const id = Number(config.url?.split('/').pop());
+        const found = MOCK_PROCESSES.find(p => p.id === id);
+        if (!found) {
+            logger.debug('[mock] GET /processes-migrant/:id — not found', { id });
+            return [404, { error: { message: `Process ${id} not found or not published` } }];
+        }
+        logger.debug('[mock] GET /processes-migrant/:id', { id });
+        return [200, found];
+    });
+
     logger.debug('[mock] process handlers registered');
 }

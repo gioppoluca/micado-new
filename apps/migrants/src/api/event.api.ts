@@ -81,6 +81,17 @@ export const eventApi = {
         logger.info('[event.api] listForMigrant', params);
         return apiGet<MigrantEvent[]>('/events-migrant', { params });
     },
+
+    /**
+     * Fetch a single published event by its external key (numeric id).
+     * Unauthenticated — enables direct URL access (bookmark, refresh, shared link)
+     * without requiring the list to be loaded first.
+     * Throws on 404 if the item is not found or has no published translation.
+     */
+    async getById(id: number, params: Pick<EventMigrantParams, 'defaultlang' | 'currentlang'>): Promise<MigrantEvent> {
+        logger.info('[event.api] getById', { id, ...params });
+        return apiGet<MigrantEvent>(`/events-migrant/${id}`, { params });
+    },
 };
 
 // ─── Mock handlers ────────────────────────────────────────────────────────────
@@ -150,5 +161,18 @@ export function registerEventMocks(mock: MockRegistry): void {
         logger.debug('[mock] GET /events-migrant', { count: paged.length, page, pageSize });
         return [200, paged];
     });
+
+    // Single-item endpoint — matched by regex to capture the numeric id segment
+    mock.onGet(/^\/events-migrant\/(\d+)$/).reply((config: MockRequestConfig): MockReplyTuple => {
+        const id = Number(config.url?.split('/').pop());
+        const found = MOCK_EVENTS.find(e => e.id === id);
+        if (!found) {
+            logger.debug('[mock] GET /events-migrant/:id — not found', { id });
+            return [404, { error: { message: `Event ${id} not found or not published` } }];
+        }
+        logger.debug('[mock] GET /events-migrant/:id', { id });
+        return [200, found];
+    });
+
     logger.debug('[mock] event handlers registered');
 }
