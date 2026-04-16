@@ -4,13 +4,10 @@
  * Boot file that installs the mock adapter and registers all API module
  * handlers when VITE_API_MOCK=true.
  *
- * IMPORTANT: Add 'mock' as the FIRST entry in quasar.config.ts → boot[]
- * so the adapter is installed before any component or store imports an API module:
+ * IMPORTANT: 'mock' must be listed before all other boots in quasar.config.ts
+ * so the adapter is installed before any component or store imports an API module.
  *
- *   boot: ['mock', 'i18n', 'axios', 'keycloak', 'router-guard'],
- *
- * When VITE_API_MOCK is not 'true', this boot file is a no-op and adds
- * zero overhead to the production bundle (dynamic imports are tree-shaken).
+ * When VITE_API_MOCK is not 'true', this boot file is a no-op.
  */
 
 import { defineBoot } from '#q-app/wrappers';
@@ -23,16 +20,18 @@ export default defineBoot(async () => {
         return;
     }
 
-    // installMockAdapter is synchronous — no external package to load.
     const adapter = installMockAdapter();
     if (!adapter) return;
 
-    // Register handlers from each API module
+    // Register handlers for modules present in ngo_frontoffice.
+    // Add new modules here as they are created.
     const { registerLanguageMocks } = await import('src/api/language.api');
     const { registerSettingsMocks } = await import('src/api/settings.api');
+    const { registerFeaturesMocks } = await import('src/api/features.api');
 
     registerLanguageMocks(adapter);
     registerSettingsMocks(adapter);
+    registerFeaturesMocks(adapter);
 
     logger.warn('[boot:mock] all mock handlers registered');
 });

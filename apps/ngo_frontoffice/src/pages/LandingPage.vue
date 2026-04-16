@@ -4,7 +4,7 @@
         <!-- ── Not authenticated ─────────────────────────────────────────────── -->
         <div v-if="!auth.authenticated" class="column items-center justify-center" style="min-height: 60vh;">
             <q-icon name="translate" size="4rem" color="primary" class="q-mb-md" />
-            <div class="text-h5 q-mb-sm">Welcome to Micado NGO</div>
+            <div class="text-h5 q-mb-sm">Welcome to Micado PA</div>
             <div class="text-body2 text-grey-7 q-mb-lg">Please log in to continue</div>
             <q-btn color="primary" icon="login" label="Login with Keycloak" unelevated rounded size="lg"
                 :loading="loginLoading" @click="doLogin" />

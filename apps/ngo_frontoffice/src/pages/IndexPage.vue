@@ -1,43 +1,41 @@
 <template>
-  <q-page class="row items-center justify-evenly">
-    <example-component
-      title="Example component"
-      active
-      :todos="todos"
-      :meta="meta"
-    ></example-component>
+  <q-page padding>
+    <div class="column items-center justify-center" style="min-height: 60vh;">
+      <q-icon name="supervisor_account" size="4rem" color="primary" class="q-mb-md" />
+      <div class="text-h5 q-mb-sm">Welcome to Micado NGO</div>
+      <div class="text-body2 text-grey-7 q-mb-lg">
+        NGO / CSO back-office for the Micado platform.
+      </div>
+      <q-btn
+        v-if="!auth.authenticated"
+        color="primary"
+        icon="login"
+        label="Login with Keycloak"
+        unelevated
+        rounded
+        size="lg"
+        @click="doLogin"
+      />
+      <q-btn
+        v-else
+        color="secondary"
+        icon="language"
+        label="Select language"
+        unelevated
+        rounded
+        size="lg"
+        :to="{ name: 'languages' }"
+      />
+    </div>
   </q-page>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
-import type { Todo, Meta } from 'components/models';
-import ExampleComponent from 'components/ExampleComponent.vue';
+import { useAuthStore } from 'src/stores/auth-store';
 
-const todos = ref<Todo[]>([
-  {
-    id: 1,
-    content: 'ct1',
-  },
-  {
-    id: 2,
-    content: 'ct2',
-  },
-  {
-    id: 3,
-    content: 'ct3',
-  },
-  {
-    id: 4,
-    content: 'ct4',
-  },
-  {
-    id: 5,
-    content: 'ct5',
-  },
-]);
+const auth = useAuthStore();
 
-const meta = ref<Meta>({
-  totalCount: 1200,
-});
+async function doLogin() {
+  await auth.login(window.location.href);
+}
 </script>

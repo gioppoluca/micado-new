@@ -2,12 +2,6 @@
  * src/api/index.ts
  *
  * Barrel export — import everything from 'src/api' in page/store files.
- *
- * Examples:
- *   import { languageApi }            from 'src/api';
- *   import { settingsApi }            from 'src/api';
- *   import type { Language }          from 'src/api';
- *   import { isApiError, type ApiError } from 'src/api';
  */
 
 export { apiClient, isApiError } from './client';
@@ -25,3 +19,13 @@ export { settingsApi } from './settings.api';
 export type { PublicSetting } from './settings.api';
 
 export { isMockEnabled } from './mock';
+export { featuresApi } from './features.api';
+export type { FeatureFlag, PatchFeatureFlagPayload } from './features.api';
+
+// ── Micado entities (required by rich-text editor mention system) ──────────────
+export { micadoEntitiesApi } from './micado-entities.api';
+export type {
+    MicadoEntity,
+    EntityTranslation,
+    EntityListParams,
+} from './micado-entities.api';

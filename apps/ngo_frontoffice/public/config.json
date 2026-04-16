@@ -1,0 +1,12 @@
+{
+  "_comment": "DEVELOPMENT DEFAULTS — override in production via docker-entrypoint.sh",
+  "apiUrl": "http://api.localhost",
+  "keycloakUrl": "http://auth.localhost",
+  "keycloakRealm": "ngo_frontoffice",
+  "keycloakClientId": "ngo_frontoffice",
+  "migrantDomain": "localhost",
+  "titleLimit": 30,
+  "umamiUrl": "http://analytics.localhost",
+  "umamiWebsiteId": "33333333-3333-4333-8333-333333333333",
+  "umamiDomains": "ngo.localhost"
+}

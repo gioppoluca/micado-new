@@ -5,30 +5,50 @@ const routes: RouteRecordRaw[] = [
     path: '/',
     component: () => import('layouts/MainLayout.vue'),
     children: [
-      // public home
-      { path: '', component: () => import('pages/IndexPage.vue') },
+      // ── Public home ──────────────────────────────────────────────────────
+      { path: '', name: 'home', component: () => import('pages/IndexPage.vue') },
 
-      // landing page: post-login language selection (auth required)
-      { path: 'languages', component: () => import('pages/LandingPage.vue'), meta: { requiresAuth: true } },
+      // ── Post-login language selection ────────────────────────────────────
+      {
+        path: 'languages',
+        name: 'languages',
+        component: () => import('pages/LandingPage.vue'),
+        meta: { requiresAuth: true },
+      },
 
-      // protected profile
-      { path: 'profile', component: () => import('pages/ProfilePage.vue'), meta: { requiresAuth: true } },
+      // ── Profile ──────────────────────────────────────────────────────────
+      {
+        path: 'profile',
+        name: 'profile',
+        component: () => import('pages/ProfilePage.vue'),
+        meta: { requiresAuth: true },
+      },
 
-      // public settings bootstrap example
-      { path: 'settings', component: () => import('pages/SettingsPage.vue') },
+      // ── Settings section ─────────────────────────────────────────────────
+      // Placeholder: NGO settings routes will be added here as pages are migrated.
+      {
+        path: 'data_settings',
+        meta: { requiresAuth: true },
+        children: [
+          {
+            path: '',
+            redirect: { name: 'settings-profile' },
+          },
+          {
+            path: 'profile_settings',
+            name: 'settings-profile',
+            component: () => import('pages/SettingsPage.vue'),
+          },
+        ],
+      },
     ],
   },
 
-  // login route (optional; protected pages auto-redirect to Keycloak)
-  {
-    path: '/login',
-    component: () => import('pages/LoginPage.vue'),
-  },
+  // ── Login (optional — protected pages auto-redirect to Keycloak) ─────────
+  { path: '/login', name: 'login', component: () => import('pages/LoginPage.vue') },
 
-  {
-    path: '/:catchAll(.*)*',
-    component: () => import('pages/ErrorNotFound.vue'),
-  },
+  // ── 404 ──────────────────────────────────────────────────────────────────
+  { path: '/:catchAll(.*)*', name: 'not-found', component: () => import('pages/ErrorNotFound.vue') },
 ];
 
 export default routes;

@@ -55,6 +55,16 @@ export const languageApi = {
     },
 
     /**
+     * Fetch the platform default language (is_default = true).
+     * Single source of truth — not the settings table.
+     * Auth: public.
+     */
+    async getDefault(): Promise<Language> {
+        logger.info('[language.api] getDefault');
+        return apiGet<Language>('/languages/default');
+    },
+
+    /**
      * Fetch a single language by its lang key.
      * Auth: migrant_user, pa_editor, ngo_editor, admin
      */
@@ -133,6 +143,15 @@ export function registerLanguageMocks(mock: MockRegistry): void {
 
         logger.debug('[mock] GET /languages', { count: result.length });
         return [200, result];
+    });
+
+    // GET /languages/default — registered before /:lang so axios-mock-adapter
+    // matches the exact string before the wildcard regex.
+    mock.onGet('/languages/default').reply((): MockReplyTuple => {
+        const found = MOCK_LANGUAGES.find(l => l.isDefault);
+        if (!found) return [404, { error: 'No default language configured' }];
+        logger.debug('[mock] GET /languages/default', { lang: found.lang });
+        return [200, found];
     });
 
     // GET /languages/:lang
