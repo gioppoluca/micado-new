@@ -150,3 +150,15 @@ export type {
     CreatePaUserPayload,
     UpdatePaUserRolesPayload,
 } from './pa-users.api';
+
+// ── Migrant users + intervention plans ───────────────────────────────────────
+export { migrantUsersApi } from './migrant-users.api';
+export type {
+    MigrantUser,
+    InterventionPlan,
+    InterventionPlanItem,
+    CreatePlanPayload,
+    UpdatePlanPayload,
+    CreatePlanItemPayload,
+    UpdatePlanItemPayload,
+} from './migrant-users.api';

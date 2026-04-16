@@ -24,6 +24,28 @@ const routes: RouteRecordRaw[] = [
         meta: { requiresAuth: true },
       },
 
+      // ── Migrant account management ─────────────────────────────────────────
+      {
+        path: 'migrant',
+        name: 'migrant-management',
+        component: () => import('pages/MigrantManagementPage.vue'),
+        meta: { requiresAuth: true, roles: ['pa_admin', 'pa_operator', 'pa_viewer'] },
+      },
+      // Intervention plans for a specific migrant
+      {
+        path: 'migrant/:migrantId/plans',
+        name: 'migrant-plans',
+        component: () => import('pages/MigrantPlansPage.vue'),
+        meta: { requiresAuth: true, roles: ['pa_admin', 'pa_operator', 'pa_viewer'] },
+      },
+      // Migrant profile & documents
+      {
+        path: 'migrant/:migrantId/profile',
+        name: 'migrant-profile',
+        component: () => import('pages/MigrantProfilePage.vue'),
+        meta: { requiresAuth: true, roles: ['pa_admin', 'pa_operator', 'pa_viewer'] },
+      },
+
       // ── CSO account management (pa_admin) ──────────────────────────────────
       {
         path: 'cso',
