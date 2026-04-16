@@ -28,6 +28,9 @@ export * from './process-legacy.model';
 export * from './process-full.model';
 export * from './step-full.model';
 export * from './step-link-full.model';
+export * from './migrant-profile.model';
+export * from './intervention-plan.model';
+export * from './intervention-plan-item.model';
 
 // Weblate webhook staging model
 export * from './weblate-commit-event.model';

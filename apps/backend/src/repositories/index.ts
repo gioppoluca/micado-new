@@ -12,3 +12,8 @@ export * from './content-item-relation.repository';
 
 // Weblate webhook staging table
 export * from './weblate-commit-event.repository';
+
+// Migrant operational repositories (non-CRT)
+export * from './migrant-profile.repository';
+export * from './intervention-plan-item.repository';
+export * from './intervention-plan.repository';
