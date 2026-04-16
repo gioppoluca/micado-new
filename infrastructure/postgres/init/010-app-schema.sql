@@ -398,7 +398,7 @@ CREATE INDEX IF NOT EXISTS idx_content_item_relation_extra_gin
 -- worker_hash is a random UUID generated once per push-handler invocation.
 -- Rows are deleted by worker_hash so only the rows THIS handler claimed are removed.
 
-CREATE TABLE IF NOT EXISTS micado.weblate_commit_event (
+CREATE TABLE IF NOT EXISTS weblate_commit_event (
     id              UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
 
     -- Raw Weblate webhook payload (full body as received)
@@ -423,16 +423,117 @@ CREATE TABLE IF NOT EXISTS micado.weblate_commit_event (
 
 -- Index for the push handler's SELECT FOR UPDATE SKIP LOCKED (claims by status only)
 CREATE INDEX IF NOT EXISTS idx_weblate_commit_event_status
-    ON micado.weblate_commit_event (status)
+    ON weblate_commit_event (status)
     WHERE status = 'NEW';
 
 -- Index on (component, lang) for diagnostics and monitoring queries
 CREATE INDEX IF NOT EXISTS idx_weblate_commit_event_component_lang
-    ON micado.weblate_commit_event (component, lang);
+    ON weblate_commit_event (component, lang);
 
 -- Index for time-based cleanup / monitoring
 CREATE INDEX IF NOT EXISTS idx_weblate_commit_event_received_at
-    ON micado.weblate_commit_event (received_at);
+    ON weblate_commit_event (received_at);
 
-COMMENT ON TABLE micado.weblate_commit_event IS
+COMMENT ON TABLE weblate_commit_event IS
     'Staging table for Weblate COMMIT events awaiting the next PUSH event to process.';
+
+
+-- =============================================================================
+-- Migration: Migrant profile anchor + Intervention Plan operational tables
+-- Schema: micado
+--
+-- Design decisions:
+--   - migrant_profile.keycloak_id is the UUID from the Keycloak migrants realm.
+--     It is the stable anchor for all migrant-related operational data.
+--   - intervention_plan_item.intervention_type_id is an optional FK to
+--     content_item (type = INTERVENTION_TYPE). NULL means ad-hoc item.
+--   - No revision/translation cycle — these are operational records managed
+--     by PA operators at the desk, not translatable content.
+--   - created_by / validated_by are JSONB ActorStamps (self-contained audit).
+-- =============================================================================
+
+-- ── 1. Migrant profile anchor ────────────────────────────────────────────────
+--
+-- Thin anchor row: the actual user data lives in Keycloak.
+-- Used as the FK target for plans, documents, and any future migrant data.
+-- Created lazily on first PA action (auto-upsert in service layer).
+
+CREATE TABLE IF NOT EXISTS migrant_profile (
+  keycloak_id   UUID         PRIMARY KEY,
+  realm         VARCHAR(100) NOT NULL DEFAULT 'migrants',
+  notes         TEXT,                          -- PA internal notes (not shown to migrant)
+  created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+COMMENT ON TABLE migrant_profile IS
+  'Thin anchor for migrant users. Primary key = Keycloak UUID from the migrants realm. '
+  'The actual identity data (name, email) stays in Keycloak; this row exists only to '
+  'anchor operational data (plans, documents) without duplicating PII.';
+
+-- ── 2. Intervention plan (header) ────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS intervention_plan (
+  id            UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  migrant_id    UUID         NOT NULL
+                               REFERENCES migrant_profile(keycloak_id)
+                               ON DELETE CASCADE,
+  title         VARCHAR(200),
+  case_manager  VARCHAR(100),                 -- PA user display name or id
+  start_date    DATE,
+  end_date      DATE,
+  completed     BOOLEAN      NOT NULL DEFAULT FALSE,
+  notes         TEXT,
+  created_by    JSONB,                        -- ActorStamp {sub, username, name, realm}
+  created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_intervention_plan_migrant_id
+  ON intervention_plan (migrant_id);
+
+COMMENT ON TABLE intervention_plan IS
+  'Individual integration plan assigned to a migrant by a PA social assistant. '
+  'Not translatable — created and managed at the desk in the contact language.';
+
+-- ── 3. Intervention plan item (line) ────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS intervention_plan_item (
+  id                      UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  plan_id                 UUID         NOT NULL
+                                         REFERENCES intervention_plan(id)
+                                         ON DELETE CASCADE,
+  -- Optional FK to the catalogue (content_item with type = INTERVENTION_TYPE).
+  -- NULL = ad-hoc item written by the PA.
+  intervention_type_id    UUID         REFERENCES content_item(id)
+                                         ON DELETE SET NULL,
+  title                   VARCHAR(200),
+  description             TEXT,
+  assigned_date           DATE,
+  due_date                DATE,
+  completed               BOOLEAN      NOT NULL DEFAULT FALSE,
+  completed_date          DATE,
+  -- NGO validation workflow fields
+  validation_requested_at TIMESTAMPTZ,        -- PA sets when requesting NGO sign-off
+  validated_by            JSONB,              -- ActorStamp of the NGO validator
+  validated_at            TIMESTAMPTZ,
+  sort_order              INTEGER      NOT NULL DEFAULT 0,
+  created_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_intervention_plan_item_plan_id
+  ON intervention_plan_item (plan_id);
+
+CREATE INDEX IF NOT EXISTS idx_intervention_plan_item_type_id
+  ON intervention_plan_item (intervention_type_id)
+  WHERE intervention_type_id IS NOT NULL;
+
+COMMENT ON TABLE intervention_plan_item IS
+  'A single action / task within an intervention plan. '
+  'intervention_type_id optionally references the translated catalogue (content_item). '
+  'Ad-hoc items carry only a free-text title written by the PA.';
+
+COMMENT ON COLUMN intervention_plan_item.validation_requested_at IS
+  'Set by the PA when the item is ready for NGO validation. '
+  'NULL = not yet submitted for validation.';
