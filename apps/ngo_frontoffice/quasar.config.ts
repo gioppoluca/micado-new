@@ -12,7 +12,27 @@ export default defineConfig((ctx) => {
     // app boot file (/src/boot)
     // --> boot files are part of "main.js"
     // https://v2.quasar.dev/quasar-cli-vite/boot-files
-    boot: ['i18n', 'axios', 'keycloak', 'router-guard'],
+    boot: [
+      // 1. envvar   — MUST be first: fetches /config.json at runtime and
+      //               populates RuntimeConfig with apiUrl, keycloakUrl, etc.
+      'envvar',
+      'umami',
+      // 2. mock     — wires the axios interceptor; no-op when VITE_API_MOCK != 'true'
+      'mock',
+      // 3. i18n     — installs vue-i18n with en-US fallback locale
+      'i18n',
+      // 4. axios    — registers $api / $axios globals on the Vue app instance
+      'axios',
+      // 5. loadData — GET /languages + GET /public/settings (public, no auth);
+      //               populates language-store and app-store; sets i18n locale
+      'loadData',
+      // 6. featureflag — loads GET /active-features; registers directive + guard
+      'featureflag',
+      // 7. keycloak — initialises Keycloak PKCE using URLs from RuntimeConfig
+      'keycloak',
+      // 8. router-guard — attaches beforeEach guard; must run after keycloak
+      'router-guard',
+    ],
 
     // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#css
     css: ['app.scss'],
@@ -116,7 +136,7 @@ export default defineConfig((ctx) => {
       // directives: [],
 
       // Quasar plugins
-      plugins: [],
+      plugins: ['Notify'],
     },
 
     // animations: 'all', // --- includes all animations
