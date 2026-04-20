@@ -157,7 +157,36 @@ export class NgoOrganizationsAdminController {
   // Keycloak queries to that group.
 
   @authenticate('keycloak')
-  @authorize({ allowedRoles: ['ngo-admin'] })
+  @authorize({ allowedRoles: ['ngo_admin', 'ngo-admin'] })
+  @get('/admin/ngo/roles', {
+    responses: {
+      '200': {
+        description: 'Assignable realm roles for the ngo_frontoffice realm.',
+        content: {
+          'application/json': {
+            schema: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  name: { type: 'string' },
+                  description: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  })
+  async listAssignableRoles(): Promise<{ id?: string; name: string; description?: string }[]> {
+    this.logger.info('[NgoOrganizationsAdminController] listAssignableRoles');
+    return this.ngoUserManagementService.listAssignableRoles();
+  }
+
+  @authenticate('keycloak')
+  @authorize({ allowedRoles: ['ngo_admin', 'ngo-admin'] })
   @get('/admin/ngo/users', {
     responses: {
       '200': {
@@ -180,7 +209,7 @@ export class NgoOrganizationsAdminController {
   }
 
   @authenticate('keycloak')
-  @authorize({ allowedRoles: ['ngo-admin'] })
+  @authorize({ allowedRoles: ['ngo_admin', 'ngo-admin'] })
   @post('/admin/ngo/users', {
     responses: {
       '200': {
@@ -222,7 +251,7 @@ export class NgoOrganizationsAdminController {
   }
 
   @authenticate('keycloak')
-  @authorize({ allowedRoles: ['ngo-admin'] })
+  @authorize({ allowedRoles: ['ngo_admin', 'ngo-admin'] })
   @get('/admin/ngo/users/{id}', {
     responses: {
       '200': {
@@ -242,7 +271,7 @@ export class NgoOrganizationsAdminController {
   }
 
   @authenticate('keycloak')
-  @authorize({ allowedRoles: ['ngo-admin'] })
+  @authorize({ allowedRoles: ['ngo_admin', 'ngo-admin'] })
   @put('/admin/ngo/users/{id}/roles', {
     responses: {
       '200': {
@@ -287,7 +316,7 @@ export class NgoOrganizationsAdminController {
   }
 
   @authenticate('keycloak')
-  @authorize({ allowedRoles: ['ngo-admin'] })
+  @authorize({ allowedRoles: ['ngo_admin', 'ngo-admin'] })
   @del('/admin/ngo/users/{id}', {
     responses: {
       '204': { description: 'Delete an NGO user (must belong to caller\'s group).' },

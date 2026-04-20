@@ -67,6 +67,34 @@ export class NgoUserManagementService {
 
     // ── Public API ─────────────────────────────────────────────────────────────
 
+    /**
+     * Returns the realm roles that are safe to assign to NGO users.
+     * Controlled by env var KEYCLOAK_NGO_ASSIGNABLE_ROLES (comma-separated).
+     * Falls back to all non-reserved realm roles when the env var is unset.
+     */
+    async listAssignableRoles(): Promise<{ id?: string; name: string; description?: string }[]> {
+        const kc = await this.keycloakAdmin.getClient(NgoUserManagementService.NGO_REALM);
+        const allRoles = await kc.roles.find();
+        const assignableNames = this.getAssignableRoleNames();
+
+        const filtered = allRoles
+            .filter(role => !!role.name)
+            .filter(role => {
+                if (assignableNames.length > 0) return assignableNames.includes(role.name!);
+                // When no explicit list is set, exclude reserved internal roles
+                return !['default-roles-' + NgoUserManagementService.NGO_REALM, 'offline_access', 'uma_authorization'].includes(role.name!);
+            })
+            .map(role => ({ id: role.id, name: role.name!, description: role.description }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+
+        this.logger.info('[NgoUserManagementService.listAssignableRoles]', {
+            realm: NgoUserManagementService.NGO_REALM,
+            count: filtered.length,
+        });
+
+        return filtered;
+    }
+
     async listUsers(caller: UserProfile): Promise<NgoUserSummaryDto[]> {
         const { kc, groupId } = await this.scopedClient(caller);
 

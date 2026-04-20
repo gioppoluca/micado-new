@@ -146,7 +146,7 @@ export class CategoriesController {
             },
         },
     })
-    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer'] })
+    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer', 'ngo_admin', 'ngo_operator'] })
     async count(
         @param.query.string('subtype') subtype?: 'event' | 'information',
     ): Promise<{ count: number }> {
@@ -177,7 +177,7 @@ export class CategoriesController {
             },
         },
     })
-    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer'] })
+    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer', 'ngo_admin', 'ngo_operator'] })
     async find(
         @param.query.string('subtype') subtype?: 'event' | 'information',
     ): Promise<CategoryLegacy[]> {
@@ -207,7 +207,7 @@ export class CategoriesController {
             },
         },
     })
-    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer'] })
+    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer', 'ngo_admin', 'ngo_operator'] })
     async findById(
         @param.path.number('id') id: number,
     ): Promise<CategoryFull> {

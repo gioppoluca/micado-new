@@ -107,7 +107,7 @@ export class EventsController {
             },
         },
     })
-    @authorize({ allowedRoles: ['pa_admin', 'pa_operator'] })
+    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'ngo_admin', 'ngo_operator'] })
     async create(
         @requestBody({
             content: {
@@ -145,7 +145,7 @@ export class EventsController {
             },
         },
     })
-    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer'] })
+    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer', 'ngo_admin', 'ngo_operator'] })
     async count(
         @param.query.number('categoryId') categoryId?: number,
         @param.query.string('topicIds') topicIds?: string,
@@ -177,7 +177,7 @@ export class EventsController {
             },
         },
     })
-    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer'] })
+    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer', 'ngo_admin', 'ngo_operator'] })
     async find(
         @param.query.number('categoryId') categoryId?: number,
         @param.query.string('topicIds') topicIds?: string,
@@ -194,7 +194,7 @@ export class EventsController {
     @get('/events/to-production', {
         responses: { '200': { description: 'Event published to production' } },
     })
-    @authorize({ allowedRoles: ['pa_admin'] })
+    @authorize({ allowedRoles: ['pa_admin', 'ngo_admin'] })
     async publish(
         @param.query.number('id') id: number,
     ): Promise<void> {
@@ -212,7 +212,7 @@ export class EventsController {
             },
         },
     })
-    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer'] })
+    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer', 'ngo_admin', 'ngo_operator'] })
     async findById(
         @param.path.number('id') id: number,
     ): Promise<EventFull> {
@@ -225,7 +225,7 @@ export class EventsController {
     @put('/events/{id}', {
         responses: { '204': { description: 'Event updated (full replace)' } },
     })
-    @authorize({ allowedRoles: ['pa_admin', 'pa_operator'] })
+    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'ngo_admin', 'ngo_operator'] })
     async replaceById(
         @param.path.number('id') id: number,
         @requestBody({
@@ -265,7 +265,7 @@ export class EventsController {
     @patch('/events/{id}', {
         responses: { '204': { description: 'Event partial update' } },
     })
-    @authorize({ allowedRoles: ['pa_admin', 'pa_operator'] })
+    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'ngo_admin', 'ngo_operator'] })
     async updateById(
         @param.path.number('id') id: number,
         @requestBody({
@@ -294,7 +294,7 @@ export class EventsController {
     @del('/events/{id}', {
         responses: { '204': { description: 'Event deleted' } },
     })
-    @authorize({ allowedRoles: ['pa_admin'] })
+    @authorize({ allowedRoles: ['pa_admin', 'ngo_admin'] })
     async deleteById(@param.path.number('id') id: number): Promise<void> {
         this.logger.warn('[EventsController.deleteById]', { id });
         await this.eventFacadeService.deleteById(id);

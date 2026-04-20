@@ -162,7 +162,7 @@ export class TopicsController {
             },
         },
     })
-    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer'] })
+    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer', 'ngo_admin', 'ngo_operator'] })
     async count(
         @param.where(TopicLegacy) _where?: Where<TopicLegacy>,
     ): Promise<{ count: number }> {
@@ -196,7 +196,7 @@ export class TopicsController {
             },
         },
     })
-    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer'] })
+    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer', 'ngo_admin', 'ngo_operator'] })
     async find(
         @param.filter(TopicLegacy) _filter?: Filter<TopicLegacy>,
     ): Promise<TopicLegacy[]> {
@@ -243,7 +243,7 @@ export class TopicsController {
             },
         },
     })
-    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer'] })
+    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer', 'ngo_admin', 'ngo_operator'] })
     async findById(
         @param.path.number('id') id: number,
         @param.filter(TopicFull, { exclude: 'where' })

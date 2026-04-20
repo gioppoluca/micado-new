@@ -86,7 +86,7 @@ export class InformationController {
             },
         },
     })
-    @authorize({ allowedRoles: ['pa_admin', 'pa_operator'] })
+    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'ngo_admin', 'ngo_operator'] })
     async create(
         @requestBody({
             content: {
@@ -123,7 +123,7 @@ export class InformationController {
             },
         },
     })
-    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer'] })
+    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer', 'ngo_admin', 'ngo_operator'] })
     async count(
         @param.query.number('categoryId') categoryId?: number,
         @param.query.string('topicIds') topicIds?: string,
@@ -146,7 +146,7 @@ export class InformationController {
             },
         },
     })
-    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer'] })
+    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer', 'ngo_admin', 'ngo_operator'] })
     async find(
         @param.query.number('categoryId') categoryId?: number,
         @param.query.string('topicIds') topicIds?: string,
@@ -162,7 +162,7 @@ export class InformationController {
     @get('/information/to-production', {
         responses: { '200': { description: 'Information item published to production' } },
     })
-    @authorize({ allowedRoles: ['pa_admin'] })
+    @authorize({ allowedRoles: ['pa_admin', 'ngo_admin'] })
     async publish(@param.query.number('id') id: number): Promise<void> {
         this.logger.info('[InformationController.publish]', { id });
         await this.informationFacadeService.publish(id);
@@ -178,7 +178,7 @@ export class InformationController {
             },
         },
     })
-    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer'] })
+    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer', 'ngo_admin', 'ngo_operator'] })
     async findById(@param.path.number('id') id: number): Promise<InformationFull> {
         this.logger.info('[InformationController.findById]', { id });
         return this.informationFacadeService.findById(id);
@@ -189,7 +189,7 @@ export class InformationController {
     @put('/information/{id}', {
         responses: { '204': { description: 'Information item updated' } },
     })
-    @authorize({ allowedRoles: ['pa_admin', 'pa_operator'] })
+    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'ngo_admin', 'ngo_operator'] })
     async replaceById(
         @param.path.number('id') id: number,
         @requestBody({
@@ -225,7 +225,7 @@ export class InformationController {
     @patch('/information/{id}', {
         responses: { '204': { description: 'Information item partial update' } },
     })
-    @authorize({ allowedRoles: ['pa_admin', 'pa_operator'] })
+    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'ngo_admin', 'ngo_operator'] })
     async updateById(
         @param.path.number('id') id: number,
         @requestBody({
@@ -252,7 +252,7 @@ export class InformationController {
     @del('/information/{id}', {
         responses: { '204': { description: 'Information item deleted' } },
     })
-    @authorize({ allowedRoles: ['pa_admin'] })
+    @authorize({ allowedRoles: ['pa_admin', 'ngo_admin'] })
     async deleteById(@param.path.number('id') id: number): Promise<void> {
         this.logger.warn('[InformationController.deleteById]', { id });
         await this.informationFacadeService.deleteById(id);
