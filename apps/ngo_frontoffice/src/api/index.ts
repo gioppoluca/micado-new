@@ -38,3 +38,60 @@ export type {
     CreateNgoUserPayload,
     UpdateNgoUserRolesPayload,
 } from './ngo-users.api';
+
+// ── Content types used by InformationPage and EventsPage ─────────────────────
+export { informationApi, informationStatusKey } from './information.api';
+export type {
+    Information,
+    InformationFull,
+    InformationTranslation,
+    InformationStatus,
+    InformationListFilter,
+    CreateInformationPayload,
+    PatchInformationPayload,
+} from './information.api';
+
+export { eventApi, eventStatusKey } from './event.api';
+export type {
+    Event,
+    EventFull,
+    EventTranslation,
+    EventDataExtra,
+    EventStatus,
+    EventListFilter,
+    CreateEventPayload,
+    PatchEventPayload,
+} from './event.api';
+
+export { categoryApi, categoryStatusKey } from './category.api';
+export type {
+    Category,
+    CategoryFull,
+    CategoryTranslation,
+    CategoryStatus,
+    CategorySubtype,
+    CreateCategoryPayload,
+    PatchCategoryPayload,
+} from './category.api';
+
+export { topicApi, toTreeNodes, topicStatusKey } from './topic.api';
+export type {
+    Topic,
+    TopicFull,
+    TopicTranslation,
+    TopicDataExtra,
+    TopicStatus,
+    TopicTreeNode,
+    CreateTopicPayload,
+    PatchTopicPayload,
+} from './topic.api';
+
+export { userTypeApi } from './user-type.api';
+export type {
+    UserType,
+    UserTypeFull,
+    UserTypeTranslation,
+    UserTypeStatus,
+    CreateUserTypePayload,
+    PatchUserTypePayload,
+} from './user-type.api';

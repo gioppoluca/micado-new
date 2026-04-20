@@ -24,8 +24,23 @@ const routes: RouteRecordRaw[] = [
         meta: { requiresAuth: true },
       },
 
-      // ── Settings section ─────────────────────────────────────────────────
-      // Placeholder: NGO settings routes will be added here as pages are migrated.
+      // ── Useful Information ────────────────────────────────────────────────
+      {
+        path: 'information',
+        name: 'information',
+        component: () => import('pages/InformationPage.vue'),
+        meta: { requiresAuth: true, roles: ['ngo_admin', 'ngo_operator', 'ngo-admin'] },
+      },
+
+      // ── Events & Courses ──────────────────────────────────────────────────
+      {
+        path: 'events',
+        name: 'events',
+        component: () => import('pages/EventsPage.vue'),
+        meta: { requiresAuth: true, roles: ['ngo_admin', 'ngo_operator', 'ngo-admin'] },
+      },
+
+      // ── Settings section ──────────────────────────────────────────────────
       {
         path: 'data_settings',
         meta: { requiresAuth: true },
@@ -51,7 +66,7 @@ const routes: RouteRecordRaw[] = [
     ],
   },
 
-  // ── Login (optional — protected pages auto-redirect to Keycloak) ─────────
+  // ── Login ─────────────────────────────────────────────────────────────────
   { path: '/login', name: 'login', component: () => import('pages/LoginPage.vue') },
 
   // ── 404 ──────────────────────────────────────────────────────────────────
