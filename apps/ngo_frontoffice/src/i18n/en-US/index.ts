@@ -151,6 +151,8 @@ export default {
     "events_desc": "View and edit courses and events",
     "login": "Login",
     "logout": "Logout",
+    "ngo_users": "Member management",
+    "ngo_users_desc": "Manage members of your NGO organisation",
     "situation_description": "You will find some statistics on migration that are available in your city. You can select different categories and print a selected set of data.",
     "migrant_description": "When a migrant makes a personal Micado account, it will appear in this list. Here you can view the data and upload documents from the migrant, if he has given consent for this. You can also manage the intervention plans for migrants: add a plan, assign the tasks in this plan, validate the tasks that have been fulfilled. This gives you the opportunity to have a continuous view on what the migrant has done so far and will do later.",
     "cso_description": "As a public authority, you can manage the accounts for Micado for CSO’s. Add or delete organisations that can get access to the Micado CSO website.",
@@ -863,5 +865,29 @@ export default {
     "item_delete_confirm": "Remove this item from the plan?",
     "item_delete_success": "Item removed.",
     "item_validation_success": "Validation requested."
+  }
+  ,
+  "ngo_users": {
+    "title": "Member management",
+    "subtitle": "Manage users within your NGO organisation. You can only see and manage members of your own group.",
+    "add_person": "Add member",
+    "delete_person": "Delete member",
+    "manage_roles": "Manage roles",
+    "temporary_password": "Temporary password",
+    "password_help": "The user will be asked by Keycloak to change this password at first login.",
+    "roles": "Roles",
+    "status": "Status",
+    "actions": "Actions",
+    "user": "Member",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "user_enabled": "Account enabled",
+    "last_name": "Last name",
+    "create_success": "Member created successfully.",
+    "roles_update_success": "Roles updated successfully.",
+    "delete_success": "Member removed successfully.",
+    "delete_confirmation": "Delete user {user}? This action cannot be undone.",
+    "no_users_found": "No members found in your organisation.",
+    "total_users": "Members: {count}"
   }
 } as const;

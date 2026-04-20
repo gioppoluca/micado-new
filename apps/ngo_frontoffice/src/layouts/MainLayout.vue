@@ -70,6 +70,13 @@ const navs: NavItem[] = [
     description: 'menu.glossary_desc',
   },
   {
+    label: 'menu.ngo_users',
+    icon: 'group', active_icon: 'group',
+    to: '/data_settings/usermgmt',
+    auth: ['ngo_admin', 'ngo-admin'],
+    description: 'menu.ngo_users_desc',
+  },
+  {
     label: 'menu.setting',
     icon: 'settings', active_icon: 'settings',
     to: '/data_settings/profile_settings',

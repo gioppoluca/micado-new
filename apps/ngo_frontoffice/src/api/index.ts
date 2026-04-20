@@ -29,3 +29,12 @@ export type {
     EntityTranslation,
     EntityListParams,
 } from './micado-entities.api';
+
+// ── NGO user management ───────────────────────────────────────────────────────
+export { ngoUsersApi } from './ngo-users.api';
+export type {
+    NgoUser,
+    NgoRealmRole,
+    CreateNgoUserPayload,
+    UpdateNgoUserRolesPayload,
+} from './ngo-users.api';

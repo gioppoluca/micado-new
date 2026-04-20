@@ -39,6 +39,13 @@ const routes: RouteRecordRaw[] = [
             name: 'settings-profile',
             component: () => import('pages/SettingsPage.vue'),
           },
+          // ── NGO user management (ngo_admin only) ─────────────────────────
+          {
+            path: 'usermgmt',
+            name: 'settings-usermgmt',
+            component: () => import('pages/NgoUserManagementPage.vue'),
+            meta: { roles: ['ngo_admin', 'ngo-admin'] },
+          },
         ],
       },
     ],
