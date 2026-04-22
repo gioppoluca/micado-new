@@ -40,7 +40,8 @@ export interface NgoUser {
 
 export interface NgoRealmRole {
     id?: string;
-    name?: string;
+    /** Role name — always present in Keycloak responses */
+    name: string;
     description?: string;
 }
 

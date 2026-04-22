@@ -1,7 +1,7 @@
 /**
  * src/api/client.ts
  *
- * Central axios instance for the micado_ngo application.
+ * Central axios instance for the micado_pa application.
  *
  * ── Fix: [object Object] in error banner ────────────────────────────────────
  *
@@ -64,13 +64,28 @@ export function isApiError(e: unknown): e is ApiError {
  *
  * We handle both.
  */
+/**
+ * One entry in the LoopBack 4 `details` array emitted for 422 validation errors.
+ *
+ * Shape (from @loopback/rest AjvError):
+ *   { path: '/fieldName', code: 'minLength', message: '...', info: { limit: 8 } }
+ */
+export interface Lb4ValidationDetail {
+    path: string;
+    code: string;
+    message: string;
+    info?: Record<string, unknown>;
+}
+
 interface Lb4ErrorBody {
     /** Nested LB4 error object */
     error?: {
         statusCode?: number;
         name?: string;
         message?: string;
-    } | string;          // guard: sometimes error is already a plain string
+        /** Field-level validation details — present on 422 UnprocessableEntity */
+        details?: Lb4ValidationDetail[];
+    } | string;
     /** Flat message from non-LB4 middleware */
     message?: string;
 }
@@ -79,27 +94,49 @@ interface Lb4ErrorBody {
  * Extract a human-readable message from an HTTP error response body.
  *
  * Priority:
- *  1. data.error.message  — standard LB4 HttpError (nested object)
- *  2. data.error          — if error is already a plain string
- *  3. data.message        — flat shape from body-parser / other middleware
- *  4. undefined           — caller falls back to AxiosError.message
+ *  1. data.error.details[]  — 422 validation errors: join all field messages
+ *  2. data.error.message    — standard LB4 HttpError (nested object)
+ *  3. data.error            — if error is already a plain string
+ *  4. data.message          — flat shape from body-parser / other middleware
+ *  5. undefined             — caller falls back to AxiosError.message
+ *
+ * For validation errors (422), the generic `message` says "The request body is
+ * invalid" — not actionable. The real cause is in `details[].message` which
+ * names the failing field and constraint (e.g. "must NOT have fewer than 8
+ * characters"). We join all detail messages so the UI can surface them all.
  */
 function extractServerMessage(data: unknown): string | undefined {
     if (!data || typeof data !== 'object') return undefined;
 
     const body = data as Lb4ErrorBody;
 
-    // Case 1 & 2: data.error exists
     if (body.error !== undefined) {
         if (typeof body.error === 'string') {
-            return body.error;                   // plain string — return as-is
+            return body.error;
         }
-        if (typeof body.error === 'object' && typeof body.error.message === 'string') {
-            return body.error.message;           // LB4 nested shape ← the fix
+
+        if (typeof body.error === 'object') {
+            // Case 1: 422 with details[] — build a joined message from all entries
+            const details = body.error.details;
+            if (Array.isArray(details) && details.length > 0) {
+                return details
+                    .map(d => {
+                        // Strip leading slash from path for readability:
+                        //   "/temporaryPassword" -> "temporaryPassword"
+                        const field = (d.path ?? '').replace(/^\//, '');
+                        return field ? `${field}: ${d.message}` : d.message;
+                    })
+                    .join(' | ');
+            }
+
+            // Case 2: plain LB4 message
+            if (typeof body.error.message === 'string') {
+                return body.error.message;
+            }
         }
     }
 
-    // Case 3: flat { message }
+    // Case 4: flat { message }
     if (typeof body.message === 'string') {
         return body.message;
     }

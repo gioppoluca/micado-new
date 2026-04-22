@@ -128,6 +128,14 @@
         </q-card-section>
 
         <q-card-section>
+          <!-- Inline server-side error — stays visible while the user corrects the form -->
+          <q-banner v-if="createDialog.error" class="bg-negative text-white q-mb-md" rounded dense>
+            <template #avatar><q-icon name="error_outline" /></template>
+            {{ createDialog.error }}
+            <template #action>
+              <q-btn flat dense color="white" icon="close" @click="createDialog.error = null" />
+            </template>
+          </q-banner>
           <div class="row q-col-gutter-md">
             <div class="col-12">
               <q-input
@@ -272,7 +280,7 @@
  *   PUT  /admin/ngo/users/:id/roles → replace user roles
  *   DEL  /admin/ngo/users/:id      → delete user
  */
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useQuasar, type QTableProps } from 'quasar';
 import { ngoUsersApi, type NgoUser, type CreateNgoUserPayload } from 'src/api';
@@ -372,7 +380,15 @@ const createDialog = reactive({
   saving: false,
   showPassword: false,
   form: emptyCreateForm(),
+  /** Server-side error to display inside the dialog (null = no error) */
+  error: null as string | null,
 });
+
+// Clear the inline error as soon as the user edits any field.
+watch(
+  () => ({ ...createDialog.form }),
+  () => { createDialog.error = null; },
+);
 
 const rolesDialog = reactive<{
   open: boolean;
@@ -451,12 +467,14 @@ async function loadData(): Promise<void> {
 function openCreateDialog(): void {
   createDialog.form = emptyCreateForm();
   createDialog.showPassword = false;
+  createDialog.error = null;
   createDialog.open = true;
 }
 
 function closeCreateDialog(): void {
   if (createDialog.saving) return;
   createDialog.open = false;
+  createDialog.error = null;
 }
 
 async function submitCreateDialog(): Promise<void> {
@@ -466,7 +484,7 @@ async function submitCreateDialog(): Promise<void> {
     lastName: createDialog.form.lastName.trim(),
     password: createDialog.form.password,
     roleNames: createDialog.form.roleNames ?? [],
-    enabled: createDialog.form.enabled,
+    enabled: createDialog.form.enabled ?? true,
   };
 
   if (!payload.email || !payload.firstName || !payload.lastName || !payload.password) {
@@ -483,7 +501,8 @@ async function submitCreateDialog(): Promise<void> {
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     logger.error('[NgoUserManagementPage] createUser failed', e);
-    $q.notify({ color: 'negative', message });
+    createDialog.error = message;
+    $q.notify({ color: 'negative', message, timeout: 4000 });
   } finally {
     createDialog.saving = false;
   }

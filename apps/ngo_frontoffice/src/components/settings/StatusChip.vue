@@ -7,10 +7,20 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { TranslationStatus } from 'src/api/translation-monitor.api';
+
+/** Inline union — mirrors TranslationStatus from the translation-monitor workflow.
+ *  Defined here to avoid a dependency on the PA-only translation-monitor.api module. */
+type StatusChipStatus =
+    | 'DONE'
+    | 'WAITING_TRANSLATION'
+    | 'RECEIVED_TRANSLATION'
+    | 'GENERATING_MP3'
+    | 'SAVING_TO_DB'
+    | 'TIMEOUT'
+    | 'ERROR';
 
 const props = withDefaults(defineProps<{
-    status: TranslationStatus | null;
+    status: StatusChipStatus | null;
 }>(), {
     status: null,
 });
