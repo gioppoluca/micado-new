@@ -72,6 +72,13 @@ export class ProcessLegacy extends Model {
     @property({ type: 'number' })
     stepCount?: number;
 
+    /**
+     * Total number of NGO comments across all groups for the current published
+     * revision. Used to show/hide the comment pill in the list. 0 = no comments.
+     */
+    @property({ type: 'number' })
+    ngoCommentCount?: number;
+
     constructor(data?: Partial<ProcessLegacy>) {
         super(data);
     }

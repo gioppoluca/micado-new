@@ -83,6 +83,9 @@ import {
     ContentItemRelationRepository,
 } from '../repositories';
 import { buildActorStamp, ActorStamp } from '../auth/actor-stamp';
+import { NgoProcessCommentRepository } from '../repositories/ngo-process-comment.repository';
+import { KeycloakAdminService } from './keycloak-admin.service';
+import type { NgoCommentOnProcess } from '../models/process-full.model';
 import { TranslationWorkflowOrchestratorService } from './translation-workflow-orchestrator.service';
 
 // ── Content type codes ────────────────────────────────────────────────────────
@@ -137,6 +140,12 @@ export class ProcessFacadeService {
 
         @inject(TranslationWorkflowOrchestratorService.BINDING, { optional: true })
         protected translationOrchestrator: TranslationWorkflowOrchestratorService | undefined,
+
+        @repository(NgoProcessCommentRepository)
+        protected ngoProcessCommentRepository: NgoProcessCommentRepository,
+
+        @inject('services.KeycloakAdminService', { optional: true })
+        protected keycloakAdminService: KeycloakAdminService | undefined,
     ) { }
 
     // ════════════════════════════════════════════════════════════════════════════
@@ -192,7 +201,14 @@ export class ProcessFacadeService {
         }
 
         const offset = (page - 1) * pageSize;
-        return result.slice(offset, offset + pageSize);
+        const page_result = result.slice(offset, offset + pageSize);
+
+        // Attach NGO comment counts for the current published revision of each process.
+        // Single batch query per page: fetch all comments whose revision_id matches
+        // any published_revision_id in the current page, then group by revision_id.
+        await this.attachNgoCommentCounts(page_result);
+
+        return page_result;
     }
 
     async count(filter: ProcessListFilter = {}): Promise<{ count: number }> {
@@ -227,7 +243,16 @@ export class ProcessFacadeService {
             relations.filter(r => r.relationType === REL_DOCUMENT_TYPE).map(r => r.parentItemId),
         );
 
-        return this.toFullDto(item, revision, translationRows, allRevisions, topicIds, userTypeIds, producedDocTypeIds);
+        const full = this.toFullDto(item, revision, translationRows, allRevisions, topicIds, userTypeIds, producedDocTypeIds);
+
+        // Attach all NGO comments for the current published revision
+        if (item.publishedRevisionId) {
+            full.ngoComments = await this.fetchNgoCommentsForRevision(item.publishedRevisionId);
+        } else {
+            full.ngoComments = [];
+        }
+
+        return full;
     }
 
     // ── Create ────────────────────────────────────────────────────────────────
@@ -999,6 +1024,109 @@ export class ProcessFacadeService {
     }
 
     // ── DTO mappers ───────────────────────────────────────────────────────────
+
+    // ── NGO comment helpers ───────────────────────────────────────────────────
+
+    /**
+     * Attaches ngoCommentCount to a page of ProcessLegacy DTOs.
+     * Single batch query: find all comments whose revision_id is in the set of
+     * published_revision_ids for this page, then count per revision_id.
+     * Processes with no published revision get count 0.
+     */
+    private async attachNgoCommentCounts(processes: ProcessLegacy[]): Promise<void> {
+        // Collect all published_revision_ids for processes on this page
+        const items = await Promise.all(
+            processes
+                .filter(p => p.id != null)
+                .map(p =>
+                    this.contentItemRepository.findOne({
+                        where: { typeCode: 'PROCESS', externalKey: String(p.id) },
+                        fields: { externalKey: true, publishedRevisionId: true },
+                    }),
+                ),
+        );
+
+        const revisionIdByProcessId = new Map<number, string>();
+        for (const item of items) {
+            if (item?.publishedRevisionId && item.externalKey) {
+                revisionIdByProcessId.set(Number(item.externalKey), item.publishedRevisionId);
+            }
+        }
+
+        if (revisionIdByProcessId.size === 0) {
+            processes.forEach(p => { p.ngoCommentCount = 0; });
+            return;
+        }
+
+        const revisionIds = [...revisionIdByProcessId.values()];
+        const comments = await this.ngoProcessCommentRepository.find({
+            where: { revisionId: { inq: revisionIds } },
+            fields: { revisionId: true },
+        });
+
+        // Count comments per revision_id
+        const countByRevisionId = new Map<string, number>();
+        for (const c of comments) {
+            countByRevisionId.set(c.revisionId, (countByRevisionId.get(c.revisionId) ?? 0) + 1);
+        }
+
+        for (const p of processes) {
+            if (p.id == null) { p.ngoCommentCount = 0; continue; }
+            const revId = revisionIdByProcessId.get(p.id);
+            p.ngoCommentCount = revId ? (countByRevisionId.get(revId) ?? 0) : 0;
+        }
+    }
+
+    /**
+     * Fetch all NGO comments for a given published revision UUID.
+     * Attempts to resolve the group display name from Keycloak for each unique
+     * ngoGroupId, falling back to the raw UUID when Keycloak is unavailable.
+     */
+    private async fetchNgoCommentsForRevision(revisionId: string): Promise<NgoCommentOnProcess[]> {
+        const rows = await this.ngoProcessCommentRepository.find({
+            where: { revisionId },
+            order: ['ngoGroupId ASC', 'createdAt ASC'],
+        });
+
+        if (rows.length === 0) return [];
+
+        // Resolve group display names — one Keycloak lookup per unique group ID
+        const groupNames = new Map<string, string>();
+        if (this.keycloakAdminService) {
+            const uniqueGroupIds = [...new Set(rows.map(r => r.ngoGroupId))];
+            const ngoRealm = process.env.KEYCLOAK_NGO_REALM ?? 'ngo_frontoffice';
+            try {
+                const kc = await this.keycloakAdminService.getClient(ngoRealm);
+                await Promise.all(
+                    uniqueGroupIds.map(async groupId => {
+                        try {
+                            const group = await kc.groups.findOne({ id: groupId });
+                            if (group?.name) {
+                                // Prefer the displayName attribute set by bootstrap service
+                                const displayName = group.attributes?.['displayName']?.[0] ?? group.name;
+                                groupNames.set(groupId, displayName);
+                            }
+                        } catch {
+                            // Non-fatal: fall back to raw UUID
+                            this.logger.debug('[ProcessFacadeService] could not resolve group name', { groupId });
+                        }
+                    }),
+                );
+            } catch (e) {
+                this.logger.warn('[ProcessFacadeService] Keycloak unavailable for group name resolution', e);
+            }
+        }
+
+        return rows.map(r => ({
+            id: r.id!,
+            ngoGroupId: r.ngoGroupId,
+            ngoGroupName: groupNames.get(r.ngoGroupId) ?? r.ngoGroupId,
+            body: r.body,
+            published: r.published,
+            createdBy: r.createdBy as NgoCommentOnProcess['createdBy'],
+            createdAt: r.createdAt,
+        }));
+    }
 
     protected toLegacyDto(
         item: ContentItem,

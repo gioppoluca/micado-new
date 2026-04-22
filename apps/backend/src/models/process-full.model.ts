@@ -122,7 +122,52 @@ export class ProcessFull extends Model {
     })
     revisions?: RevisionSummary[];
 
+    /**
+     * NGO comments for this process, grouped by organisation.
+     * Populated by GET /processes/:id — PA roles only.
+     * Each entry is one group's comment for the current published revision.
+     * Empty array when there are no comments.
+     */
+    @property({
+        type: 'array',
+        jsonSchema: {
+            type: 'array',
+            items: {
+                type: 'object',
+                required: ['id', 'ngoGroupId', 'body', 'published'],
+                properties: {
+                    id:           { type: 'string' },
+                    ngoGroupId:   { type: 'string' },
+                    ngoGroupName: { type: 'string' },
+                    body:         { type: 'string' },
+                    published:    { type: 'boolean' },
+                    createdAt:    { type: 'string' },
+                    createdBy: {
+                        type: 'object',
+                        properties: {
+                            name:     { type: 'string' },
+                            username: { type: 'string' },
+                        },
+                    },
+                },
+            },
+        },
+    })
+    ngoComments?: NgoCommentOnProcess[];
+
     constructor(data?: Partial<ProcessFull>) {
         super(data);
     }
+}
+
+/** One NGO comment as embedded in the process detail DTO. */
+export interface NgoCommentOnProcess {
+    id: string;
+    ngoGroupId: string;
+    /** Display name resolved from Keycloak — may be undefined for legacy rows. */
+    ngoGroupName?: string;
+    body: string;
+    published: boolean;
+    createdBy?: { name?: string; username?: string };
+    createdAt?: string;
 }
