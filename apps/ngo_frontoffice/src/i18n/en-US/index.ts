@@ -151,6 +151,8 @@ export default {
     "events_desc": "View and edit courses and events",
     "login": "Login",
     "logout": "Logout",
+    "ngo_processes": "Step-by-step guides",
+    "ngo_processes_desc": "Browse guides and add your organisation's comments",
     "ngo_users": "Member management",
     "ngo_users_desc": "Manage members of your NGO organisation",
     "situation_description": "You will find some statistics on migration that are available in your city. You can select different categories and print a selected set of data.",
@@ -889,5 +891,15 @@ export default {
     "delete_confirmation": "Delete user {user}? This action cannot be undone.",
     "no_users_found": "No members found in your organisation.",
     "total_users": "Members: {count}"
+  }
+  ,
+  "ngo_comments": {
+    "commenting_on": "Adding comment for:",
+    "no_comments": "No comments yet for this process. Click 'Add comment' to add the first one.",
+    "add_comment": "Add comment",
+    "your_comment": "Your comment",
+    "publish": "Published (visible to migrants)",
+    "saved": "Comment saved.",
+    "deleted": "Comment deleted."
   }
 } as const;

@@ -63,6 +63,13 @@ const navs: NavItem[] = [
     description: 'menu.events_desc',
   },
   {
+    label: 'menu.ngo_processes',
+    icon: 'timeline', active_icon: 'timeline',
+    to: '/ngo-processes',
+    auth: ['ngo_admin', 'ngo_operator', 'ngo-admin'],
+    description: 'menu.ngo_processes_desc',
+  },
+  {
     label: 'menu.glossary',
     icon: 'menu_book', active_icon: 'menu_book',
     to: '/glossary',

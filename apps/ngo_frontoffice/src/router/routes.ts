@@ -32,6 +32,14 @@ const routes: RouteRecordRaw[] = [
         meta: { requiresAuth: true, roles: ['ngo_admin', 'ngo_operator', 'ngo-admin'] },
       },
 
+      // ── Step-by-step guides (NGO read-only + comments) ──────────────────────
+      {
+        path: 'ngo-processes',
+        name: 'ngo-processes',
+        component: () => import('pages/NgoProcessesPage.vue'),
+        meta: { requiresAuth: true, roles: ['ngo_admin', 'ngo_operator', 'ngo-admin'] },
+      },
+
       // ── Events & Courses ──────────────────────────────────────────────────
       {
         path: 'events',

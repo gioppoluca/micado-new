@@ -95,3 +95,19 @@ export type {
     CreateUserTypePayload,
     PatchUserTypePayload,
 } from './user-type.api';
+
+// ── NGO process comments ──────────────────────────────────────────────────────
+export { ngoProcessCommentApi } from './ngo-process-comment.api';
+export type {
+    NgoProcessComment,
+    CreateNgoCommentPayload,
+    UpdateNgoCommentPayload,
+} from './ngo-process-comment.api';
+
+// ── Processes (read-only for NGO — used by NgoProcessesPage) ─────────────────
+export { processApi, processStatusKey } from './process.api';
+export type {
+    Process,
+    ProcessFull,
+    ProcessListFilter,
+} from './process.api';
