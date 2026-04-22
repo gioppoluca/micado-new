@@ -146,6 +146,15 @@ export class KeycloakJwtStrategy implements AuthenticationStrategy {
           rolesArray,
         );
 
+        // `groups` — array of group path strings injected by the Keycloak
+        // Group Membership protocol mapper (configured on the client).
+        // NgoUserManagementService.resolveCallerGroupId() reads this field
+        // to scope all Keycloak queries to the caller's NGO organisation.
+        // Cast: JWT payload values are unknown; the mapper always emits string[].
+        const groupsClaim = Array.isArray(payload['groups'])
+          ? (payload['groups'] as string[])
+          : [];
+
         return {
           [securityId]: payload.sub as string,
           id: payload.sub,
@@ -157,6 +166,7 @@ export class KeycloakJwtStrategy implements AuthenticationStrategy {
             ?? 'unknown',
           realm,   // the realm variable from the for-loop above
           roles: rolesArray,
+          groups: groupsClaim,
         };
       } catch (e: unknown) {
         const message = e instanceof Error ? e.message : String(e);

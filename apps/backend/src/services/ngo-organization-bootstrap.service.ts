@@ -29,7 +29,7 @@ export interface NgoOrganizationSummary {
  * - one realm shared by all NGOs
  * - one top-level group per NGO
  * - one first administrator user per NGO
- * - shared realm role `ngo-admin`
+ * - shared realm role `ngo_admin`
  *
  * Real segregation is then enforced by the backend when the NGO admin uses
  * the NGO application to manage only the users in the same group.
@@ -37,7 +37,7 @@ export interface NgoOrganizationSummary {
 @injectable({scope: BindingScope.TRANSIENT})
 export class NgoOrganizationBootstrapService {
   static readonly NGO_REALM = process.env.KEYCLOAK_NGO_REALM ?? 'ngo_frontoffice';
-  static readonly NGO_ADMIN_ROLE = process.env.KEYCLOAK_NGO_ADMIN_ROLE ?? 'ngo-admin';
+  static readonly NGO_ADMIN_ROLE = process.env.KEYCLOAK_NGO_ADMIN_ROLE ?? 'ngo_admin';
   static readonly GROUP_PREFIX = process.env.KEYCLOAK_NGO_GROUP_PREFIX ?? 'ngo-';
 
   constructor(

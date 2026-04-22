@@ -56,7 +56,7 @@ export class NgoUserManagementService {
         process.env.KEYCLOAK_NGO_REALM ?? 'ngo_frontoffice';
 
     static readonly NGO_ADMIN_ROLE =
-        process.env.KEYCLOAK_NGO_ADMIN_ROLE ?? 'ngo-admin';
+        process.env.KEYCLOAK_NGO_ADMIN_ROLE ?? 'ngo_admin';
 
     constructor(
         @inject('services.KeycloakAdminService')
