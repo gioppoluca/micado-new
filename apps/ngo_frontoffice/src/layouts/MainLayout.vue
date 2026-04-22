@@ -42,13 +42,6 @@ const navs: NavItem[] = [
     description: 'menu.home_desc',
   },
   {
-    label: 'menu.process',
-    icon: 'timeline', active_icon: 'timeline',
-    to: '/guided_process_editor',
-    auth: ['micado_superadmin', 'ngo_admin'],
-    description: 'menu.process_desc',
-  },
-  {
     label: 'menu.information_centre',
     icon: 'info', active_icon: 'info',
     to: '/information',
@@ -70,11 +63,11 @@ const navs: NavItem[] = [
     description: 'menu.ngo_processes_desc',
   },
   {
-    label: 'menu.glossary',
-    icon: 'menu_book', active_icon: 'menu_book',
-    to: '/glossary',
-    auth: ['micado_superadmin', 'ngo_admin'],
-    description: 'menu.glossary_desc',
+    label: 'menu.manage_validation',
+    icon: 'verified', active_icon: 'verified',
+    to: '/manage-validation',
+    auth: ['ngo_admin', 'ngo_operator', 'ngo-admin'],
+    description: 'menu.manage_validation_desc',
   },
   {
     label: 'menu.ngo_users',

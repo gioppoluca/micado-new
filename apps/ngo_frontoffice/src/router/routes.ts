@@ -40,6 +40,14 @@ const routes: RouteRecordRaw[] = [
         meta: { requiresAuth: true, roles: ['ngo_admin', 'ngo_operator', 'ngo-admin'] },
       },
 
+      // ── Manage validation (NGO feature — stub for future implementation) ────────
+      {
+        path: 'manage-validation',
+        name: 'manage-validation',
+        component: () => import('pages/ManageValidationPage.vue'),
+        meta: { requiresAuth: true, roles: ['ngo_admin', 'ngo_operator', 'ngo-admin'] },
+      },
+
       // ── Events & Courses ──────────────────────────────────────────────────
       {
         path: 'events',

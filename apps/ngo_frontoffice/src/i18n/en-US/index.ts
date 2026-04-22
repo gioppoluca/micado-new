@@ -151,6 +151,8 @@ export default {
     "events_desc": "View and edit courses and events",
     "login": "Login",
     "logout": "Logout",
+    "manage_validation": "Manage validation",
+    "manage_validation_desc": "Check and manage validation requests",
     "ngo_processes": "Step-by-step guides",
     "ngo_processes_desc": "Browse guides and add your organisation's comments",
     "ngo_users": "Member management",
@@ -891,6 +893,10 @@ export default {
     "delete_confirmation": "Delete user {user}? This action cannot be undone.",
     "no_users_found": "No members found in your organisation.",
     "total_users": "Members: {count}"
+  }
+  ,
+  "manage_validation": {
+    "coming_soon": "The validation management feature is under development and will be available in a future release."
   }
   ,
   "ngo_comments": {
