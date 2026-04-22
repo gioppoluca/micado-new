@@ -537,3 +537,72 @@ COMMENT ON TABLE intervention_plan_item IS
 COMMENT ON COLUMN intervention_plan_item.validation_requested_at IS
   'Set by the PA when the item is ready for NGO validation. '
   'NULL = not yet submitted for validation.';
+
+
+-- ── NGO Process Comment ──────────────────────────────────────────────────────
+--
+-- Design
+-- ──────
+-- Comments are written by NGO group members on a SPECIFIC PUBLISHED REVISION
+-- of a process (not on the process item in general). This is intentional:
+--
+--   - When process v2 is published, comments on v1 are implicitly "expired"
+--     because they reference the old revision UUID. The NGO page only shows
+--     comments whose revision_id matches the current published_revision_id of
+--     the process item. No deletion is needed — they just stop appearing.
+--
+--   - The group_id (Keycloak group UUID) scopes visibility: a user only sees
+--     comments from their own NGO group.
+--
+--   - There is no translation; the comment is freeform text written once.
+--
+-- Table: micado.ngo_process_comment
+--
+--   id              UUID PK
+--   revision_id     UUID FK → micado.content_revision.id ON DELETE CASCADE
+--                   Points to the PUBLISHED revision at the time of writing.
+--   ngo_group_id    VARCHAR(100)   Keycloak group UUID (from JWT groups claim
+--                                  or ngoGroupId user attribute).
+--   body            TEXT NOT NULL  The comment text.
+--   published       BOOLEAN NOT NULL DEFAULT FALSE
+--                   Simple on/off; false = saved but not visible to migrants.
+--   created_by      JSONB          ActorStamp { sub, username, name, realm }
+--   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+--   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+--
+-- Indexes
+--   idx_ngo_comment_revision  — supports the main query: "comments for revision X"
+--   idx_ngo_comment_group     — supports filtering by group
+
+CREATE TABLE IF NOT EXISTS micado.ngo_process_comment (
+    id           UUID        NOT NULL DEFAULT gen_random_uuid(),
+    revision_id  UUID        NOT NULL
+                     REFERENCES micado.content_revision(id) ON DELETE CASCADE,
+    ngo_group_id VARCHAR(100) NOT NULL,
+    body         TEXT        NOT NULL,
+    published    BOOLEAN     NOT NULL DEFAULT FALSE,
+    created_by   JSONB,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    CONSTRAINT pk_ngo_process_comment PRIMARY KEY (id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ngo_comment_revision
+    ON micado.ngo_process_comment (revision_id);
+
+CREATE INDEX IF NOT EXISTS idx_ngo_comment_group
+    ON micado.ngo_process_comment (ngo_group_id);
+
+COMMENT ON TABLE  micado.ngo_process_comment IS
+    'Free-text comments written by NGO groups on a specific published process revision.';
+COMMENT ON COLUMN micado.ngo_process_comment.revision_id IS
+    'FK to the published content_revision at the time the comment was written. '
+    'When a new revision is published the old comments silently stop appearing '
+    '(they are not deleted, just no longer referenced by the active revision).';
+COMMENT ON COLUMN micado.ngo_process_comment.ngo_group_id IS
+    'Keycloak group UUID that owns this comment. Used to scope visibility '
+    'so each NGO only sees its own comments.';
+COMMENT ON COLUMN micado.ngo_process_comment.published IS
+    'Simple publish flag. FALSE = draft (only visible in the NGO backoffice). '
+    'TRUE  = visible to migrants on the process detail page.';
