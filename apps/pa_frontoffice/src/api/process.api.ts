@@ -59,6 +59,11 @@ export interface Process {
     producedDocTypeIds: number[];
     /** Number of steps in the graph. */
     stepCount: number;
+    /**
+     * Total NGO comments across all groups for the current published revision.
+     * Used to show/hide the comment pill in the list.
+     */
+    ngoCommentCount?: number;
 }
 
 export interface ProcessTranslation {
@@ -85,6 +90,8 @@ export interface ProcessFull {
     producedDocTypeIds?: number[];
     translations?: Record<string, ProcessTranslation>;
     revisions?: RevisionSummary[];
+    /** NGO comments for the current published revision — PA admin only. */
+    ngoComments?: NgoCommentOnProcess[];
 }
 
 export interface ProcessListFilter {
@@ -199,6 +206,18 @@ function buildParams(filter: ProcessListFilter): Record<string, string | number>
 }
 
 // ─── API calls ────────────────────────────────────────────────────────────────
+
+/** One NGO comment as embedded in the process detail response. */
+export interface NgoCommentOnProcess {
+    id: string;
+    ngoGroupId: string;
+    /** Display name resolved from Keycloak — may equal the UUID if resolution failed. */
+    ngoGroupName?: string;
+    body: string;
+    published: boolean;
+    createdBy?: { name?: string; username?: string };
+    createdAt?: string;
+}
 
 export const processApi = {
 

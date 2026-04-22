@@ -864,4 +864,11 @@ export default {
     "item_delete_success": "Item removed.",
     "item_validation_success": "Validation requested."
   }
+  ,
+  "ngo_comments": {
+    "dialog_title": "NGO organisation comments",
+    "no_comments": "No NGO comments for this process yet.",
+    "published": "Published",
+    "draft": "Draft"
+  }
 } as const;

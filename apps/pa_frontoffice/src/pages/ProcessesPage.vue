@@ -200,9 +200,17 @@
                         <q-badge :color="statusColor(process.status)" :label="t(processStatusKey(process))" />
                     </q-item-section>
 
-                    <!-- Comments (placeholder — not yet implemented) -->
+                    <!-- NGO Comments — grey pill when 0, clickable accent pill when > 0 -->
                     <q-item-section class="col-1 flex flex-center">
-                        <span class="text-caption text-grey-6">0</span>
+                        <q-btn
+                            v-if="(process.ngoCommentCount ?? 0) > 0"
+                            unelevated rounded dense no-caps
+                            color="accent" text-color="white"
+                            size="sm" style="min-width:32px"
+                            :label="String(process.ngoCommentCount)"
+                            @click.stop="openCommentsDialog(process)"
+                        />
+                        <span v-else class="text-caption text-grey-5">0</span>
                     </q-item-section>
 
                     <!-- Manage (→ graph editor) -->
@@ -241,10 +249,63 @@
 
         </template>
     </q-page>
+    <!-- ── NGO Comments dialog ─────────────────────────────────────────────── -->
+    <q-dialog v-model="commentsDialog.open" max-width="680px">
+      <q-card style="width:680px; max-width:95vw">
+        <q-card-section class="row items-center q-pb-none">
+          <div>
+            <div class="text-h6">{{ t('ngo_comments.dialog_title') }}</div>
+            <div class="text-caption text-grey-7">{{ commentsDialog.processTitle }}</div>
+          </div>
+          <q-space />
+          <q-btn flat round dense icon="close" @click="commentsDialog.open = false" />
+        </q-card-section>
+
+        <q-card-section>
+          <q-inner-loading :showing="commentsDialog.loading" />
+
+          <div v-if="!commentsDialog.loading">
+            <div v-if="commentsDialog.comments.length === 0"
+              class="text-grey-6 text-caption text-center q-py-lg">
+              {{ t('ngo_comments.no_comments') }}
+            </div>
+
+            <q-list separator v-else>
+              <q-item v-for="c in commentsDialog.comments" :key="c.id" class="q-py-sm">
+                <q-item-section avatar>
+                  <q-avatar color="accent" text-color="white" size="36px">
+                    {{ groupInitials(c.ngoGroupName || c.ngoGroupId) }}
+                  </q-avatar>
+                </q-item-section>
+                <q-item-section>
+                  <q-item-label>
+                    <span class="text-weight-medium">{{ c.ngoGroupName || c.ngoGroupId }}</span>
+                    <q-badge v-if="c.published" color="positive" class="q-ml-sm" dense>
+                      {{ t('ngo_comments.published') }}
+                    </q-badge>
+                    <q-badge v-else color="grey-5" class="q-ml-sm" dense>
+                      {{ t('ngo_comments.draft') }}
+                    </q-badge>
+                  </q-item-label>
+                  <q-item-label caption class="q-mt-xs" style="white-space:pre-wrap">
+                    {{ c.body }}
+                  </q-item-label>
+                  <q-item-label caption class="text-grey-5 q-mt-xs">
+                    {{ c.createdBy?.name || c.createdBy?.username || '—' }}
+                    · {{ formatCommentDate(c.createdAt) }}
+                  </q-item-label>
+                </q-item-section>
+              </q-item>
+            </q-list>
+          </div>
+        </q-card-section>
+      </q-card>
+    </q-dialog>
+
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, reactive, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useQuasar } from 'quasar';
 import { useRouter } from 'vue-router';
@@ -254,12 +315,14 @@ import { useUserTypeStore } from 'src/stores/user-type-store';
 import { useDocumentTypeStore } from 'src/stores/document-type-store';
 import { useAppStore } from 'src/stores/app-store';
 import { processStatusKey } from 'src/api/process.api';
+import { processApi } from 'src/api/process.api';
 import type {
     Process,
     ProcessFull,
     ProcessListFilter,
     ProcessStatus,
     RevisionSummary,
+    NgoCommentOnProcess,
 } from 'src/api/process.api';
 import HelpLabel from 'src/components/HelpLabel.vue';
 import RichTextEditor from 'src/components/RichTextEditor.vue';
@@ -510,6 +573,57 @@ function statusColor(status: ProcessStatus): string {
 }
 
 // ─── Lifecycle ────────────────────────────────────────────────────────────────
+
+// ─── NGO Comments dialog ─────────────────────────────────────────────────────
+
+interface CommentsDialogState {
+    open: boolean;
+    loading: boolean;
+    processId: number | null;
+    processTitle: string;
+    comments: NgoCommentOnProcess[];
+}
+
+const commentsDialog = reactive<CommentsDialogState>({
+    open: false,
+    loading: false,
+    processId: null,
+    processTitle: '',
+    comments: [],
+});
+
+async function openCommentsDialog(process: Process): Promise<void> {
+    commentsDialog.processId = process.id;
+    commentsDialog.processTitle = process.title || `Process #${process.id}`;
+    commentsDialog.comments = [];
+    commentsDialog.open = true;
+    commentsDialog.loading = true;
+    try {
+        const full = await store.getOne(process.id);
+        commentsDialog.comments = full?.ngoComments ?? [];
+    } catch (e) {
+        logger.error('[ProcessesPage] openCommentsDialog failed', e);
+    } finally {
+        commentsDialog.loading = false;
+    }
+}
+
+function groupInitials(name: string): string {
+    return name
+        .split(/[\s-_]+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map(w => w[0]?.toUpperCase() ?? '')
+        .join('');
+}
+
+function formatCommentDate(iso?: string): string {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleDateString(undefined, {
+        day: '2-digit', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+    });
+}
 
 onMounted(async () => {
     await Promise.all([
