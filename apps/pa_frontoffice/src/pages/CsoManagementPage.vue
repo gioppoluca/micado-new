@@ -74,6 +74,14 @@
                 </q-card-section>
 
                 <q-card-section>
+                    <!-- Inline server-side error — stays visible while the user corrects the form -->
+                    <q-banner v-if="createOrgDialog.error" class="bg-negative text-white q-mb-md" rounded dense>
+                        <template #avatar><q-icon name="error_outline" /></template>
+                        {{ createOrgDialog.error }}
+                        <template #action>
+                            <q-btn flat dense color="white" icon="close" @click="createOrgDialog.error = null" />
+                        </template>
+                    </q-banner>
                     <div class="row q-col-gutter-md">
                         <!-- Organisation identity -->
                         <div class="col-12">
@@ -135,7 +143,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useQuasar, type QTableProps } from 'quasar';
 import { ngoOrganizationsApi, type NgoOrganization } from 'src/api';
@@ -190,17 +198,27 @@ const createOrgDialog = reactive({
     saving: false,
     showPassword: false,
     form: emptyOrgForm(),
+    /** Server-side error shown inside the dialog (null = no error) */
+    error: null as string | null,
 });
+
+// Clear the inline error as soon as the user edits any field
+watch(
+    () => ({ ...createOrgDialog.form }),
+    () => { createOrgDialog.error = null; },
+);
 
 function openCreateOrgDialog(): void {
     createOrgDialog.form = emptyOrgForm();
     createOrgDialog.showPassword = false;
+    createOrgDialog.error = null;
     createOrgDialog.open = true;
 }
 
 function closeCreateOrgDialog(): void {
     if (createOrgDialog.saving) return;
     createOrgDialog.open = false;
+    createOrgDialog.error = null;
 }
 
 async function submitCreateOrgDialog(): Promise<void> {
@@ -238,7 +256,9 @@ async function submitCreateOrgDialog(): Promise<void> {
     } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
         logger.error('[CsoManagementPage] createOrganization failed', e);
-        $q.notify({ color: 'negative', message });
+        // Keep the dialog open so the user can correct the input
+        createOrgDialog.error = message;
+        $q.notify({ color: 'negative', message, timeout: 4000 });
     } finally {
         createOrgDialog.saving = false;
     }
