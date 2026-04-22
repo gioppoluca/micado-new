@@ -180,7 +180,7 @@ export class ProcessesController {
             },
         },
     })
-    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer', 'micado_admin'] })
+    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer', 'micado_admin', 'ngo_admin', 'ngo_operator'] })
     async count(
         @param.query.string('topicIds') topicIds?: string,
         @param.query.string('userTypeIds') userTypeIds?: string,
@@ -202,7 +202,7 @@ export class ProcessesController {
             },
         },
     })
-    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer', 'micado_admin'] })
+    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer', 'micado_admin', 'ngo_admin', 'ngo_operator'] })
     async find(
         @param.query.string('topicIds') topicIds?: string,
         @param.query.string('userTypeIds') userTypeIds?: string,
@@ -245,7 +245,7 @@ export class ProcessesController {
             },
         },
     })
-    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer', 'micado_admin'] })
+    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer', 'micado_admin', 'ngo_admin', 'ngo_operator'] })
     async getGraph(@param.path.number('id') id: number): Promise<ProcessGraph> {
         this.logger.info('[ProcessesController.getGraph]', { id });
         return this.processFacadeService.getGraph(id);
@@ -282,7 +282,7 @@ export class ProcessesController {
             },
         },
     })
-    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer', 'micado_admin'] })
+    @authorize({ allowedRoles: ['pa_admin', 'pa_operator', 'pa_viewer', 'micado_admin', 'ngo_admin', 'ngo_operator'] })
     async findById(@param.path.number('id') id: number): Promise<ProcessFull> {
         this.logger.info('[ProcessesController.findById]', { id });
         return this.processFacadeService.findById(id);

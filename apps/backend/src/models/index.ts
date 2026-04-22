@@ -32,5 +32,8 @@ export * from './migrant-profile.model';
 export * from './intervention-plan.model';
 export * from './intervention-plan-item.model';
 
+// NGO process comments
+export * from './ngo-process-comment.model';
+
 // Weblate webhook staging model
 export * from './weblate-commit-event.model';

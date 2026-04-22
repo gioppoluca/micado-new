@@ -17,3 +17,4 @@ export * from './weblate-commit-event.repository';
 export * from './migrant-profile.repository';
 export * from './intervention-plan-item.repository';
 export * from './intervention-plan.repository';
+export * from './ngo-process-comment.repository';

@@ -3,6 +3,7 @@ import { HttpErrors } from '@loopback/rest';
 import { LoggingBindings, WinstonLogger } from '@loopback/logging';
 import { UserProfile } from '@loopback/security';
 import { KeycloakAdminService } from './keycloak-admin.service';
+import { NgoGroupResolverService } from './ngo-group-resolver.service';
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -61,6 +62,8 @@ export class NgoUserManagementService {
     constructor(
         @inject('services.KeycloakAdminService')
         private readonly keycloakAdmin: KeycloakAdminService,
+        @inject('services.NgoGroupResolverService')
+        private readonly groupResolver: NgoGroupResolverService,
         @inject(LoggingBindings.WINSTON_LOGGER)
         private readonly logger: WinstonLogger,
     ) { }
@@ -274,62 +277,13 @@ export class NgoUserManagementService {
         kc: Awaited<ReturnType<KeycloakAdminService['getClient']>>;
         groupId: string;
     }> {
-        const kc = await this.keycloakAdmin.getClient(
-            NgoUserManagementService.NGO_REALM,
-        );
-
-        const groupId = await this.resolveCallerGroupId(kc, caller);
-
+        // Group resolution is delegated to the shared NgoGroupResolverService
+        // so the same two-path logic and UUID format is used across all NGO services.
+        const [kc, groupId] = await Promise.all([
+            this.keycloakAdmin.getClient(NgoUserManagementService.NGO_REALM),
+            this.groupResolver.resolve(caller),
+        ]);
         return { kc, groupId };
-    }
-
-    /**
-     * Resolves the Keycloak group UUID for the calling ngo-admin.
-     *
-     * Priority:
-     *  1. `groups` claim in the JWT (array of path strings like ["/ngo-red-cross"])
-     *  2. `ngoGroupId` custom attribute on the user record in Keycloak
-     */
-    private async resolveCallerGroupId(
-        kc: Awaited<ReturnType<KeycloakAdminService['getClient']>>,
-        caller: UserProfile,
-    ): Promise<string> {
-        // 1. JWT groups claim — populated by a Keycloak Group Membership mapper
-        const rawGroups: unknown = (caller as Record<string, unknown>)['groups'];
-        if (Array.isArray(rawGroups) && rawGroups.length > 0) {
-            const groupPath = String(rawGroups[0]).replace(/^\//, '');
-            const found = await kc.groups.find({ search: groupPath });
-            const exact = found.find(g => g.name === groupPath);
-            if (exact?.id) {
-                this.logger.debug(
-                    '[NgoUserManagementService] resolved groupId from JWT groups claim',
-                    { groupPath, groupId: exact.id },
-                );
-                return exact.id;
-            }
-        }
-
-        // 2. Custom attribute fallback — set by our bootstrap service on creation
-        const userId = caller.id ?? caller[Symbol.for('securityId') as unknown as string];
-        if (userId) {
-            const userRecord = await kc.users.findOne({ id: userId as string });
-            const attrGroupId = userRecord?.attributes?.['ngoGroupId']?.[0];
-            if (attrGroupId) {
-                this.logger.debug(
-                    '[NgoUserManagementService] resolved groupId from user attribute',
-                    { userId, groupId: attrGroupId },
-                );
-                return attrGroupId;
-            }
-        }
-
-        this.logger.warn(
-            '[NgoUserManagementService] caller has no resolvable NGO group',
-            { callerId: caller.id },
-        );
-        throw new HttpErrors.Forbidden(
-            'Your account is not associated with any NGO organisation group.',
-        );
     }
 
     /**
