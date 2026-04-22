@@ -6,10 +6,12 @@
   "roles": {
     "realm": [
       {
-        "name": "ngo_admin"
+        "name": "ngo_admin",
+        "description": "NGO organisation administrator \u2014 can manage members of own group"
       },
       {
-        "name": "ngo_operator"
+        "name": "ngo_operator",
+        "description": "NGO operator \u2014 limited read access within own group"
       }
     ]
   },
@@ -39,6 +41,19 @@
             "access.token.claim": "true",
             "id.token.claim": "false",
             "userinfo.token.claim": "false"
+          }
+        },
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "claim.name": "groups"
           }
         }
       ]
