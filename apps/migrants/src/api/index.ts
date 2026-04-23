@@ -53,3 +53,11 @@ export type { MigrantGlossaryTerm, GlossaryMigrantParams } from './glossary.api'
 
 export { processApi } from './process.api';
 export type { MigrantProcess, ProcessMigrantParams } from './process.api';
+// ─── Document Wallet (authenticated migrant) ──────────────────────────────────
+export { documentApi, buildDataUri } from './document.api';
+export type {
+    MigrantDocument,
+    MigrantDocumentSummary,
+    UploadDocumentPayload,
+    UpdateDocumentPayload,
+} from './document.api';

@@ -63,6 +63,18 @@ const routes: RouteRecordRaw[] = [
         meta: { requiresAuth: true },
       },
       {
+        path: 'document-wallet/:id',
+        name: 'document-detail',
+        component: () => import('pages/DocumentDetailPage.vue'),
+        meta: { requiresAuth: true },
+      },
+      {
+        path: 'document-wallet/:id/edit',
+        name: 'document-edit',
+        component: () => import('pages/DocumentEditPage.vue'),
+        meta: { requiresAuth: true },
+      },
+      {
         path: 'tasks',
         name: 'tasks',
         component: () => import('pages/TasksPage.vue'),

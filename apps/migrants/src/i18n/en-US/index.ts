@@ -147,6 +147,28 @@ export default {
   },
 
   // ── Features ──────────────────────────────────────────────────
+  documents: {
+    add_document: 'Add Document',
+    document_type: 'Document Type',
+    change_type: 'Change Document Type',
+    change_image: 'Change Image',
+    delete_image: 'Delete Image',
+    upload_new_image: 'Upload new Image',
+    shareable_label: 'Document is shareable',
+    shareable_hint: 'PA social assistants will be able to see this document.',
+    share_label: 'Share',
+    choose_file: 'Choose a file (image or PDF)',
+    pdf_selected: 'PDF selected',
+    no_documents: 'No documents yet. Tap "Add Document" to upload your first one.',
+    not_found: 'Document not found.',
+    issuer: 'Document Issuer',
+    edit_title: 'Edit your document',
+    upload_success: 'Document uploaded successfully.',
+    save_success: 'Document saved.',
+    delete_success: 'Document deleted.',
+    delete_confirm_title: 'Delete document',
+    delete_confirm_body: 'Are you sure you want to delete this document? This action cannot be undone.',
+  },
   features: {
     documents_coming_soon: 'The document wallet feature is coming soon. It will allow you to securely store and manage your personal documents.',
     tasks_coming_soon: 'The integration plan feature is coming soon. It will help you track your personalised integration journey step by step.',
