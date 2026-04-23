@@ -142,13 +142,14 @@ export const useDocumentStore = defineStore('document', (): DocumentStoreSetup =
         try {
             const created = await documentApi.upload(payload);
             // Add summary to the list (strip binary from the cache entry)
-            const summary: MigrantDocumentSummary = {
+            const summary = {
                 id: created.id, migrantId: created.migrantId,
                 ...(created.documentTypeId !== undefined && { documentTypeId: created.documentTypeId }),
                 fileName: created.fileName, mimeType: created.mimeType,
                 shareable: created.shareable,
-                createdAt: created.createdAt, updatedAt: created.updatedAt,
-            };
+                ...(created.createdAt !== undefined && { createdAt: created.createdAt }),
+                ...(created.updatedAt !== undefined && { updatedAt: created.updatedAt }),
+            } satisfies MigrantDocumentSummary;
             documents.value = [summary, ...documents.value];
             logger.info('[document-store] upload done', { id: created.id });
             return created;
@@ -166,13 +167,14 @@ export const useDocumentStore = defineStore('document', (): DocumentStoreSetup =
         try {
             const updated = await documentApi.update(id, payload);
             // Refresh the list entry (strip binary from the cache entry)
-            const summary: MigrantDocumentSummary = {
+            const summary = {
                 id: updated.id, migrantId: updated.migrantId,
                 ...(updated.documentTypeId !== undefined && { documentTypeId: updated.documentTypeId }),
                 fileName: updated.fileName, mimeType: updated.mimeType,
                 shareable: updated.shareable,
-                createdAt: updated.createdAt, updatedAt: updated.updatedAt,
-            };
+                ...(updated.createdAt !== undefined && { createdAt: updated.createdAt }),
+                ...(updated.updatedAt !== undefined && { updatedAt: updated.updatedAt }),
+            } satisfies MigrantDocumentSummary;
             const idx = documents.value.findIndex(d => d.id === id);
             if (idx !== -1) documents.value[idx] = summary;
             if (selectedDocument.value?.id === id) selectedDocument.value = updated;
