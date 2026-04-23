@@ -31,6 +31,7 @@ export * from './step-link-full.model';
 export * from './migrant-profile.model';
 export * from './intervention-plan.model';
 export * from './intervention-plan-item.model';
+export * from './migrant-document.model';
 
 // NGO process comments
 export * from './ngo-process-comment.model';
