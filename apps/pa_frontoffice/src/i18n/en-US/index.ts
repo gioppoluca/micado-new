@@ -654,6 +654,8 @@ export default {
     "no_orgs_found": "No CSO organisations found. Click 'Add new CSO' to create the first one.",
     "addNgo": "Add new CSO",
     "adminMail": "Admin email",
+    "contactEmail": "Contact email (for migrants)",
+    "contactEmailHint": "Migrants can send documents to this address. Leave empty if not applicable.",
     "ngoName": "CSO name",
     "link": "CSO web site",
     "contactMail": "Contact email",

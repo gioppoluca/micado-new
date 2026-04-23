@@ -10,11 +10,15 @@ export interface NgoOrganization {
     slug: string;
     adminUserId?: string;
     adminEmail?: string;
+    /** Contact email shown to migrants for the send-document dropdown. */
+    contactEmail?: string;
 }
 
 export interface CreateNgoOrganizationPayload {
     displayName: string;
     slug: string;
+    /** Optional: email address migrants can send documents to. Stored as a Keycloak group attribute. */
+    contactEmail?: string;
     adminEmail: string;
     adminFirstName: string;
     adminLastName: string;

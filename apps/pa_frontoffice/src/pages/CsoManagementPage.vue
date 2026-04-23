@@ -55,6 +55,15 @@
                     </q-td>
                 </template>
 
+                <template #body-cell-contactEmail="props">
+                    <q-td :props="props">
+                        <span v-if="props.row.contactEmail" class="text-caption">
+                            {{ props.row.contactEmail }}
+                        </span>
+                        <span v-else class="text-grey-5">—</span>
+                    </q-td>
+                </template>
+
                 <template #no-data>
                     <div class="full-width row flex-center q-gutter-sm q-pa-lg text-grey-7">
                         <q-icon name="domain_disabled" size="28px" />
@@ -92,6 +101,11 @@
                             <q-input v-model.trim="createOrgDialog.form.slug" outlined dense
                                 label="Slug (URL-safe identifier)" autocomplete="off"
                                 hint="Lowercase letters, digits and hyphens only. Used as a unique key." />
+                        </div>
+                        <div class="col-12">
+                            <q-input v-model.trim="createOrgDialog.form.contactEmail" outlined dense type="email"
+                                :label="t('ngo.contactEmail')" autocomplete="off"
+                                :hint="t('ngo.contactEmailHint')" />
                         </div>
                         <q-separator class="col-12" />
                         <!-- First admin account -->
@@ -177,6 +191,13 @@ const orgColumns: QTableProps['columns'] = [
         align: 'left',
         sortable: true,
     },
+    {
+        name: 'contactEmail',
+        label: t('ngo.contactEmail'),
+        field: 'contactEmail',
+        align: 'left',
+        sortable: false,
+    },
 ];
 
 // ── Create org dialog ─────────────────────────────────────────────────────────
@@ -185,6 +206,7 @@ function emptyOrgForm() {
     return {
         displayName: '',
         slug: '',
+        contactEmail: '',
         adminEmail: '',
         adminFirstName: '',
         adminLastName: '',
@@ -240,6 +262,7 @@ async function submitCreateOrgDialog(): Promise<void> {
         const created = await ngoOrganizationsApi.createOrganization({
             displayName: f.displayName.trim(),
             slug: f.slug.trim(),
+            ...(f.contactEmail.trim() && { contactEmail: f.contactEmail.trim().toLowerCase() }),
             adminEmail: f.adminEmail.trim().toLowerCase(),
             adminFirstName: f.adminFirstName.trim(),
             adminLastName: f.adminLastName.trim(),
