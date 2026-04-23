@@ -168,6 +168,15 @@ export default {
     delete_success: 'Document deleted.',
     delete_confirm_title: 'Delete document',
     delete_confirm_body: 'Are you sure you want to delete this document? This action cannot be undone.',
+    // Send via email
+    send_title: 'Send document via email',
+    send_subtitle: 'Select a public authority or enter a new email address',
+    select_authority: 'Select a public authority',
+    different_email: 'Send to a different email',
+    send_document: 'Send Document',
+    send_success_prefix: 'Your document was successfully sent to:',
+    send_error_no_user: 'The email you entered does not exist.',
+    send_error_generic: 'The document could not be sent. Please try again.',
   },
   features: {
     documents_coming_soon: 'The document wallet feature is coming soon. It will allow you to securely store and manage your personal documents.',

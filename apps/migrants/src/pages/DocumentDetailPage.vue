@@ -37,6 +37,7 @@
           flat round icon="send" color="primary"
           :title="t('documents.share_label')"
           :disable="!doc.shareable"
+          @click="goSend"
         />
         <q-btn
           flat round icon="download" color="grey-7"
@@ -156,6 +157,10 @@ const dataUri = computed(() => {
 
 function goEdit(): void {
   void router.push({ name: 'document-edit', params: { id: id.value } });
+}
+
+function goSend(): void {
+  void router.push({ name: 'document-send', params: { id: id.value } });
 }
 
 function download(): void {

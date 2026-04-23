@@ -60,4 +60,7 @@ export type {
     MigrantDocumentSummary,
     UploadDocumentPayload,
     UpdateDocumentPayload,
+    ContactEmailOption,
+    SendDocumentPayload,
+    SendDocumentResult,
 } from './document.api';

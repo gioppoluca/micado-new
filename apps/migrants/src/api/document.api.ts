@@ -104,6 +104,25 @@ export const documentApi = {
         logger.warn('[document.api] remove', { id });
         return apiDelete(`/documents-migrant/${id}`);
     },
+
+    /**
+     * List available send-to email contacts (NGO groups + PA).
+     * Public endpoint — no auth required (but token is sent if available).
+     */
+    async listContactEmails(): Promise<ContactEmailOption[]> {
+        logger.info('[document.api] listContactEmails');
+        return apiGet<ContactEmailOption[]>('/ngo/contact-emails');
+    },
+
+    /**
+     * Send a document as an email attachment to the given address.
+     * Returns { sentTo: string } on success.
+     * Throws ApiError on SMTP failure (status 502) or server misconfiguration (503).
+     */
+    async sendByEmail(id: string, payload: SendDocumentPayload): Promise<SendDocumentResult> {
+        logger.info('[document.api] sendByEmail', { id, to: payload.email });
+        return apiPost<SendDocumentResult>(`/documents-migrant/${id}/send-email`, payload);
+    },
 };
 
 // ─── Mock handlers ────────────────────────────────────────────────────────────
@@ -133,11 +152,28 @@ const MOCK_DOCS: MigrantDocument[] = [
     },
 ];
 
+// ─── Contact email types ──────────────────────────────────────────────────────
+
+/** One entry in the send-to dropdown. */
+export interface ContactEmailOption {
+    displayName: string;
+    email: string;
+}
+
+export interface SendDocumentPayload {
+    email: string;
+}
+
+export interface SendDocumentResult {
+    sentTo: string;
+}
+
 export function registerDocumentMocks(mock: MockRegistry): void {
     // GET /documents-migrant
     mock.onGet('/documents-migrant').reply((): MockReplyTuple => {
         logger.debug('[mock] GET /documents-migrant', { count: MOCK_DOCS.length });
-        return [200, MOCK_DOCS.map(({ fileData: _fd, ...rest }) => rest)];
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        return [200, MOCK_DOCS.map(({ fileData, ...rest }) => rest)];
     });
 
     // GET /documents-migrant/:id
@@ -173,7 +209,7 @@ export function registerDocumentMocks(mock: MockRegistry): void {
         const idx = MOCK_DOCS.findIndex(d => d.id === id);
         if (idx === -1) return [404, { error: { message: `Document ${id} not found.` } }];
         MOCK_DOCS[idx] = { ...MOCK_DOCS[idx]!, updatedAt: new Date().toISOString() };
-        return [200, MOCK_DOCS[idx]!];
+        return [200, MOCK_DOCS[idx]];
     });
 
     // DELETE /documents-migrant/:id
@@ -183,6 +219,21 @@ export function registerDocumentMocks(mock: MockRegistry): void {
         if (idx === -1) return [404, { error: { message: `Document ${id} not found.` } }];
         MOCK_DOCS.splice(idx, 1);
         return [204];
+    });
+
+    // GET /ngo/contact-emails
+    mock.onGet('/ngo/contact-emails').reply((): MockReplyTuple => {
+        logger.debug('[mock] GET /ngo/contact-emails');
+        return [200, [
+            { displayName: 'Public Administration', email: 'pa@micado.example.eu' },
+            { displayName: 'Red Cross NGO', email: 'redcross@micado.example.eu' },
+        ]];
+    });
+
+    // POST /documents-migrant/:id/send-email
+    mock.onPost(/\/documents-migrant\/[\w-]+\/send-email$/).reply((): MockReplyTuple => {
+        logger.debug('[mock] POST /documents-migrant/:id/send-email');
+        return [200, { sentTo: 'test@example.com' }];
     });
 
     logger.debug('[mock] document handlers registered');
