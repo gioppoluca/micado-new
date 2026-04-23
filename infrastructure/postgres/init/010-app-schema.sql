@@ -606,3 +606,74 @@ COMMENT ON COLUMN micado.ngo_process_comment.ngo_group_id IS
 COMMENT ON COLUMN micado.ngo_process_comment.published IS
     'Simple publish flag. FALSE = draft (only visible in the NGO backoffice). '
     'TRUE  = visible to migrants on the process detail page.';
+
+-- ── Migrant Document Wallet ───────────────────────────────────────────────────
+--
+-- Design
+-- ──────
+-- Each row is one personal document uploaded by a migrant.
+-- The document binary is stored as BYTEA (BLOB) in the DB — no external object
+-- storage required. For large deployments the column can be moved to a separate
+-- large-object strategy, but BYTEA is correct for the current scale.
+--
+-- document_type_id references content_item.external_key (the legacy numeric id
+-- of the DOCUMENT_TYPE content item).  It is nullable — a migrant may upload
+-- a document before the PA has published any document types.
+--
+-- The migrant_id FK references migrant_profile.keycloak_id so the row is
+-- automatically deleted if the migrant account is purged.
+--
+-- shareable: PA workers can see shareable documents in the migrant's profile.
+--           Non-shareable documents are private and only visible to the migrant.
+--
+-- No translation columns — document labels/names are not translated.
+-- The document_type name is resolved from the published CRT translation when
+-- displayed on screen.
+--
+-- Table: micado.migrant_document
+--
+--   id               UUID PK
+--   migrant_id       UUID FK → migrant_profile.keycloak_id ON DELETE CASCADE
+--   document_type_id INTEGER  nullable — content_item.external_key of DOCUMENT_TYPE
+--   file_name        VARCHAR(500)  original filename (e.g. "identity_card.jpg")
+--   mime_type        VARCHAR(100)  e.g. "image/jpeg", "application/pdf"
+--   file_data        BYTEA NOT NULL — binary content
+--   shareable        BOOLEAN NOT NULL DEFAULT FALSE
+--   created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+--   updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+
+CREATE TABLE IF NOT EXISTS micado.migrant_document (
+    id               UUID         NOT NULL DEFAULT gen_random_uuid(),
+    migrant_id       UUID         NOT NULL
+                         REFERENCES micado.migrant_profile(keycloak_id)
+                         ON DELETE CASCADE,
+    document_type_id INTEGER,          -- nullable: references content_item.external_key
+    file_name        VARCHAR(500)  NOT NULL DEFAULT '',
+    mime_type        VARCHAR(100)  NOT NULL DEFAULT 'application/octet-stream',
+    file_data        BYTEA         NOT NULL,
+    shareable        BOOLEAN       NOT NULL DEFAULT FALSE,
+    created_at       TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    updated_at       TIMESTAMPTZ   NOT NULL DEFAULT now(),
+
+    CONSTRAINT pk_migrant_document PRIMARY KEY (id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_migrant_document_migrant_id
+    ON micado.migrant_document (migrant_id);
+
+CREATE INDEX IF NOT EXISTS idx_migrant_document_type_id
+    ON micado.migrant_document (document_type_id)
+    WHERE document_type_id IS NOT NULL;
+
+COMMENT ON TABLE  micado.migrant_document IS
+    'Personal documents uploaded by a migrant to their Document Wallet. '
+    'Binary content stored as BYTEA. Not translated.';
+COMMENT ON COLUMN micado.migrant_document.document_type_id IS
+    'Optional FK to content_item.external_key for a DOCUMENT_TYPE item. '
+    'Nullable: a migrant may upload a document without selecting a type.';
+COMMENT ON COLUMN micado.migrant_document.shareable IS
+    'When TRUE, PA social assistants can see this document in the migrant profile. '
+    'When FALSE, the document is private and only visible to the migrant.';
+COMMENT ON COLUMN micado.migrant_document.file_data IS
+    'Binary content of the document. Max recommended size: 10 MB per row. '
+    'Served as base64 over the API; the backend enforces a size limit.';
