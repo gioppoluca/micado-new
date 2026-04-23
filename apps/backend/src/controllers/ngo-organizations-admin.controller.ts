@@ -129,6 +129,7 @@ export class NgoOrganizationsAdminController {
             properties: {
               displayName: { type: 'string' },
               slug: { type: 'string' },
+              contactEmail: { type: 'string', format: 'email' },
               adminEmail: { type: 'string', format: 'email' },
               adminFirstName: { type: 'string' },
               adminLastName: { type: 'string' },

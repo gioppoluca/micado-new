@@ -6,6 +6,8 @@ import {KeycloakAdminService} from './keycloak-admin.service';
 export interface CreateNgoOrganizationRequest {
   displayName: string;
   slug: string;
+  /** Contact email for this NGO organisation — shown to migrants as a send-to option. */
+  contactEmail?: string;
   adminEmail: string;
   adminFirstName: string;
   adminLastName: string;
@@ -20,6 +22,8 @@ export interface NgoOrganizationSummary {
   slug: string;
   adminUserId?: string;
   adminEmail?: string;
+  /** Contact email for this NGO — exposed to migrants for the send-document feature. */
+  contactEmail?: string;
 }
 
 /**
@@ -66,6 +70,9 @@ export class NgoOrganizationBootstrapService {
       slug:
         group.attributes?.ngoSlug?.[0] ??
         this.stripPrefix(group.name ?? ''),
+      ...(group.attributes?.contactEmail?.[0] && {
+        contactEmail: group.attributes.contactEmail[0],
+      }),
     }));
   }
 
@@ -111,6 +118,9 @@ export class NgoOrganizationBootstrapService {
         ngoSlug: [slug],
         displayName: [request.displayName.trim()],
         managedBy: ['micado-backend'],
+        ...(request.contactEmail?.trim() && {
+          contactEmail: [request.contactEmail.trim().toLowerCase()],
+        }),
       },
     });
 
@@ -187,6 +197,9 @@ export class NgoOrganizationBootstrapService {
         slug,
         adminUserId: userId,
         adminEmail: email,
+        ...(request.contactEmail?.trim() && {
+          contactEmail: request.contactEmail.trim().toLowerCase(),
+        }),
       };
     } catch (error) {
       this.logger.error(
@@ -223,6 +236,9 @@ export class NgoOrganizationBootstrapService {
     }
     if (!request.temporaryPassword?.trim()) {
       throw new HttpErrors.UnprocessableEntity('temporaryPassword is required.');
+    }
+    if (request.contactEmail?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(request.contactEmail.trim())) {
+      throw new HttpErrors.UnprocessableEntity('contactEmail must be a valid email address.');
     }
   }
 

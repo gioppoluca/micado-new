@@ -28,6 +28,7 @@ export * from './ngo-process-comments.controller';
 export * from './migrant-users-admin.controller';
 export * from './intervention-plan.controller';
 export * from './migrant-documents.controller';
+export * from './document-email.controller';
 
 // ── Webhook receivers ─────────────────────────────────────────────────────────
 //
