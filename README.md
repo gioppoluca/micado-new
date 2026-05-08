@@ -19,9 +19,15 @@ Three Vue SPAs (migrants, PA, NGO) backed by a LoopBack 4 API, Keycloak for auth
 
 ## First-time setup
 
+> **Do this once before anything else.** All scenarios below require a
+> populated `.env` file. If you skip this step, nothing will start correctly.
+
 ```bash
 cp .env.example .env
-# edit .env and fill in passwords / domains
+# Open .env and set at minimum:
+#   POSTGRES_SUPERPASS, MICADO_APP_PASSWORD, KEYCLOAK_DB_PASSWORD,
+#   GITEA_DB_PASSWORD, WEBLATE_DB_PASSWORD, UMAMI_DB_PASSWORD,
+#   UMAMI_APP_SECRET
 ```
 
 Dev compose uses `BASE_DOMAIN=localhost` so all services are reachable at `*.localhost`.
@@ -51,9 +57,11 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up [services] [fl
 
 ### Scenario 1 — Backend only, no real auth
 
-The fastest setup for working on backend APIs. The backend runs with a dummy user profile — no Keycloak token needed.
+> **Prerequisite:** Complete "First-time setup" above before running this
+> scenario. Running with a missing or incomplete `.env` will cause database
+> init failures that require a full volume wipe (`down -v`) to recover from.
 
-In `.env`, uncomment:
+In your `.env`, uncomment (these lines are already present, just remove the `#`):
 ```
 AUTH_DISABLE_KEYCLOAK=true
 AUTH_DUMMY_ROLES=pa_admin
