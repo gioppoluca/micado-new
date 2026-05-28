@@ -7,3 +7,12 @@ dist
 
 # Local archive dumps
 *.zip
+
+
+# TypeScript incremental build cache
+*.tsbuildinfo
+
+# Backend generated output
+apps/backend/dist/
+apps/backend/node_modules/
+
