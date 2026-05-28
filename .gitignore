@@ -16,3 +16,15 @@ dist
 apps/backend/dist/
 apps/backend/node_modules/
 
+# Quasar generated folders
+apps/migrants/dist/
+apps/migrants/.quasar/
+apps/migrants/.output/
+
+apps/pa/dist/
+apps/pa/.quasar/
+apps/pa/.output/
+
+apps/ngo/dist/
+apps/ngo/.quasar/
+apps/ngo/.output/
