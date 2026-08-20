@@ -49,6 +49,12 @@ services:
       KEYCLOAK_EXPECTED_AUDIENCE: ${BACKEND_KEYCLOAK_EXPECTED_AUDIENCE:-micado-backend}
       CORS_ORIGIN: http://migrants.${BASE_DOMAIN},http://pa.${BASE_DOMAIN},http://ngo.${BASE_DOMAIN}
       LOG_LEVEL: debug
+      # Development/test-only dummy authentication. These variables are
+      # intentionally absent from the base and production Compose services.
+      AUTH_DISABLE_KEYCLOAK: ${AUTH_DISABLE_KEYCLOAK:-false}
+      AUTH_DUMMY_ROLES: ${AUTH_DUMMY_ROLES:-pa_admin}
+      AUTH_DUMMY_USERNAME: ${AUTH_DUMMY_USERNAME:-test.user}
+      AUTH_DUMMY_SUB: ${AUTH_DUMMY_SUB:-test-user}
     volumes:
       - ./apps/backend:/app
     labels:

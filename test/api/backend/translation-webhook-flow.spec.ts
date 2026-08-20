@@ -73,8 +73,7 @@ async function postPush(
 /**
  * Build a realistic Weblate COMMIT payload.
  */
-function commitPayload(category: string, lang: string, changeId = 1000) {
-    const component = `content-${category}`;
+function commitPayload(component: string, lang: string, changeId = 1000) {
     return {
         change_id: changeId,
         action: 'Changes committed',

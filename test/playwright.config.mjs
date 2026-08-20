@@ -6,7 +6,11 @@ const baseDomain = process.env.BASE_DOMAIN?.trim() || 'localhost';
 
 export default defineConfig({
   testDir: '.',
-  testMatch: ['smoke/**/*.spec.mjs', 'api/**/*.spec.mjs', 'e2e/**/*.spec.mjs'],
+  testMatch: [
+    'smoke/**/*.spec.mjs',
+    'api/**/*.spec.{mjs,ts}',
+    'e2e/**/*.spec.{mjs,ts}',
+  ],
   outputDir: `${resultsDirectory}/artifacts`,
   fullyParallel: false,
   workers: 1,
