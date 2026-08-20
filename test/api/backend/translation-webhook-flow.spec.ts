@@ -37,9 +37,10 @@
  */
 
 import { test, expect, request, APIRequestContext } from '@playwright/test';
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 
 const baseURL = process.env.API_BASE_URL ?? 'http://api.localhost';
+const webhookSecret = process.env.WEBLATE_WEBHOOK_SECRET ?? '';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -57,7 +58,10 @@ async function postCommit(
     ctx: APIRequestContext,
     body: Record<string, unknown>,
 ) {
-    return ctx.post('/api/webhooks/weblate/translation-committed', { data: body });
+    return ctx.post('/api/webhooks/weblate/translation-committed', {
+        data: body,
+        headers: standardWebhookHeaders(body),
+    });
 }
 
 /**
@@ -67,7 +71,29 @@ async function postPush(
     ctx: APIRequestContext,
     body: Record<string, unknown>,
 ) {
-    return ctx.post('/api/webhooks/weblate/translation-pushed', { data: body });
+    return ctx.post('/api/webhooks/weblate/translation-pushed', {
+        data: body,
+        headers: standardWebhookHeaders(body),
+    });
+}
+
+function standardWebhookHeaders(body: Record<string, unknown>): Record<string, string> {
+    if (!webhookSecret) {
+        throw new Error('WEBLATE_WEBHOOK_SECRET must be available in the Playwright container');
+    }
+
+    const messageId = randomUUID().replaceAll('-', '');
+    const timestamp = String(Date.now() / 1000);
+    const key = Buffer.from(webhookSecret.replace(/^whsec_/, ''), 'base64');
+    const signature = createHmac('sha256', key)
+        .update(`${messageId}.${timestamp}.${JSON.stringify(body)}`)
+        .digest('base64');
+
+    return {
+        'webhook-id': messageId,
+        'webhook-timestamp': timestamp,
+        'webhook-signature': `v1,${signature}`,
+    };
 }
 
 /**
@@ -126,6 +152,13 @@ test.afterEach(async () => {
 // ── Suite 1: /translation-committed ──────────────────────────────────────────
 
 test.describe('translation-committed webhook', () => {
+
+    test('rejects an unsigned webhook request', async () => {
+        const ctx = await api();
+        const body = commitPayload('content-topics', 'it', 1099);
+        const res = await ctx.post('/api/webhooks/weblate/translation-committed', { data: body });
+        expect(res.status()).toBe(403);
+    });
 
     test('returns 200 and stores row for valid COMMIT payload', async () => {
         const ctx = await api();

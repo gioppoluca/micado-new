@@ -49,16 +49,16 @@
  */
 
 import { post, Request, RestBindings, requestBody } from '@loopback/rest';
-import { inject } from '@loopback/core';
+import { inject, service } from '@loopback/core';
 import { repository } from '@loopback/repository';
 import { authenticate } from '@loopback/authentication';
-import { authorize } from '@loopback/authorization';
 import { LoggingBindings } from '@loopback/logging';
 import { randomUUID } from 'node:crypto';
 import type { Logger } from 'winston';
 import { WeblateCommitEventRepository } from '../../repositories/weblate-commit-event.repository';
 import { GiteaTranslationImportService } from '../../services/gitea-translation-import.service';
 import { TranslationWorkflowOrchestratorService } from '../../services/translation-workflow-orchestrator.service';
+import { WeblateWebhookSignatureService } from '../../services/weblate-webhook-signature.service';
 
 interface WeblatePushBody {
     change_id?: number;
@@ -86,6 +86,9 @@ export class TranslationPushedController {
 
         @inject(TranslationWorkflowOrchestratorService.BINDING)
         private readonly orchestrator: TranslationWorkflowOrchestratorService,
+
+        @service(WeblateWebhookSignatureService)
+        private readonly webhookSignature: WeblateWebhookSignatureService,
     ) {
         this.logger.info(
             '[WeblatePush] REGISTERED — POST /api/webhooks/weblate/translation-pushed',
@@ -94,7 +97,6 @@ export class TranslationPushedController {
 
     @post('/api/webhooks/weblate/translation-pushed')
     @authenticate.skip()
-    @authorize({ allowedRoles: ['$everyone'] })
     async receive(
         @inject(RestBindings.Http.REQUEST) req: Request,
         @requestBody({
@@ -108,6 +110,8 @@ export class TranslationPushedController {
         })
         body: WeblatePushBody,
     ): Promise<{ ok: boolean; claimed?: number; signaled?: number; message?: string }> {
+
+        this.webhookSignature.verify(req, body);
 
         const tag = '[WeblatePush]';
 

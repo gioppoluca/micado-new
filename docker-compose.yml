@@ -153,6 +153,7 @@ services:
       GITEA_TRANSLATIONS_REPO: translations
       GITEA_TRANSLATIONS_BRANCH: main
       GITEA_TOKEN_FILE: /bootstrap/gitea-weblate.token
+      WEBLATE_WEBHOOK_SECRET: ${WEBLATE_WEBHOOK_SECRET:?WEBLATE_WEBHOOK_SECRET is required}
       UMAMI_URL: http://umami:3000
       UMAMI_ADMIN_USERNAME: ${UMAMI_ADMIN_USERNAME:-admin}
       UMAMI_ADMIN_PASSWORD: ${UMAMI_ADMIN_PASSWORD:-umami}
@@ -441,7 +442,7 @@ services:
       WEBLATE_GIT_PUSH_REPO: ""                    # empty = same as WEBLATE_GIT_REPO      BOOTSTRAP_DIR: /bootstrap
       WEBLATE_WEBHOOK_URL_COMMITTED: "http://backend:3000/api/webhooks/weblate/translation-committed"
       WEBLATE_WEBHOOK_URL_PUSHED:    "http://backend:3000/api/webhooks/weblate/translation-pushed"
-      WEBLATE_WEBHOOK_SECRET: "bWljYWRvMjAyNm1pY2FkbzIwMjZtaWNhZG8yMDI2bWljYWRvMjAyNm1pY2FkbzIwMjY="          # set a base64 secret in production
+      WEBLATE_WEBHOOK_SECRET: ${WEBLATE_WEBHOOK_SECRET:?WEBLATE_WEBHOOK_SECRET is required}
       WEBLATE_WEBHOOK_EVENTS_COMMITTED: "17"   # default, no need to set explicitly
       WEBLATE_WEBHOOK_EVENTS_PUSHED:    "18"   # default, no need to set explicitly
       TOKEN_FILE: /bootstrap/gitea-weblate.token

@@ -39,13 +39,14 @@
  */
 
 import { post, Request, RestBindings, requestBody } from '@loopback/rest';
-import { inject } from '@loopback/core';
+import { inject, service } from '@loopback/core';
 import { repository } from '@loopback/repository';
 import { authenticate } from '@loopback/authentication';
 //import { authorize } from '@loopback/authorization';
 import { LoggingBindings } from '@loopback/logging';
 import type { Logger } from 'winston';
 import { WeblateCommitEventRepository } from '../../repositories/weblate-commit-event.repository';
+import { WeblateWebhookSignatureService } from '../../services/weblate-webhook-signature.service';
 
 /**
  * Technical prefix applied to every MICADO component created in Weblate.
@@ -83,6 +84,9 @@ export class TranslationCommittedController {
 
         @repository(WeblateCommitEventRepository)
         private readonly commitEventRepo: WeblateCommitEventRepository,
+
+        @service(WeblateWebhookSignatureService)
+        private readonly webhookSignature: WeblateWebhookSignatureService,
     ) {
         this.logger.info(
             '[WeblateCommit] REGISTERED — POST /api/webhooks/weblate/translation-committed',
@@ -105,6 +109,8 @@ export class TranslationCommittedController {
         })
         body: WeblateCommitBody,
     ): Promise<{ ok: boolean; id?: string; message?: string }> {
+
+        this.webhookSignature.verify(req, body);
 
         const tag = '[WeblateCommit]';
 
