@@ -538,6 +538,8 @@ services:
         condition: service_healthy
     environment:
       BASE_DOMAIN: ${BASE_DOMAIN}
+      PUBLIC_SCHEME: http
+      TRAEFIK_DASHBOARD_URL: ""
     entrypoint:
       - sh
       - -c
@@ -546,15 +548,17 @@ services:
         echo "============================================================"
         echo " MICADO IS READY! Access the services at the following URLs:"
         echo "============================================================"
-        echo " Migrants:  http://migrants.$${BASE_DOMAIN}"
-        echo " PA:        http://pa.$${BASE_DOMAIN}"
-        echo " NGO:       http://ngo.$${BASE_DOMAIN}"
-        echo " API:       http://api.$${BASE_DOMAIN}"
-        echo " Keycloak:  http://auth.$${BASE_DOMAIN}"
-        echo " Weblate:   http://weblate.$${BASE_DOMAIN}"
-        echo " Gitea:     http://git.$${BASE_DOMAIN}"
-        echo " Analytics: http://analytics.$${BASE_DOMAIN}"
-        echo " Traefik:   http://traefik.$${BASE_DOMAIN}/#"
+        echo " Migrants:  $${PUBLIC_SCHEME}://migrants.$${BASE_DOMAIN}"
+        echo " PA:        $${PUBLIC_SCHEME}://pa.$${BASE_DOMAIN}"
+        echo " NGO:       $${PUBLIC_SCHEME}://ngo.$${BASE_DOMAIN}"
+        echo " API:       $${PUBLIC_SCHEME}://api.$${BASE_DOMAIN}"
+        echo " Keycloak:  $${PUBLIC_SCHEME}://auth.$${BASE_DOMAIN}"
+        echo " Weblate:   $${PUBLIC_SCHEME}://weblate.$${BASE_DOMAIN}"
+        echo " Gitea:     $${PUBLIC_SCHEME}://git.$${BASE_DOMAIN}"
+        echo " Analytics: $${PUBLIC_SCHEME}://analytics.$${BASE_DOMAIN}"
+        if [ -n "$${TRAEFIK_DASHBOARD_URL}" ]; then
+          echo " Traefik:   $${TRAEFIK_DASHBOARD_URL}"
+        fi
         echo "============================================================"
         echo
     restart: "no"

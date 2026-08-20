@@ -86,24 +86,8 @@ services:
       - traefik.http.routers.umami.tls.certresolver=le
 
   stack-ready:
-    entrypoint:
-      - sh
-      - -c
-      - |
-        echo
-        echo "============================================================"
-        echo " MICADO IS READY! Access the services at the following URLs:"
-        echo "============================================================"
-        echo " Migrants:  https://migrants.$${BASE_DOMAIN}"
-        echo " PA:        https://pa.$${BASE_DOMAIN}"
-        echo " NGO:       https://ngo.$${BASE_DOMAIN}"
-        echo " API:       https://api.$${BASE_DOMAIN}"
-        echo " Keycloak:  https://auth.$${BASE_DOMAIN}"
-        echo " Weblate:   https://weblate.$${BASE_DOMAIN}"
-        echo " Gitea:     https://git.$${BASE_DOMAIN}"
-        echo " Analytics: https://analytics.$${BASE_DOMAIN}"
-        echo "============================================================"
-        echo
+    environment:
+      PUBLIC_SCHEME: https
 
 volumes:
   traefik_acme:

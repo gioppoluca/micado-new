@@ -151,3 +151,7 @@ services:
   umami:
     labels:
       - traefik.http.routers.umami.tls=false
+
+  stack-ready:
+    environment:
+      TRAEFIK_DASHBOARD_URL: "http://traefik.${BASE_DOMAIN}/#"
