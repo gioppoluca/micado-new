@@ -14,6 +14,7 @@ services:
       - --certificatesresolvers.le.acme.httpchallenge=true
       - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
       - --log.level=INFO
+      - --ping=true
     ports:
       - "80:80"
       - "443:443"
@@ -55,15 +56,18 @@ services:
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.5.3
-    depends_on: [db]
+    depends_on:
+      db:
+        condition: service_healthy
     command: ["start", "--import-realm", "--proxy-headers", "xforwarded", "--http-enabled", "true"]
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD}
       KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://db:5432/${KEYCLOAK_DB}
+      KC_DB_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
       KC_DB_USERNAME: ${KEYCLOAK_DB_USER}
       KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      KC_DB_SCHEMA: keycloak
       KC_HOSTNAME: auth.${BASE_DOMAIN}
       KC_HOSTNAME_STRICT: "false"
       KC_HOSTNAME_STRICT_HTTPS: "false"
@@ -82,7 +86,15 @@ services:
     build:
       context: .
       dockerfile: apps/backend/Dockerfile
-    depends_on: [db, keycloak]
+    depends_on:
+      db:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      gitea-init:
+        condition: service_completed_successfully
+      umami-init:
+        condition: service_completed_successfully
     environment:
       PORT: ${BACKEND_PORT}
       CORS_ORIGIN: ${CORS_ORIGIN}
@@ -175,8 +187,8 @@ services:
       - traefik.enable=true
       - traefik.http.routers.gitea.rule=Host(`git.${BASE_DOMAIN}`)
       - traefik.http.routers.gitea.entrypoints=websecure
-        - traefik.http.routers.gitea.tls=true
-        - traefik.http.routers.gitea.tls.certresolver=le
+      - traefik.http.routers.gitea.tls=true
+      - traefik.http.routers.gitea.tls.certresolver=le
       - traefik.http.routers.gitea.middlewares=sec-headers@file
       - traefik.http.services.gitea.loadbalancer.server.port=3000
 
@@ -232,6 +244,26 @@ services:
       - traefik.http.routers.umami.tls.certresolver=le
       - traefik.http.routers.umami.middlewares=sec-headers@file
       - traefik.http.services.umami.loadbalancer.server.port=3000
+
+  stack-ready:
+    entrypoint:
+      - sh
+      - -c
+      - |
+        echo
+        echo "============================================================"
+        echo " MICADO IS READY! Access the services at the following URLs:"
+        echo "============================================================"
+        echo " Migrants:  https://migrants.$${BASE_DOMAIN}"
+        echo " PA:        https://pa.$${BASE_DOMAIN}"
+        echo " NGO:       https://ngo.$${BASE_DOMAIN}"
+        echo " API:       https://api.$${BASE_DOMAIN}"
+        echo " Keycloak:  https://auth.$${BASE_DOMAIN}"
+        echo " Weblate:   https://weblate.$${BASE_DOMAIN}"
+        echo " Gitea:     https://git.$${BASE_DOMAIN}"
+        echo " Analytics: https://analytics.$${BASE_DOMAIN}"
+        echo "============================================================"
+        echo
 
 volumes:
   db_data:

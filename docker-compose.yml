@@ -6,11 +6,18 @@ services:
       - --providers.docker.exposedbydefault=false
       - --providers.file.directory=/etc/traefik/dynamic
       - --entrypoints.web.address=:80
+      - --ping=true
     ports:
       - "80:80"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./infrastructure/traefik/dynamic:/etc/traefik/dynamic:ro
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   db:
     image: groonga/pgroonga:4.0.5-debian-16
@@ -39,10 +46,7 @@ services:
       - traefik.enable=false
     healthcheck:
       test:
-        [
-          "CMD-SHELL",
-          "pg_isready -h 127.0.0.1 -p 5432 -U ${POSTGRES_SUPERUSER} -d ${POSTGRES_DB}"
-        ]
+        ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U ${POSTGRES_SUPERUSER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -87,6 +91,7 @@ services:
       KC_HOSTNAME: auth.${BASE_DOMAIN}
       KC_HOSTNAME_STRICT: "false"
       KC_HOSTNAME_STRICT_HTTPS: "false"
+      KC_HEALTH_ENABLED: "true"
     volumes:
       - keycloak_data:/opt/keycloak/data
       - ./infrastructure/keycloak/realms:/opt/keycloak/data/import:ro
@@ -96,6 +101,17 @@ services:
       - traefik.http.routers.keycloak.rule=Host(`auth.${BASE_DOMAIN}`)
       - traefik.http.routers.keycloak.entrypoints=web
       - traefik.http.services.keycloak.loadbalancer.server.port=8080
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          bash -ec 'exec 3<>/dev/tcp/127.0.0.1/9000;
+          printf "GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3;
+          grep -q "200 OK" <&3'
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
 
   backend:
     build:
@@ -105,7 +121,7 @@ services:
       db:
         condition: service_healthy
       keycloak:
-        condition: service_started
+        condition: service_healthy
       gitea-init:
         condition: service_completed_successfully
       umami-init:
@@ -161,6 +177,17 @@ services:
     volumes:
       - bootstrap_data:/bootstrap
       - piper_audio:/audio
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          node -e "fetch('http://127.0.0.1:${BACKEND_PORT}/ping')
+          .then(response => process.exit(response.ok ? 0 : 1))
+          .catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
 
   migrants:
     build:
@@ -177,6 +204,12 @@ services:
       - traefik.http.routers.migrants.entrypoints=web
       - traefik.http.routers.migrants.middlewares=sec-headers@file
       - traefik.http.services.migrants.loadbalancer.server.port=80
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
 
   pa_frontoffice:
     build:
@@ -193,6 +226,12 @@ services:
       - traefik.http.routers.pa.entrypoints=web
       - traefik.http.routers.pa.middlewares=sec-headers@file
       - traefik.http.services.pa.loadbalancer.server.port=80
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
 
   ngo_frontoffice:
     build:
@@ -209,6 +248,12 @@ services:
       - traefik.http.routers.ngo.entrypoints=web
       - traefik.http.routers.ngo.middlewares=sec-headers@file
       - traefik.http.services.ngo.loadbalancer.server.port=80
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
 
   gitea:
     image: gitea/gitea:1.25.0
@@ -477,6 +522,8 @@ services:
   stack-ready:
     image: busybox:1.36
     depends_on:
+      traefik:
+        condition: service_healthy
       backend:
         condition: service_healthy
       migrants:
@@ -487,18 +534,32 @@ services:
         condition: service_healthy
       weblate-init:
         condition: service_completed_successfully
-    command:
+      piper:
+        condition: service_healthy
+    environment:
+      BASE_DOMAIN: ${BASE_DOMAIN}
+    entrypoint:
       - sh
       - -c
       - |
-        echo ""
-        echo "=========================================="
-        echo " MICADO È PRONTO"
-        echo " Tutti i servizi sono operativi."
-        echo "=========================================="
-        echo ""
+        echo
+        echo "============================================================"
+        echo " MICADO IS READY! Access the services at the following URLs:"
+        echo "============================================================"
+        echo " Migrants:  http://migrants.$${BASE_DOMAIN}"
+        echo " PA:        http://pa.$${BASE_DOMAIN}"
+        echo " NGO:       http://ngo.$${BASE_DOMAIN}"
+        echo " API:       http://api.$${BASE_DOMAIN}"
+        echo " Keycloak:  http://auth.$${BASE_DOMAIN}"
+        echo " Weblate:   http://weblate.$${BASE_DOMAIN}"
+        echo " Gitea:     http://git.$${BASE_DOMAIN}"
+        echo " Analytics: http://analytics.$${BASE_DOMAIN}"
+        echo " Traefik:   http://traefik.$${BASE_DOMAIN}/#"
+        echo "============================================================"
+        echo
     restart: "no"
-
+    labels:
+      - traefik.enable=false
 
 volumes:
   db_data:
