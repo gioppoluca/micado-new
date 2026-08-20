@@ -936,15 +936,33 @@ main() {
 
       cat_slug=$(slugify_category "$category")
 
-      # Component slug = category slug (no "category-" prefix needed)
-      comp_slug="${cat_slug}"
+      # Weblate component slugs are namespaced to avoid collisions with
+      # Weblate-native components. In particular, "glossary" is reserved by
+      # Weblate for the project's terminology component.
+      #
+      # The prefix affects only the Weblate component slug:
+      #   content-glossary
+      #
+      # It does NOT affect the Gitea folder:
+      #   glossary/*.json
+      comp_slug="content-${cat_slug}"
 
-      # Human-readable name: capitalize first letter
+      # Human-readable name: capitalize first letter.
+      # Keep the visible name independent from the technical component prefix.
       cap=$(printf '%s' "$cat_slug" | cut -c1 | tr '[:lower:]' '[:upper:]')
       rest=$(printf '%s' "$cat_slug" | cut -c2-)
       comp_name="${cap}${rest}"
 
-      # File paths — must match gitea-init.sh and GiteaTranslationExportService
+      # Git paths continue to use the backend category.
+      # These values must match:
+      #   - gitea-init.sh
+      #   - GiteaTranslationExportService.computeRepoPath()
+      #   - GiteaTranslationImportService.computeRepoPath()
+      #
+      # Example:
+      #   Weblate component: content-glossary
+      #   filemask:          glossary/*.json
+      #   template:          glossary/en.json
       filemask="${cat_slug}/*.json"
       template="${cat_slug}/${MICADO_SOURCE_LANG}.json"
 

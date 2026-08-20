@@ -47,6 +47,21 @@ import { LoggingBindings } from '@loopback/logging';
 import type { Logger } from 'winston';
 import { WeblateCommitEventRepository } from '../../repositories/weblate-commit-event.repository';
 
+/**
+ * Technical prefix applied to every MICADO component created in Weblate.
+ *
+ * The prefix prevents collisions with Weblate-native component slugs,
+ * particularly the reserved "glossary" terminology component.
+ *
+ * It is removed before routing to Gitea because Gitea folders continue
+ * to use the backend category:
+ *
+ *   Weblate component: content-glossary
+ *   Gitea category:    glossary
+ *   Gitea path:        glossary/it.json
+ */
+const WEBLATE_COMPONENT_PREFIX = 'content-';
+
 interface WeblateCommitBody {
     change_id?: number;
     action?: string;
@@ -113,12 +128,58 @@ export class TranslationCommittedController {
             return { ok: true, message: 'missing change_id — skipped' };
         }
 
+        // ── Convert the Weblate component slug to the Gitea category ─────────
+        //
+        // Weblate component:
+        //   content-glossary
+        //
+        // Backend/Gitea category:
+        //   glossary
+        //
+        // This keeps the Weblate namespace separate from the repository layout.
+        if (!component.startsWith(WEBLATE_COMPONENT_PREFIX)) {
+            this.logger.warn(
+                `${tag} SKIPPED — unexpected component slug.` +
+                `  component=${component}` +
+                `  expectedPrefix=${WEBLATE_COMPONENT_PREFIX}`,
+            );
+
+            return {
+                ok: true,
+                message: `unexpected component slug '${component}' — skipped`,
+            };
+        }
+
+        const category = component.slice(WEBLATE_COMPONENT_PREFIX.length);
+
+        if (!category) {
+            this.logger.warn(
+                `${tag} SKIPPED — component contains prefix but no category.` +
+                `  component=${component}`,
+            );
+
+            return {
+                ok: true,
+                message: `component '${component}' has no category — skipped`,
+            };
+        }
+
+        this.logger.info(
+            `${tag} routing  weblateComponent=${component}` +
+            `  category=${category}` +
+            `  lang=${lang}`,
+        );
+
         // ── Store in staging table ────────────────────────────────────────────
+        //
+        // The full original Weblate payload is preserved in `payload`.
+        // The `component` database column stores the normalized backend category
+        // because the PUSH handler uses it as the Gitea folder.
         try {
             const saved = await this.commitEventRepo.create({
                 payload: body as Record<string, unknown>,
                 project: project ?? 'unknown',
-                component,
+                component: category,
                 lang,
                 changeId: change_id,
                 action: action ?? 'Changes committed',
@@ -127,18 +188,26 @@ export class TranslationCommittedController {
             });
 
             this.logger.info(
-                `${tag} stored  id=${saved.id}  component=${component}` +
-                `  lang=${lang}  changeId=${change_id}`,
+                `${tag} stored  id=${saved.id}` +
+                `  weblateComponent=${component}` +
+                `  category=${category}` +
+                `  lang=${lang}` +
+                `  changeId=${change_id}`,
             );
 
             return { ok: true, id: saved.id };
 
         } catch (err) {
             this.logger.error(
-                `${tag} DB insert FAILED  component=${component}  lang=${lang}` +
+                `${tag} DB insert FAILED` +
+                `  weblateComponent=${component}` +
+                `  category=${category}` +
+                `  lang=${lang}` +
                 `  error=${String(err)}`,
             );
-            // Return 200 so Weblate does not retry — we log the failure
+
+            // Return 200 so Weblate does not retry.
+            // The failure remains visible in the structured backend logs.
             return { ok: true, message: 'db insert failed — logged' };
         }
     }

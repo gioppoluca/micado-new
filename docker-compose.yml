@@ -330,7 +330,7 @@ services:
       GITEA__server__HTTP_PORT: 3000
       GITEA__security__INSTALL_LOCK: "true"
       MICADO_SOURCE_LANG: ${MICADO_SOURCE_LANG:-it}
-      MICADO_CATEGORIES: ${MICADO_CATEGORIES:-information,event,categories}
+      MICADO_CATEGORIES: ${MICADO_CATEGORIES:-information,event,category}
       GITEA_TRANSLATIONS_REPO_PRIVATE: "false"
     volumes:
       - gitea_data:/data
@@ -410,7 +410,7 @@ services:
       WEBLATE_GIT_REPO: http://weblate-bot:${GITEA_WEBLATE_PASSWORD}@gitea:3000/weblate-bot/translations.git
       GIT_CONFIG_GLOBAL: /home/weblate/.gitconfig
       MICADO_SOURCE_LANG: ${MICADO_SOURCE_LANG:-it}
-      MICADO_CATEGORIES: ${MICADO_CATEGORIES:-information,event,categories}
+      MICADO_CATEGORIES: ${MICADO_CATEGORIES:-information,event,category}
       #      GIT_ALLOW_PROTOCOL: http:https
       #      GIT_CONFIG_COUNT: "1"
       #      GIT_CONFIG_KEY_0: protocol.http.allow
