@@ -1,140 +1,123 @@
 # MICADO
 
-Three Vue SPAs (migrants, PA, NGO) backed by a LoopBack 4 API, Keycloak for auth, PGroonga/Postgres, Traefik as the reverse proxy, and Weblate + Gitea for translation management.
+MICADO is a containerised multilingual platform composed of three Quasar 2 / Vue 3 applications and a shared LoopBack 4 API. Docker Compose also provides identity, persistence, translations, analytics, text-to-speech and reverse-proxy services.
 
-## Stack
+## Services
 
-| Service | Role |
+| Compose service | Purpose |
 |---|---|
-| `backend` | LoopBack 4 REST API, port 3000 |
-| `pa_frontoffice` | Vue 3 / Quasar SPA for PA operators |
-| `migrants` | Vue 3 / Quasar SPA for migrants |
-| `ngo_frontoffice` | Vue 3 / Quasar SPA for NGO operators |
-| `db` | PGroonga (Postgres + full-text search extension) |
-| `keycloak` | Auth server, realm import on startup |
-| `cache` | Redis, used by Weblate |
-| `traefik` | Reverse proxy / routing for all services |
-| `gitea` | Internal Git server for translation files |
-| `weblate` | Translation management UI |
+| `migrants` | Front office for migrants (`migrants` Keycloak realm). |
+| `pa_frontoffice` | Back office for public-administration operators (`pa_frontoffice` realm). |
+| `ngo_frontoffice` | Back office for NGO operators (`ngo_frontoffice` realm). |
+| `backend` | Shared LoopBack 4 REST API, authorization, content workflows and integrations. |
+| `db` | PostgreSQL 16 with PGroonga; separate schemas/users support MICADO, Keycloak, Gitea, Weblate, Umami and DBOS. |
+| `keycloak` | Authentication and role-based access control for the three realms; realm definitions and custom themes are imported from `infrastructure/keycloak/`. |
+| `traefik` | Single public entry point, host-based routing and TLS termination in production. |
+| `gitea` | Internal Git repository used to exchange translation files. |
+| `weblate` | Translation management UI connected to the Gitea repository. |
+| `cache` | Persistent Redis cache used by Weblate. |
+| `umami` | Privacy-focused analytics for the three frontends. |
+| `piper` | Internal text-to-speech service; generated audio is shared with the backend. |
+| `bootstrap-perms` | One-shot preparation of the shared bootstrap volume. |
+| `gitea-init` | One-shot creation of Gitea users, repository and translation files. |
+| `weblate-init` | One-shot creation/update of the Weblate project, components, languages and webhooks. |
+| `umami-init` | One-shot registration of the three frontend websites in Umami. |
+| `stack-ready` | Waits for the stack and prints its public URLs when every required service is ready. |
+
+Initialisation and readiness services are orchestrated automatically and normally require no manual invocation.
 
 ## First-time setup
 
-> **Do this once before anything else.** All scenarios below require a
-> populated `.env` file. If you skip this step, nothing will start correctly.
+Create the local configuration before starting any service:
 
 ```bash
 cp .env.example .env
-# Open .env and set at minimum:
-#   POSTGRES_SUPERPASS, MICADO_APP_PASSWORD, KEYCLOAK_DB_PASSWORD,
-#   GITEA_DB_PASSWORD, WEBLATE_DB_PASSWORD, UMAMI_DB_PASSWORD,
-#   UMAMI_APP_SECRET
 ```
 
-Dev compose uses `BASE_DOMAIN=localhost` so all services are reachable at `*.localhost`.
+Review every value in `.env`, especially passwords, application secrets, public domain, email configuration and Keycloak settings. The example values are suitable only for local development. With `BASE_DOMAIN=localhost`, development services use HTTP and `*.localhost` hostnames.
 
-## Dev hostnames
+## Run the stack
 
-| URL | Service |
-|---|---|
-| http://api.localhost | Backend API + `/explorer` (LoopBack UI) |
-| http://auth.localhost | Keycloak admin console |
-| http://pa.localhost | PA frontoffice |
-| http://migrants.localhost | Migrants app |
-| http://ngo.localhost | NGO app |
-| http://git.localhost | Gitea |
-| http://weblate.localhost | Weblate |
-| http://traefik.localhost:8088 | Traefik dashboard (dev only) |
-
----
-
-## How to develop
-
-All dev commands combine the base compose file with the dev override, which swaps production builds for bind-mounted live-reload containers:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up [services] [flags]
-```
-
-### Scenario 1 — Backend only, no real auth
-
-> **Prerequisite:** Complete "First-time setup" above before running this
-> scenario. Running with a missing or incomplete `.env` will cause database
-> init failures that require a full volume wipe (`down -v`) to recover from.
-
-In your `.env`, uncomment (these lines are already present, just remove the `#`):
-```
-AUTH_DISABLE_KEYCLOAK=true
-AUTH_DUMMY_ROLES=pa_admin
-AUTH_DUMMY_USERNAME=dev.user
-```
-
-Then start:
-```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up traefik db backend --build
-```
-
-> Keycloak will also start because it is listed in the backend's `depends_on`. It runs in the background and is completely ignored while `AUTH_DISABLE_KEYCLOAK=true`. You can test every API endpoint via the LoopBack explorer at http://api.localhost/explorer without needing a token.
-
-To fake a different role, change `AUTH_DUMMY_ROLES` to `pa_operator` and restart the backend container.
-
-### Scenario 2 — PA frontoffice + backend + real auth
-
-For testing the full auth flow: login, token, role-based access.
-
-Make sure `AUTH_DISABLE_KEYCLOAK` is **not set** (or set to `false`) in `.env`.
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up traefik db keycloak backend pa_frontoffice --build
-```
-
-Open http://pa.localhost. Keycloak realms are imported automatically on first boot — the PA realm is `pa_frontoffice`, roles are `pa_admin` and `pa_operator`.
-
-> First boot of Keycloak takes ~60-90 seconds. Subsequent starts are faster because data is persisted in the `keycloak_data` volume.
-
-### Scenario 3 — Full stack
+Development uses the base Compose file plus the development override, with source bind mounts and live reload:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 ```
 
-This starts everything including Gitea, Weblate, and their init containers. Weblate and Gitea init are designed to be resilient: if Gitea or Weblate is temporarily unreachable the workflow will retry. You do not need them running to develop backend or frontend features.
+Production adds HTTPS, Let's Encrypt and production images:
 
-### Rebuilding a single service
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
 
-Hot reload handles most changes. When you change a `Dockerfile` or `package.json`:
+To rebuild only one application, replace `backend` below with the required service:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up backend --build
 ```
 
-### Stopping without losing volumes
+Stop the development stack without deleting persistent data:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml down
-# volumes are kept — db data, keycloak config, etc. survive
-
-# to also wipe volumes (full reset):
-docker compose -f docker-compose.yml -f docker-compose.dev.yml down -v
 ```
 
----
+Use `down -v` only when a complete reset of all databases, configuration and generated data is intended.
 
-## Database
+### Useful development URLs
 
-The DB init scripts in `infrastructure/postgres/init/` run once on first boot:
-- `010-app-schema.sql` — creates schemas and tables
-- `020-app-seed.sql` — seeds languages, default settings, feature flags
+| URL | Destination |
+|---|---|
+| <http://migrants.localhost> | Migrants application |
+| <http://pa.localhost> | PA application |
+| <http://ngo.localhost> | NGO application |
+| <http://api.localhost> | Backend API (`/explorer` for the OpenAPI Explorer) |
+| <http://auth.localhost> | Keycloak |
+| <http://git.localhost> | Gitea |
+| <http://weblate.localhost> | Weblate |
+| <http://analytics.localhost> | Umami |
+| <http://traefik.localhost/#> | Traefik dashboard (development only) |
 
-SQL migrations go in `infrastructure/postgres/migrations/` following the naming convention `0001__description.sql`. They are not applied automatically — run them manually or wire them into a migration step.
+PostgreSQL is additionally exposed on `localhost:5432` by the development override. Piper, Redis and the initialisation services are internal-only.
 
-Postgres is exposed on `localhost:5432` in dev (see the `db` service in `docker-compose.dev.yml`).
+## Focused development
 
-## Translation workflow (Weblate + Gitea)
+For backend work without real authentication, enable the documented dummy-auth variables in `.env`, then start the required subset:
 
-The backend pushes translation entries to a Gitea repo; Weblate picks them up from there. The workflow is designed to tolerate Gitea or Weblate being down: operations are queued via DBOS and retried automatically. Gitea and Weblate do not need to be running during normal backend or frontend development.
+```dotenv
+AUTH_DISABLE_KEYCLOAK=true
+AUTH_DUMMY_ROLES=pa_admin
+AUTH_DUMMY_USERNAME=dev.user
+```
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up traefik db backend --build
+```
+
+Remove `AUTH_DISABLE_KEYCLOAK` or set it to `false` before validating login and role-based access. Compose may still start transitive dependencies required by `backend`; this is expected.
+
+## Persistence and initialisation
+
+Database bootstrap scripts in `infrastructure/postgres/init/` run only when the PostgreSQL volume is first created:
+
+- `010-app-schema.sql` creates the application schema;
+- `020-app-seed.sql` creates initial application data;
+- `030-app-test-seed.sql` contains optional test data.
+
+Future migrations belong in `infrastructure/postgres/migrations/`; they are not currently applied automatically. Named volumes retain PostgreSQL, Keycloak, Gitea, Weblate, Piper, Redis and bootstrap data between restarts.
+
+The translation bootstrap creates the Gitea repository and Weblate project/components before the backend starts. Weblate then reads and writes translation files through Gitea, while backend workflows handle application-side import/export and retries.
+
+## Tests
+
+The Playwright suite verifies the public applications, API, authentication and infrastructure endpoints. It reuses the project `.env` and supports local or self-signed HTTPS environments.
+
+See **[test/README.md](test/README.md)** for the current commands, coverage and generated reports.
 
 ## Logging
 
-Set `LOG_LEVEL` in `.env` for backend log verbosity (`debug` | `info` | `warn` | `error`).
+Set `LOG_LEVEL` and `FRONTEND_LOG_LEVEL` in `.env` to `debug`, `info`, `warn` or `error`. For container output use:
 
-Frontend log level is controlled by `FRONTEND_LOG_LEVEL` (same values).
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f [service]
+```
