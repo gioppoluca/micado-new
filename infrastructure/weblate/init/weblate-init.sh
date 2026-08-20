@@ -381,6 +381,16 @@ component_exists() {
   [ "$http_code" = "200" ]
 }
 
+translation_exists() {
+  comp_slug="$1"; lang="$2"
+  http_code=$(curl -o /dev/null -sS -w '%{http_code}' \
+    -H "Authorization: Token ${WEBLATE_ADMIN_API_TOKEN}" \
+    "${WEBLATE_URL}/api/translations/${WEBLATE_PROJECT_SLUG}/${comp_slug}/${lang}/" \
+    2>/dev/null || echo "000")
+  debug "  translation_exists '${comp_slug}/${lang}' HTTP ${http_code}"
+  [ "$http_code" = "200" ]
+}
+
 # ---------------------------------------------------------------------------
 # Webhook add-on detection
 #
@@ -797,8 +807,35 @@ refresh_component() {
   info "Pulling latest from Gitea for component '${comp_slug}'"
   result=$(api_post_json \
     "/api/components/${WEBLATE_PROJECT_SLUG}/${comp_slug}/repository/" \
-    '{"operation":"pull"}' || true)
+    '{"operation":"pull"}')
   info "  Pull response: ${result}"
+}
+
+# A component GET returning 200 only means that the component database row
+# exists.  The repository update and source translation import can still be
+# running asynchronously.  Adding target languages before the source exists
+# produces "The monolingual base language file is invalid" (HTTP 403).
+wait_for_source_translation() {
+  comp_slug="$1"
+  max="${2:-60}"
+  attempt=1
+
+  info "Waiting for source translation '${comp_slug}/${MICADO_SOURCE_LANG}'"
+  while :; do
+    if translation_exists "$comp_slug" "$MICADO_SOURCE_LANG"; then
+      info "  Source translation '${comp_slug}/${MICADO_SOURCE_LANG}' is ready"
+      return 0
+    fi
+
+    if [ "$attempt" -ge "$max" ]; then
+      error "Source translation '${comp_slug}/${MICADO_SOURCE_LANG}' not ready after ${attempt} polls"
+      return 1
+    fi
+
+    info "  Waiting for source translation (${attempt}/${max})"
+    attempt=$((attempt + 1))
+    sleep 2
+  done
 }
 
 # ---------------------------------------------------------------------------
@@ -840,43 +877,57 @@ ensure_component_languages() {
       continue
     fi
 
-    info "  Adding language '${lang}' to component '${comp_slug}'"
+    if translation_exists "$comp_slug" "$lang"; then
+      info "  Language '${lang}' already exists on '${comp_slug}'"
+      continue
+    fi
 
-    response=$(curl -sS -w '\n%{http_code}' \
-      -H "Authorization: Token ${WEBLATE_ADMIN_API_TOKEN}" \
-      -H "Accept: application/json" \
-      -H "Content-Type: application/json" \
-      -X POST \
-      "${WEBLATE_URL}/api/components/${WEBLATE_PROJECT_SLUG}/${comp_slug}/translations/" \
-      -d "{\"language_code\":\"${lang}\"}")
+    max=10; attempt=1
+    while :; do
+      info "  Adding language '${lang}' to component '${comp_slug}' (attempt ${attempt}/${max})"
 
-    http_code=$(printf '%s' "$response" | tail -n1)
-    resp_body=$(printf '%s' "$response" | sed '$d')
+      response=$(curl -sS -w '\n%{http_code}' \
+        -H "Authorization: Token ${WEBLATE_ADMIN_API_TOKEN}" \
+        -H "Accept: application/json" \
+        -H "Content-Type: application/json" \
+        -X POST \
+        "${WEBLATE_URL}/api/components/${WEBLATE_PROJECT_SLUG}/${comp_slug}/translations/" \
+        -d "{\"language_code\":\"${lang}\"}" 2>/dev/null || printf '\n000')
 
-    debug "  Response HTTP ${http_code}: ${resp_body}"
+      http_code=$(printf '%s' "$response" | tail -n1)
+      resp_body=$(printf '%s' "$response" | sed '$d')
+      debug "  Response HTTP ${http_code}: ${resp_body}"
 
-    case "$http_code" in
-      201)
+      if [ "$http_code" = "201" ]; then
         info "  Language '${lang}' added to '${comp_slug}' (HTTP 201)"
-        ;;
-      400)
-        # Weblate returns 400 if language already exists or is not found.
-        # Distinguish: if body contains the language code it likely already exists.
-        if printf '%s' "$resp_body" | grep -qi 'already\|exists\|no language code'; then
-          info "  Language '${lang}' already present or unknown — skipping: ${resp_body}"
-        else
-          warn "  Language '${lang}' on '${comp_slug}' returned HTTP 400: ${resp_body}"
-        fi
-        ;;
-      403)
-        # Fires if new_lang != "add" on the component
-        error "  Language '${lang}' on '${comp_slug}' permission denied (HTTP 403)"
-        error "  Check that new_lang='add' is set on the component"
-        ;;
-      *)
-        warn "  Language '${lang}' on '${comp_slug}' returned unexpected HTTP ${http_code}: ${resp_body}"
-        ;;
-    esac
+        break
+      fi
+
+      # A concurrent Weblate task can create the translation between our GET
+      # and POST.  Verify actual state instead of relying on the error wording.
+      if translation_exists "$comp_slug" "$lang"; then
+        info "  Language '${lang}' is now present on '${comp_slug}'"
+        break
+      fi
+
+      # Retry transient repository/import states.  In particular Weblate uses
+      # HTTP 403 while a monolingual source file has not finished loading.
+      case "$http_code" in
+        000|403|409|429|5??)
+          if [ "$attempt" -ge "$max" ]; then
+            error "  Language '${lang}' on '${comp_slug}' failed after ${attempt} attempts (HTTP ${http_code}): ${resp_body}"
+            return 1
+          fi
+          warn "  Language '${lang}' not ready yet (HTTP ${http_code}); retrying: ${resp_body}"
+          attempt=$((attempt + 1))
+          sleep 2
+          ;;
+        *)
+          error "  Language '${lang}' on '${comp_slug}' failed (HTTP ${http_code}): ${resp_body}"
+          return 1
+          ;;
+      esac
+    done
   done
   unset IFS
 
@@ -976,9 +1027,13 @@ main() {
       ensure_gitea_template_file "$template"
 
       ensure_component "$comp_name" "$comp_slug" "$filemask" "$template"
+      # Components sharing the same Gitea repository are linked by Weblate.
+      # Pull before adding languages so a source file created moments ago is
+      # imported into the linked repository checkout first.
+      refresh_component "$comp_slug"
+      wait_for_source_translation "$comp_slug"
       ensure_component_languages "$comp_slug"
       ensure_component_commit_addon "$comp_slug"
-      refresh_component "$comp_slug"
     done
   else
     info "MICADO_CATEGORIES is empty — no category components to create"
