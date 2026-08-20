@@ -64,53 +64,39 @@ export class WeblateCommitEventRepository extends DefaultCrudRepository<
      * SKIP LOCKED ensures concurrent push handlers get disjoint row sets.
      */
     async claimNewEvents(workerHash: string): Promise<WeblateCommitEvent[]> {
-        const connector = (this.dataSource as unknown as {
-            connector: {
-                execute: (
-                    sql: string,
-                    params: unknown[],
-                    options: unknown,
-                    cb: (err: Error | null, result: unknown) => void,
-                ) => void;
-            };
-        }).connector;
+        const selectSql = `
+            WITH claimed AS (
+                SELECT id
+                FROM micado.weblate_commit_event
+                WHERE status = 'NEW'
+                FOR UPDATE SKIP LOCKED
+            ),
+            updated AS (
+                UPDATE micado.weblate_commit_event
+                SET    status = 'PROCESSING',
+                       worker_hash = $1
+                WHERE  id IN (SELECT id FROM claimed)
+                RETURNING *
+            )
+            SELECT
+                id,
+                payload,
+                project,
+                component,
+                lang,
+                change_id      AS "changeId",
+                action,
+                status,
+                worker_hash    AS "workerHash",
+                weblate_ts     AS "weblateTs",
+                received_at    AS "receivedAt"
+            FROM updated
+        `;
 
-        return new Promise((resolve, reject) => {
-            const selectSql = `
-                WITH claimed AS (
-                    SELECT id
-                    FROM micado.weblate_commit_event
-                    WHERE status = 'NEW'
-                    FOR UPDATE SKIP LOCKED
-                ),
-                updated AS (
-                    UPDATE micado.weblate_commit_event
-                    SET    status = 'PROCESSING',
-                           worker_hash = $1
-                    WHERE  id IN (SELECT id FROM claimed)
-                    RETURNING *
-                )
-                SELECT
-                    id,
-                    payload,
-                    project,
-                    component,
-                    lang,
-                    change_id      AS "changeId",
-                    action,
-                    status,
-                    worker_hash    AS "workerHash",
-                    weblate_ts     AS "weblateTs",
-                    received_at    AS "receivedAt"
-                FROM updated
-            `;
-
-            connector.execute(selectSql, [workerHash], {}, (err, result) => {
-                if (err) return reject(err);
-                const rows = (result as { rows?: unknown[] }).rows ?? [];
-                resolve(rows.map(row => new WeblateCommitEvent(row as Partial<WeblateCommitEvent>)));
-            });
-        });
+        const result = await this.dataSource.execute(selectSql, [workerHash]);
+        return this.resultRows(result).map(
+            row => new WeblateCommitEvent(row as Partial<WeblateCommitEvent>),
+        );
     }
 
     /**
@@ -119,28 +105,13 @@ export class WeblateCommitEventRepository extends DefaultCrudRepository<
      * Returns the count of deleted rows.
      */
     async deleteByWorkerHash(workerHash: string): Promise<number> {
-        const connector = (this.dataSource as unknown as {
-            connector: {
-                execute: (
-                    sql: string,
-                    params: unknown[],
-                    options: unknown,
-                    cb: (err: Error | null, result: unknown) => void,
-                ) => void;
-            };
-        }).connector;
-
-        return new Promise((resolve, reject) => {
-            const sql = `
-                DELETE FROM micado.weblate_commit_event
-                WHERE worker_hash = $1
-            `;
-            connector.execute(sql, [workerHash], {}, (err, result) => {
-                if (err) return reject(err);
-                const count = (result as { count?: number }).count ?? 0;
-                resolve(count);
-            });
-        });
+        const sql = `
+            DELETE FROM micado.weblate_commit_event
+            WHERE worker_hash = $1
+            RETURNING id
+        `;
+        const result = await this.dataSource.execute(sql, [workerHash]);
+        return this.resultRows(result).length;
     }
 
     /**
@@ -149,35 +120,28 @@ export class WeblateCommitEventRepository extends DefaultCrudRepository<
      * are considered stuck and safe to re-enqueue.
      */
     async resetStuckEvents(olderThanMinutes = 10): Promise<number> {
-        const connector = (this.dataSource as unknown as {
-            connector: {
-                execute: (
-                    sql: string,
-                    params: unknown[],
-                    options: unknown,
-                    cb: (err: Error | null, result: unknown) => void,
-                ) => void;
-            };
-        }).connector;
+        const sql = `
+            UPDATE micado.weblate_commit_event
+            SET    status = 'NEW',
+                   worker_hash = NULL
+            WHERE  status = 'PROCESSING'
+              AND  received_at < now() - ($1 || ' minutes')::interval
+            RETURNING id
+        `;
+        const result = await this.dataSource.execute(sql, [String(olderThanMinutes)]);
+        return this.resultRows(result).length;
+    }
 
-        return new Promise((resolve, reject) => {
-            const sql = `
-                UPDATE micado.weblate_commit_event
-                SET    status = 'NEW',
-                       worker_hash = NULL
-                WHERE  status = 'PROCESSING'
-                  AND  received_at < now() - ($1 || ' minutes')::interval
-            `;
-            connector.execute(
-                sql,
-                [String(olderThanMinutes)],
-                {},
-                (err, result) => {
-                    if (err) return reject(err);
-                    const count = (result as { count?: number }).count ?? 0;
-                    resolve(count);
-                },
-            );
-        });
+    /**
+     * LoopBack's PostgreSQL connector returns row-producing statements as an
+     * array. Keep compatibility with connectors exposing the native pg shape.
+     */
+    private resultRows(result: unknown): unknown[] {
+        if (Array.isArray(result)) return result;
+        if (result && typeof result === 'object') {
+            const rows = (result as { rows?: unknown[] }).rows;
+            if (Array.isArray(rows)) return rows;
+        }
+        return [];
     }
 }
