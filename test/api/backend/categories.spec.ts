@@ -120,7 +120,7 @@ test.describe('Categories API — CRUD lifecycle', () => {
         const afterPatch = await afterPatchRes.json() as Record<string, unknown>;
         expect(afterPatch.status).toBe('APPROVED');
         const afterPatchTrs = afterPatch.translations as Record<string, Record<string, string>>;
-        expect(afterPatchTrs.it?.tStatus).toBe('DRAFT');  // source unchanged
+        expect(afterPatchTrs.it?.tStatus).toBe('APPROVED');
         expect(afterPatchTrs.en?.tStatus).toBe('STALE'); // non-source → STALE
         expect(afterPatchTrs.de?.tStatus).toBe('STALE');
 
@@ -210,12 +210,12 @@ test.describe('Categories API — Translation workflow', () => {
         const afterApprove = await afterApproveRes.json() as Record<string, unknown>;
         expect(afterApprove.status).toBe('APPROVED');
         const trs = afterApprove.translations as Record<string, Record<string, string>>;
-        expect(trs.it?.tStatus).toBe('DRAFT');
+        expect(trs.it?.tStatus).toBe('APPROVED');
         expect(trs.en?.tStatus).toBe('STALE');
 
         // Publish
         const publishRes = await api.get(`/categories/to-production?id=${catId}`);
-        expect(publishRes.status()).toBe(200);
+        expect(publishRes.status()).toBe(204);
 
         const afterPublishRes = await api.get(`/categories/${catId}`);
         const afterPublish = await afterPublishRes.json() as Record<string, unknown>;

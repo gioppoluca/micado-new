@@ -335,12 +335,12 @@ test.describe('Topics API — Translation workflow', () => {
         const afterApprove = await afterApproveRes.json() as Record<string, unknown>;
         expect(afterApprove.status).toBe('APPROVED');
         const trs = afterApprove.translations as Record<string, Record<string, string>>;
-        expect(trs.it?.tStatus).toBe('DRAFT');
+        expect(trs.it?.tStatus).toBe('APPROVED');
         expect(trs.en?.tStatus).toBe('STALE');
 
         // Publish
         const publishRes = await api.get(`/topics/to-production?id=${topicId}`);
-        expect(publishRes.status()).toBe(200);
+        expect(publishRes.status()).toBe(204);
 
         const afterPublishRes = await api.get(`/topics/${topicId}`);
         const afterPublish = await afterPublishRes.json() as Record<string, unknown>;

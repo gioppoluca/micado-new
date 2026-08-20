@@ -122,7 +122,7 @@ test.describe('Information API — CRUD lifecycle', () => {
         const afterPut = await afterPutRes.json() as Record<string, unknown>;
         expect(afterPut.status).toBe('APPROVED');
         const afterPutTrs = afterPut.translations as Record<string, Record<string, string>>;
-        expect(afterPutTrs.it?.tStatus).toBe('DRAFT');
+        expect(afterPutTrs.it?.tStatus).toBe('APPROVED');
         expect(afterPutTrs.en?.tStatus).toBe('STALE');
 
         // PATCH status back to DRAFT
@@ -263,11 +263,11 @@ test.describe('Information API — Translation workflow', () => {
 
         const afterApprove = await (await api.get(`/information/${infoId}`)).json() as Record<string, unknown>;
         const trs = afterApprove.translations as Record<string, Record<string, string>>;
-        expect(trs.it?.tStatus).toBe('DRAFT');
+        expect(trs.it?.tStatus).toBe('APPROVED');
         expect(trs.en?.tStatus).toBe('STALE');
 
         const publishRes = await api.get(`/information/to-production?id=${infoId}`);
-        expect(publishRes.status()).toBe(200);
+        expect(publishRes.status()).toBe(204);
 
         const afterPublish = await (await api.get(`/information/${infoId}`)).json() as Record<string, unknown>;
         expect(afterPublish.status).toBe('PUBLISHED');

@@ -13,12 +13,13 @@ function publicUrl(subdomain, path = '') {
   return `${protocol}://${subdomain}.${baseDomain}${path}`;
 }
 
-function service(id, label, subdomain, path = '', expectedTitle = '') {
+function service(id, label, subdomain, path = '', expectedTitle = '', allowEmptyBody = false) {
   return Object.freeze({
     id,
     label,
     url: publicUrl(subdomain, path),
     expectedTitle,
+    allowEmptyBody,
   });
 }
 
@@ -33,7 +34,7 @@ export const environment = Object.freeze({
 });
 
 export const webServices = Object.freeze([
-  service('keycloak', 'KEYCLOAK-WEB', 'auth', '/admin/master/console/', 'Keycloak'),
+  service('keycloak', 'KEYCLOAK-WEB', 'auth', '/admin/master/console/', 'Keycloak', true),
   service('migrants', 'MIGRANTS', 'migrants'),
   service('pa', 'PA', 'pa'),
   service('ngo', 'NGO', 'ngo'),

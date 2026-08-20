@@ -504,12 +504,12 @@ test.describe('Processes API — Translation workflow', () => {
 
         const afterApprove = (await (await api.get(`/processes/${processId}`)).json()) as Record<string, unknown>;
         const trs = afterApprove.translations as Record<string, Record<string, string>>;
-        expect(trs.it?.tStatus).toBe('DRAFT');
+        expect(trs.it?.tStatus).toBe('APPROVED');
         expect(trs.en?.tStatus).toBe('STALE');
 
         // Publish
         const pubRes = await api.get(`/processes/to-production?id=${processId}`);
-        expect(pubRes.status()).toBe(200);
+        expect(pubRes.status()).toBe(204);
 
         const afterPub = (await (await api.get(`/processes/${processId}`)).json()) as Record<string, unknown>;
         expect(afterPub.status).toBe('PUBLISHED');

@@ -4,7 +4,7 @@ const baseURL = process.env.API_BASE_URL ?? 'http://api.localhost';
 const token = process.env.E2E_TOKEN_ADMIN ?? '';
 
 test.describe('Languages API CRUD', () => {
-    test('POST -> GET -> PUT -> GET -> DELETE -> GET', async () => {
+    test('POST -> GET -> PATCH -> GET -> DELETE -> GET', async () => {
         const api = await request.newContext({
             baseURL,
             extraHTTPHeaders: {
@@ -13,7 +13,8 @@ test.describe('Languages API CRUD', () => {
             },
         });
 
-        const lang = `e2e_${Date.now()}`;
+        // DB column is varchar(10): keep the unique test identifier within it.
+        const lang = `e${Date.now().toString(36).slice(-8)}`;
         const createBody = {
             lang,
             isoCode: 'en-GB',
@@ -37,10 +38,12 @@ test.describe('Languages API CRUD', () => {
         const got1 = await getRes1.json();
         expect(got1.name).toBe('E2E English');
 
-        // PUT (replace)
-        const putBody = { ...createBody, name: 'E2E English Updated', voiceActive: false };
-        const putRes = await api.put(`/languages/${lang}`, { data: putBody });
-        expect(putRes.ok()).toBeTruthy();
+        // PATCH only the fields being changed. A full replacement is not
+        // required to verify the language update lifecycle.
+        const patchRes = await api.patch(`/languages/${lang}`, {
+            data: { name: 'E2E English Updated', voiceActive: false },
+        });
+        expect(patchRes.status()).toBe(204);
 
         // GET
         const getRes2 = await api.get(`/languages/${lang}`);

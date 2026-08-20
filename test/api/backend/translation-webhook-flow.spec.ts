@@ -103,13 +103,33 @@ function pushPayload(component: string, changeId = 2000) {
     };
 }
 
+/** Drain rows left by an earlier assertion so global PUSH claims stay deterministic. */
+async function drainStagedCommits(ctx: APIRequestContext) {
+    await ctx.post('/dev/workflows/translation/reset-stuck?minutes=0');
+    await ctx.post('/dev/workflows/translation/simulate-push', {
+        data: { component: 'content-e2e-cleanup' },
+    });
+}
+
+test.beforeEach(async () => {
+    const ctx = await api();
+    await drainStagedCommits(ctx);
+    await ctx.dispose();
+});
+
+test.afterEach(async () => {
+    const ctx = await api();
+    await drainStagedCommits(ctx);
+    await ctx.dispose();
+});
+
 // ── Suite 1: /translation-committed ──────────────────────────────────────────
 
 test.describe('translation-committed webhook', () => {
 
     test('returns 200 and stores row for valid COMMIT payload', async () => {
         const ctx = await api();
-        const component = `test-${randomUUID().slice(0, 8)}`;
+        const component = `content-test-${randomUUID().slice(0, 8)}`;
 
         const res = await postCommit(ctx, commitPayload(component, 'it', 1001));
 
@@ -119,33 +139,32 @@ test.describe('translation-committed webhook', () => {
         expect(body.id).toBeTruthy();
 
         // Verify row exists in staging table via dev endpoint
-        const staged = await ctx.get(
-            `/dev/workflows/translation/staged-commits?component=${component}&status=NEW`,
-        );
+        const staged = await ctx.get('/dev/workflows/translation/staged-commits?status=NEW');
         expect(staged.status()).toBe(200);
-        const stagedBody = await staged.json() as { count: number; rows: unknown[] };
-        expect(stagedBody.count).toBeGreaterThanOrEqual(1);
+        const stagedBody = await staged.json() as { rows: Array<{ id: string }> };
+        expect(stagedBody.rows.some(row => row.id === body.id)).toBe(true);
 
         console.log(`✓ Stored row ${body.id} for component=${component}`);
     });
 
     test('returns 200 for multiple languages — one row per lang', async () => {
         const ctx = await api();
-        const component = `test-${randomUUID().slice(0, 8)}`;
+        const component = `content-test-${randomUUID().slice(0, 8)}`;
 
+        const insertedIds: string[] = [];
         for (const [lang, changeId] of [['it', 1010], ['fr', 1011], ['ar', 1012]] as const) {
             const res = await postCommit(ctx, commitPayload(component, lang, changeId));
             expect(res.status()).toBe(200);
             const body = await res.json() as { ok: boolean; id?: string };
             expect(body.ok).toBe(true);
             expect(body.id).toBeTruthy();
+            insertedIds.push(body.id!);
         }
 
-        const staged = await ctx.get(
-            `/dev/workflows/translation/staged-commits?component=${component}&status=NEW`,
-        );
-        const stagedBody = await staged.json() as { count: number };
-        expect(stagedBody.count).toBe(3);
+        const staged = await ctx.get('/dev/workflows/translation/staged-commits?status=NEW');
+        const stagedBody = await staged.json() as { rows: Array<{ id: string }> };
+        const stagedIds = new Set(stagedBody.rows.map(row => row.id));
+        expect(insertedIds.every(id => stagedIds.has(id))).toBe(true);
 
         console.log(`✓ 3 rows stored for component=${component}`);
     });
@@ -197,17 +216,17 @@ test.describe('translation-pushed webhook', () => {
 
     test('no-ops gracefully when staging table is empty for component', async () => {
         const ctx = await api();
-        const component = `empty-${randomUUID().slice(0, 8)}`;
+        const component = `content-empty-${randomUUID().slice(0, 8)}`;
 
         const res = await postPush(ctx, pushPayload(component, 3001));
         expect(res.status()).toBe(200);
-        const body = await res.json() as { ok: boolean; processed?: number };
+        const body = await res.json() as { ok: boolean; claimed: number };
         expect(body.ok).toBe(true);
-        expect(body.processed).toBe(0);
+        expect(body.claimed).toBe(0);
         console.log('✓ Empty staging table handled gracefully');
     });
 
-    test('returns 200 with message when component is missing from payload', async () => {
+    test('accepts a component-less PUSH because routing uses staged rows', async () => {
         const ctx = await api();
         const res = await postPush(ctx, {
             change_id: 4001,
@@ -216,17 +235,18 @@ test.describe('translation-pushed webhook', () => {
             // no component
         });
         expect(res.status()).toBe(200);
-        const body = await res.json() as { ok: boolean; message?: string };
+        const body = await res.json() as { ok: boolean; claimed: number };
         expect(body.ok).toBe(true);
-        expect(body.message).toContain('no component');
+        expect(body.claimed).toBe(0);
     });
 
     test('accepts empty body without crashing', async () => {
         const ctx = await api();
         const res = await postPush(ctx, {});
         expect(res.status()).toBe(200);
-        const body = await res.json() as { ok: boolean };
+        const body = await res.json() as { ok: boolean; claimed: number };
         expect(body.ok).toBe(true);
+        expect(body.claimed).toBe(0);
     });
 });
 
@@ -236,7 +256,7 @@ test.describe('two-phase webhook flow — full round-trip via dev endpoints', ()
 
     test('simulate-commit → staged-commits → simulate-push → rows deleted', async () => {
         const ctx = await api();
-        const component = `roundtrip-${randomUUID().slice(0, 8)}`;
+        const component = `content-roundtrip-${randomUUID().slice(0, 8)}`;
 
         // ── Step 1: insert staged commit rows via dev endpoint ─────────────────
         for (const lang of ['it', 'fr']) {
@@ -288,7 +308,7 @@ test.describe('two-phase webhook flow — full round-trip via dev endpoints', ()
 
     test('real webhook endpoints — commit then push — rows staged and cleaned', async () => {
         const ctx = await api();
-        const component = `webhook-${randomUUID().slice(0, 8)}`;
+        const component = `content-webhook-${randomUUID().slice(0, 8)}`;
 
         // ── Use the real webhook endpoints, not dev endpoints ──────────────────
         const commitRes = await postCommit(ctx, commitPayload(component, 'de', 6001));
@@ -298,18 +318,16 @@ test.describe('two-phase webhook flow — full round-trip via dev endpoints', ()
         expect(commitBody.id).toBeTruthy();
 
         // Verify staged
-        const staged = await ctx.get(
-            `/dev/workflows/translation/staged-commits?component=${component}`,
-        );
-        const stagedBody = await staged.json() as { count: number };
-        expect(stagedBody.count).toBe(1);
+        const staged = await ctx.get('/dev/workflows/translation/staged-commits?status=NEW');
+        const stagedBody = await staged.json() as { rows: Array<{ id: string }> };
+        expect(stagedBody.rows.some(row => row.id === commitBody.id)).toBe(true);
 
         // Send push — body.component is ignored for routing; all NEW rows are claimed
         const pushRes = await postPush(ctx, pushPayload(component, 6002));
         expect(pushRes.status()).toBe(200);
-        const pushBody = await pushRes.json() as { ok: boolean; processed?: number };
+        const pushBody = await pushRes.json() as { ok: boolean; claimed: number };
         expect(pushBody.ok).toBe(true);
-        expect(pushBody.processed).toBe(1);
+        expect(pushBody.claimed).toBe(1);
 
         // Verify clean
         const after = await ctx.get(
@@ -331,7 +349,7 @@ test.describe('webhook flow — resilience and edge cases', () => {
         // To keep this test isolated we use a unique component prefix and
         // verify the total claimed = total inserted, regardless of split.
         const ctx = await api();
-        const component = `concurrent-${randomUUID().slice(0, 8)}`;
+        const component = `content-concurrent-${randomUUID().slice(0, 8)}`;
 
         // Insert 4 rows (ensure staging table starts clean for this component)
         for (let i = 0; i < 4; i++) {
@@ -349,9 +367,12 @@ test.describe('webhook flow — resilience and edge cases', () => {
 
         // Fire two pushes concurrently — SKIP LOCKED means disjoint row sets
         const [r1, r2] = await Promise.all([
-            ctx.post('/dev/workflows/translation/simulate-push', { data: {} }),
-            ctx.post('/dev/workflows/translation/simulate-push', { data: {} }),
+            ctx.post('/dev/workflows/translation/simulate-push', { data: { component } }),
+            ctx.post('/dev/workflows/translation/simulate-push', { data: { component } }),
         ]);
+
+        expect(r1.status()).toBe(200);
+        expect(r2.status()).toBe(200);
 
         const b1 = await r1.json() as { claimed: number };
         const b2 = await r2.json() as { claimed: number };
@@ -382,13 +403,14 @@ test.describe('webhook flow — resilience and edge cases', () => {
         console.log(`✓ reset-stuck reset ${body.reset} row(s)`);
     });
 
-    test('push with no staged commits returns processed=0', async () => {
+    test('push with no staged commits returns claimed=0', async () => {
         const ctx = await api();
-        const component = `noclaims-${randomUUID().slice(0, 8)}`;
+        const component = `content-noclaims-${randomUUID().slice(0, 8)}`;
 
         const res = await ctx.post('/dev/workflows/translation/simulate-push', {
             data: { component },
         });
+        expect(res.status()).toBe(200);
         const body = await res.json() as { ok: boolean; claimed: number; message?: string };
         expect(body.ok).toBe(true);
         // Either claimed=0 or message about no staged commits
@@ -397,17 +419,19 @@ test.describe('webhook flow — resilience and edge cases', () => {
 
     test('multiple commits then single push — all rows processed in one shot', async () => {
         const ctx = await api();
-        const component = `bulk-${randomUUID().slice(0, 8)}`;
+        const component = `content-bulk-${randomUUID().slice(0, 8)}`;
         const langs = ['it', 'fr', 'ar', 'de', 'sq'];
 
         for (const [i, lang] of langs.entries()) {
-            await postCommit(ctx, commitPayload(component, lang, 8000 + i));
+            const commitRes = await postCommit(ctx, commitPayload(component, lang, 8000 + i));
+            expect(commitRes.status()).toBe(200);
         }
 
         const pushRes = await postPush(ctx, pushPayload(component, 8100));
-        const pushBody = await pushRes.json() as { ok: boolean; processed: number };
+        expect(pushRes.status()).toBe(200);
+        const pushBody = await pushRes.json() as { ok: boolean; claimed: number };
         expect(pushBody.ok).toBe(true);
-        expect(pushBody.processed).toBe(5);
+        expect(pushBody.claimed).toBe(5);
 
         const after = await ctx.get(
             `/dev/workflows/translation/staged-commits?component=${component}`,

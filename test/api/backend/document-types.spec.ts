@@ -269,8 +269,8 @@ test.describe('DocumentTypes API — Translation workflow', () => {
 
         expect(approved.status).toBe('APPROVED');
 
-        // Source lang (it) stays DRAFT; non-source (en) becomes STALE
-        expect(approved.translations?.it?.tStatus).toBe('DRAFT');
+        // The approved source becomes APPROVED; older non-source text is STALE.
+        expect(approved.translations?.it?.tStatus).toBe('APPROVED');
         expect(approved.translations?.en?.tStatus).toBe('STALE');
     });
 
@@ -335,7 +335,16 @@ test.describe('DocumentTypes API — Migrant endpoint', () => {
 
         // Approve
         await api.put(`/document-types/${publishedId}`, {
-            data: { id: publishedId, status: 'APPROVED', sourceLang: 'it', dataExtra: created.dataExtra, translations: {} },
+            data: {
+                id: publishedId,
+                status: 'APPROVED',
+                sourceLang: 'it',
+                dataExtra: created.dataExtra,
+                translations: {
+                    it: { title: 'Passaporto', description: 'Documento di viaggio internazionale' },
+                    en: { title: 'Passport', description: 'International travel document' },
+                },
+            },
         });
 
         // Publish

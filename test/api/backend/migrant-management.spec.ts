@@ -71,6 +71,7 @@ const baseURL = process.env.API_BASE_URL ?? 'http://api.localhost';
 const adminToken = process.env.E2E_TOKEN_ADMIN ?? '';
 const operatorToken = process.env.E2E_TOKEN_OPERATOR ?? '';
 const fixedMigrantId = process.env.E2E_MIGRANT_USER_ID ?? '';
+const dummyAuthEnabled = process.env.AUTH_DISABLE_KEYCLOAK === 'true';
 
 /** Guard: Keycloak-dependent tests must opt-in explicitly. */
 const keycloakEnabled = process.env.RUN_MIGRANT_MGMT_E2E === 'true';
@@ -178,6 +179,7 @@ test.describe('Migrant users API — /admin/migrants/users', () => {
     });
 
     test('GET /users — 401 without token', async () => {
+        test.skip(dummyAuthEnabled, 'Dummy authentication intentionally authenticates anonymous requests.');
         const api = await anonApi();
         const res = await api.get('/admin/migrants/users');
         expect([401, 403]).toContain(res.status());
@@ -234,6 +236,7 @@ test.describe('Migrant notes API — /admin/migrants/users/:id/notes', () => {
     });
 
     test('PATCH notes — 403 for pa_viewer via role check', async () => {
+        test.skip(dummyAuthEnabled, 'Dummy authentication uses the single role set configured for the backend.');
         // pa_viewer has GET but not PATCH. If no viewer token, we at least verify
         // that the endpoint requires auth.
         const api = await anonApi();

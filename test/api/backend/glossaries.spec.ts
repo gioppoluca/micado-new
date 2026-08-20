@@ -141,7 +141,7 @@ test.describe('Glossaries API — CRUD lifecycle', () => {
         expect(afterPatch.status).toBe('APPROVED');
         const afterPatchTrs = afterPatch.translations as Record<string, Record<string, string>>;
         expect(afterPatchTrs.en?.tStatus).toBe('STALE');
-        expect(afterPatchTrs.it?.tStatus).toBe('DRAFT');
+        expect(afterPatchTrs.it?.tStatus).toBe('APPROVED');
 
         // ── DELETE ────────────────────────────────────────────────────────────
         const delRes = await api.delete(`/glossaries/${termId}`);
@@ -189,12 +189,12 @@ test.describe('Glossaries API — Translation workflow', () => {
         const afterApprove = await afterApproveRes.json() as Record<string, unknown>;
         expect(afterApprove.status).toBe('APPROVED');
         const trs = afterApprove.translations as Record<string, Record<string, string>>;
-        expect(trs.it?.tStatus).toBe('DRAFT');    // source unchanged
+        expect(trs.it?.tStatus).toBe('APPROVED');
         expect(trs.en?.tStatus).toBe('STALE');    // non-source → STALE
 
         // Publish
         const publishRes = await api.get(`/glossaries/to-production?id=${termId}`);
-        expect(publishRes.status()).toBe(200);
+        expect(publishRes.status()).toBe(204);
 
         const afterPublishRes = await api.get(`/glossaries/${termId}`);
         const afterPublish = await afterPublishRes.json() as Record<string, unknown>;

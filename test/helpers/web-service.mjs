@@ -18,7 +18,13 @@ export async function verifyWebService({page, testInfo, service}) {
     console.log(`[MICADO][${service.label}] Page title: ${title || '(empty)'}`);
 
     expect(title, `${service.label} returned an empty page title`).not.toBe('');
-    expect(bodyText.length, `${service.label} returned an empty page body`).toBeGreaterThan(0);
+    // Keycloak's admin console is a client-rendered SPA whose initial document
+    // can legitimately have no visible body text and can still be navigating.
+    // The successful response and title validate its shell without racing the
+    // SPA by requesting a full page snapshot here.
+    if (!service.allowEmptyBody) {
+      expect(bodyText.length, `${service.label} returned an empty page body`).toBeGreaterThan(0);
+    }
 
     if (service.expectedTitle) {
       expect(
@@ -27,10 +33,12 @@ export async function verifyWebService({page, testInfo, service}) {
       ).toContain(service.expectedTitle.toLocaleLowerCase());
     }
 
-    await testInfo.attach(`${service.id}-page.html`, {
-      body: Buffer.from(await page.content()),
-      contentType: 'text/html',
-    });
+    if (!service.allowEmptyBody) {
+      await testInfo.attach(`${service.id}-page.html`, {
+        body: Buffer.from(await page.content()),
+        contentType: 'text/html',
+      });
+    }
 
     console.log(
       `[MICADO][${service.label}][SUCCESS] Service is reachable and page title is valid: "${title}"`,
