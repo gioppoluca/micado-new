@@ -3,16 +3,20 @@ import { repository } from '@loopback/repository';
 import { get, post, put, patch, del, param, requestBody, HttpErrors } from '@loopback/rest';
 import { Language } from '../models';
 import { LanguageRepository } from '../repositories';
-import { inject } from '@loopback/core';
+import { inject, service } from '@loopback/core';
 import { LoggingBindings, WinstonLogger } from '@loopback/logging';
 import { authenticate } from '@loopback/authentication';
 import { authorize } from '@loopback/authorization';
+import { DefaultLanguageService } from '../services/default-language.service';
 
 export class LanguageController {
     constructor(
         @repository(LanguageRepository) private repo: LanguageRepository,
         @inject(LoggingBindings.WINSTON_LOGGER)
         private logger: WinstonLogger,
+
+        @service(DefaultLanguageService)
+        private defaultLanguageService: DefaultLanguageService,
     ) { }
 
     @get('/languages')
@@ -39,9 +43,8 @@ export class LanguageController {
     /**
      * GET /languages/default
      *
-     * Returns the language with is_default = true.
-     * This is the single source of truth for the platform default language —
-     * the settings table no longer holds a 'default_language' key.
+     * Returns the unique active language with is_default = true.
+     * This is the single source of truth for the platform default language.
      *
      * IMPORTANT: this route must appear BEFORE /languages/{lang} in the
      * controller so LoopBack does not treat 'default' as a path parameter.
@@ -51,20 +54,9 @@ export class LanguageController {
     @get('/languages/default')
     @authenticate.skip()
     async getDefault(): Promise<Language> {
-        const found = await this.repo.findOne({ where: { isDefault: true } });
-        if (!found) {
-            this.logger.warn('[languages.getDefault] no default language set — falling back to first active');
-            const fallback = await this.repo.findOne({
-                where: { active: true },
-                order: ['sortOrder ASC'],
-            });
-            if (!fallback) {
-                throw new HttpErrors.NotFound('No languages configured in the system');
-            }
-            return fallback;
-        }
-        this.logger.info('[languages.getDefault]', { lang: found.lang });
-        return found;
+        const language = await this.defaultLanguageService.getDefaultLanguage();
+        this.logger.info('[languages.getDefault]', { lang: language.lang });
+        return language;
     }
 
     @get('/languages/{lang}')

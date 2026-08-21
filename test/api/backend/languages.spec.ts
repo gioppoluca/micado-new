@@ -4,6 +4,80 @@ const baseURL = process.env.API_BASE_URL ?? 'http://api.localhost';
 const token = process.env.E2E_TOKEN_ADMIN ?? '';
 
 test.describe('Languages API CRUD', () => {
+    test('GET /languages/default returns the unique active default language', async () => {
+        const api = await request.newContext({ baseURL });
+
+        try {
+            const response = await api.get('/languages/default');
+            expect(response.status()).toBe(200);
+
+            const language = await response.json() as {
+                lang: string;
+                active: boolean;
+                isDefault: boolean;
+            };
+            expect(language.lang).toBeTruthy();
+            expect(language.active).toBe(true);
+            expect(language.isDefault).toBe(true);
+
+            const listResponse = await api.get('/languages');
+            expect(listResponse.status()).toBe(200);
+            const languages = await listResponse.json() as Array<{
+                lang: string;
+                isDefault: boolean;
+            }>;
+            expect(languages.filter(item => item.isDefault)).toHaveLength(1);
+            expect(languages.find(item => item.isDefault)?.lang).toBe(language.lang);
+        } finally {
+            await api.dispose();
+        }
+    });
+
+    test('GET /languages/default fails when no default language is configured', async () => {
+        const admin = await request.newContext({
+            baseURL,
+            extraHTTPHeaders: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        });
+        const publicApi = await request.newContext({ baseURL });
+        let originalDefaultLang: string | null = null;
+
+        try {
+            const initialResponse = await publicApi.get('/languages/default');
+            expect(initialResponse.status()).toBe(200);
+            const originalDefault = await initialResponse.json() as { lang: string };
+            originalDefaultLang = originalDefault.lang;
+
+            const unsetResponse = await admin.patch(`/languages/${originalDefaultLang}`, {
+                data: { isDefault: false },
+            });
+            expect(unsetResponse.status()).toBe(204);
+
+            const missingResponse = await publicApi.get('/languages/default');
+            expect(missingResponse.status()).toBe(503);
+            const error = await missingResponse.json() as {
+                error?: { statusCode?: number };
+            };
+            expect(error.error?.statusCode).toBe(503);
+        } finally {
+            if (originalDefaultLang) {
+                const restoreResponse = await admin.patch(`/languages/${originalDefaultLang}`, {
+                    data: { isDefault: true },
+                });
+                expect(restoreResponse.status()).toBe(204);
+
+                const restoredResponse = await publicApi.get('/languages/default');
+                expect(restoredResponse.status()).toBe(200);
+                const restored = await restoredResponse.json() as { lang: string };
+                expect(restored.lang).toBe(originalDefaultLang);
+            }
+            await publicApi.dispose();
+            await admin.dispose();
+        }
+    });
+
     test('POST -> GET -> PATCH -> GET -> DELETE -> GET', async () => {
         const api = await request.newContext({
             baseURL,
