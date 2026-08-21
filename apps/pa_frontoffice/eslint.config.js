@@ -45,6 +45,20 @@ export default defineConfigWithVueTs(
   vueTsConfigs.recommendedTypeChecked,
 
   {
+    files: ['**/*.ts', '**/*.vue'],
+    languageOptions: {
+      parserOptions: {
+        // vue-eslint-parser must forward the typed project to the TS parser.
+        // An explicit project also works with the parser version in Docker.
+        project: ['./tsconfig.json'],
+        projectService: false,
+        tsconfigRootDir: import.meta.dirname,
+        extraFileExtensions: ['.vue'],
+      },
+    },
+  },
+
+  {
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',

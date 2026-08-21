@@ -39,6 +39,7 @@
 import { logger } from 'src/services/Logger';
 import { apiGet, apiPost, apiPatch, apiPut, apiDelete } from './client';
 import type { MockRegistry, MockRequestConfig, MockReplyTuple } from './mock';
+import type {TranslationListFields} from './translation-state.api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -54,7 +55,7 @@ export interface TopicDataExtra {
  * Returned by list (GET /topics) and create (POST /topics).
  * Contains only the sourceLang translation.
  */
-export interface Topic {
+export interface Topic extends TranslationListFields {
     id: number;
     /** Topic name in the source language. */
     topic: string;

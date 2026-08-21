@@ -64,6 +64,9 @@
 
         <!-- ── Add / Edit form ─────────────────────────────────────────────── -->
         <q-card v-if="formOpen" class="q-pa-md q-mb-lg">
+            <q-banner v-if="readOnlyView" dense rounded class="bg-blue-1 text-primary q-mb-md">
+                <q-icon name="visibility" class="q-mr-sm" />{{ t('button.view') }} — {{ form.status }}
+            </q-banner>
 
             <!--
                 MultiLangEditorTabs with showTitle=true
@@ -91,7 +94,7 @@
             <q-linear-progress v-if="formLoading" indeterminate color="accent" class="q-mb-sm" />
 
             <MultiLangEditorTabs v-else ref="mlTabsRef" v-model="form.translations" :languages="sortedLanguages"
-                :show-title="true" :title-max-length="titleLimit" :readonly="false" data-cy="usertype_multilang_tabs" />
+                :show-title="true" :title-max-length="titleLimit" :readonly="!isEditable" data-cy="usertype_multilang_tabs" />
             <!--
                 Note: :readonly="false" at the component level — we rely on the
                 source-language tab being individually locked when status is
@@ -136,7 +139,7 @@
                 </div>
                 <div class="col-auto q-pt-xs">
                     <q-toggle :model-value="form.status === 'APPROVED'" color="accent"
-                        :disable="form.status === 'PUBLISHED'" @update:model-value="onTranslatableToggle" />
+                        :disable="!isEditable" @update:model-value="onTranslatableToggle" />
                 </div>
             </div>
 
@@ -177,9 +180,9 @@
 
             <div class="row q-gutter-sm">
                 <q-btn data-cy="cancelusertype" no-caps class="delete-button" unelevated rounded
-                    :label="t('button.cancel')" @click="closeForm" />
-                <q-btn data-cy="saveusertype" no-caps color="accent" unelevated rounded :label="t('button.save')"
-                    :disable="formLoading || form.status === 'PUBLISHED'" :loading="store.loading"
+                    :label="t(isEditable ? 'button.cancel' : 'button.close')" @click="closeForm" />
+                <q-btn v-if="isEditable" data-cy="saveusertype" no-caps color="accent" unelevated rounded :label="t('button.save')"
+                    :disable="formLoading" :loading="store.loading"
                     @click="() => { void onSave(); }" />
             </div>
         </q-card>
@@ -234,8 +237,8 @@
                         </q-item-label>
                         <q-item-label caption class="row items-center q-gutter-x-xs q-mt-xs">
                             <span class="text-grey-7">{{ t('input_labels.available_transl') }}</span>
-                            <q-chip v-for="lang in displayLangs(ut)" :key="lang" dense color="grey-4" text-color="white"
-                                size="sm" class="q-ma-none lang-chip" :label="lang.toUpperCase()" />
+                            <TranslationStatusChips :states="ut.translationStates" :revision-id="ut.revisionId"
+                                :revision-status="ut.status" @dispatched="store.fetchAll()" />
                         </q-item-label>
                     </q-item-section>
 
@@ -253,8 +256,11 @@
 
                     <!-- Edit: orange pencil, flat, no background circle — matches Figma -->
                     <q-item-section style="min-width:48px; max-width:48px" class="flex flex-center">
-                        <q-btn :data-cy="`edituser${ut.id}`" flat round icon="edit" size="sm" color="orange"
-                            @click="onEditRowClick(ut)" />
+                        <q-btn :data-cy="`${isReadOnlyStatus(ut.status) ? 'viewuser' : 'edituser'}${ut.id}`" flat round
+                            :icon="isReadOnlyStatus(ut.status) ? 'visibility' : 'edit'" size="sm"
+                            :color="isReadOnlyStatus(ut.status) ? 'primary' : 'orange'" @click="onEditRowClick(ut)">
+                            <q-tooltip>{{ t(isReadOnlyStatus(ut.status) ? 'button.view' : 'button.edit') }}</q-tooltip>
+                        </q-btn>
                     </q-item-section>
 
                     <!-- Delete: red trash, flat — matches Figma -->
@@ -331,6 +337,7 @@ import { useI18n } from 'vue-i18n';
 import { useQuasar } from 'quasar';
 import HelpLabel from 'src/components/HelpLabel.vue';
 import MultiLangEditorTabs from 'src/components/rich-text-editor/MultiLangEditorTabs.vue';
+import TranslationStatusChips from 'src/components/settings/TranslationStatusChips.vue';
 import { useUserTypeStore } from 'src/stores/user-type-store';
 import { useLanguageStore } from 'src/stores/language-store';
 import { useAppStore } from 'src/stores/app-store';
@@ -381,6 +388,7 @@ interface FormState {
 
 const formOpen = ref(false);
 const isNew = ref(false);
+const readOnlyView = ref(false);
 
 function blankForm(): FormState {
     const src = app.requireDefaultLang();
@@ -396,7 +404,10 @@ function blankForm(): FormState {
 
 const form = ref<FormState>(blankForm());
 
-const isEditable = computed(() => form.value.status !== 'PUBLISHED');
+const isEditable = computed(() => !readOnlyView.value);
+function isReadOnlyStatus(status: UserTypeStatus): boolean {
+    return status === 'APPROVED' || status === 'PUBLISHED';
+}
 
 /**
  * Languages for the tab component.
@@ -419,10 +430,6 @@ const sortedLanguages = computed(() => {
  * Matches Figma Document Types layout where edit icon goes straight to the form.
  */
 function onEditRowClick(ut: UserType): void {
-    if (ut.status === 'PUBLISHED') {
-        $q.notify({ color: 'red', message: t('warning.published_edit') });
-        return;
-    }
     void openEditForm(ut);
 }
 
@@ -446,6 +453,7 @@ function onDeleteRowClick(ut: UserType): void {
 function openNewForm(): void {
     form.value = blankForm();
     isNew.value = true;
+    readOnlyView.value = false;
     formOpen.value = true;
 }
 
@@ -456,6 +464,7 @@ function openNewForm(): void {
  * runs, so the layout doesn't jump.
  */
 async function openEditForm(ut: UserType): Promise<void> {
+    readOnlyView.value = isReadOnlyStatus(ut.status);
     // Show form skeleton immediately
     form.value = {
         id: ut.id,
@@ -505,11 +514,12 @@ function closeForm(): void {
     formOpen.value = false;
     formLoading.value = false;
     form.value = blankForm();
+    readOnlyView.value = false;
     iconSizeError.value = null;
 }
 
 function onTranslatableToggle(value: boolean): void {
-    if (form.value.status === 'PUBLISHED') return;
+    if (!isEditable.value) return;
     form.value.status = value ? 'APPROVED' : 'DRAFT';
 }
 
@@ -539,6 +549,7 @@ function onIconSelected(file: File | File[] | null): void {
 // ── Save ──────────────────────────────────────────────────────────────────
 
 async function onSave(): Promise<void> {
+    if (!isEditable.value) return;
     // Collect the latest Markdown from all RichTextEditor instances inside the tabs
     const latestTranslations = mlTabsRef.value?.getAllTranslations() ?? form.value.translations;
 
@@ -656,9 +667,6 @@ function stripMarkdown(md: string): string {
  * Additional languages are only available after getOne() (form open).
  * Shows sourceLang always; shows up to 3 langs if the store somehow carries more.
  */
-function displayLangs(ut: UserType): string[] {
-    return [ut.sourceLang];
-}
 
 // ── Status badge ──────────────────────────────────────────────────────────
 

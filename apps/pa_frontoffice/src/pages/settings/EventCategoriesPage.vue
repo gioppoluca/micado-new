@@ -38,6 +38,9 @@
 
         <!-- ── Form ──────────────────────────────────────────────────────── -->
         <q-card v-if="formOpen" class="q-pa-md q-mb-lg">
+            <q-banner v-if="readOnlyView" dense rounded class="bg-blue-1 text-primary q-mb-md">
+                <q-icon name="visibility" class="q-mr-sm" />{{ t('button.view') }} — {{ form.status }}
+            </q-banner>
             <q-linear-progress v-if="formLoading" indeterminate color="accent" class="q-mb-sm" />
 
             <template v-if="!formLoading">
@@ -48,7 +51,7 @@
                         ? t('help.source_frozen')
                         : t('help.source_editable')" />
                     <q-toggle :model-value="form.status === 'APPROVED'" color="accent"
-                        :disable="form.status === 'PUBLISHED'" @update:model-value="onTranslatableToggle" />
+                        :disable="!isEditable" @update:model-value="onTranslatableToggle" />
                 </div>
 
                 <!-- Revision history -->
@@ -81,17 +84,17 @@
                         ? t('help.source_editable')
                         : t('help.translation_field')" class="q-mb-xs" />
                     <q-input v-model="form.translations[lang.lang]" outlined dense bg-color="grey-3" :maxlength="255"
-                        :readonly="form.status === 'PUBLISHED'"
+                        :readonly="!isEditable"
                         :label="`${t('input_labels.name')} (${lang.lang.toUpperCase()})`"
                         :data-cy="`category_title_${lang.lang}`" />
                 </div>
 
                 <!-- Actions -->
                 <div class="row q-gutter-sm q-mt-md">
-                    <q-btn class="cancel_button" no-caps unelevated rounded :label="t('button.cancel')"
+                    <q-btn class="cancel_button" no-caps unelevated rounded :label="t(isEditable ? 'button.cancel' : 'button.close')"
                         @click="closeForm" />
                     <q-space />
-                    <q-btn class="save_button" no-caps color="accent" unelevated rounded :label="t('button.save')"
+                    <q-btn v-if="isEditable" class="save_button" no-caps color="accent" unelevated rounded :label="t('button.save')"
                         :loading="store.loading" @click="onSave" />
                 </div>
             </template>
@@ -123,9 +126,8 @@
                 <q-item-section class="col-6">
                     <q-item-label>{{ cat.title }}</q-item-label>
                     <q-item-label caption class="q-mt-xs">
-                        <q-chip dense size="xs" color="grey-3" text-color="grey-8">
-                            {{ cat.sourceLang.toUpperCase() }}
-                        </q-chip>
+                        <TranslationStatusChips :states="cat.translationStates" :revision-id="cat.revisionId"
+                            :revision-status="cat.status" @dispatched="store.fetchAll('event')" />
                     </q-item-label>
                 </q-item-section>
 
@@ -143,9 +145,10 @@
                 <!-- Actions -->
                 <q-item-section class="col-3 text-center">
                     <div class="row justify-center q-gutter-xs">
-                        <q-btn :data-cy="`edit_category_${cat.id}`" flat round icon="edit" size="sm" color="orange"
-                            @click="onEditRowClick(cat)">
-                            <q-tooltip>{{ t('button.edit') }}</q-tooltip>
+                        <q-btn :data-cy="`${isReadOnlyStatus(cat.status) ? 'view_category_' : 'edit_category_'}${cat.id}`"
+                            flat round :icon="isReadOnlyStatus(cat.status) ? 'visibility' : 'edit'" size="sm"
+                            :color="isReadOnlyStatus(cat.status) ? 'primary' : 'orange'" @click="onEditRowClick(cat)">
+                            <q-tooltip>{{ t(isReadOnlyStatus(cat.status) ? 'button.view' : 'button.edit') }}</q-tooltip>
                         </q-btn>
                         <q-btn :data-cy="`delete_category_${cat.id}`" flat round icon="delete" size="sm"
                             color="negative" @click="onDeleteRowClick(cat)">
@@ -177,6 +180,7 @@ import { useAppStore } from 'src/stores/app-store';
 import { categoryStatusKey } from 'src/api/category.api';
 import type { Category, CategoryFull, RevisionSummary } from 'src/api/category.api';
 import HelpLabel from 'src/components/HelpLabel.vue';
+import TranslationStatusChips from 'src/components/settings/TranslationStatusChips.vue';
 import { logger } from 'src/services/Logger';
 
 const { t } = useI18n();
@@ -199,6 +203,7 @@ interface FormState {
 const formOpen = ref(false);
 const formLoading = ref(false);
 const isNew = ref(false);
+const readOnlyView = ref(false);
 
 function blankForm(): FormState {
     const src = app.requireDefaultLang();
@@ -212,6 +217,10 @@ function blankForm(): FormState {
 }
 
 const form = ref<FormState>(blankForm());
+const isEditable = computed(() => !readOnlyView.value);
+function isReadOnlyStatus(status: Category['status']): boolean {
+    return status === 'APPROVED' || status === 'PUBLISHED';
+}
 
 /** Source language first, then others alphabetically. */
 const sortedLanguages = computed(() => {
@@ -262,6 +271,7 @@ function revColor(status: string): string {
 // ─── Form open / close ────────────────────────────────────────────────────────
 
 function openNewForm(): void {
+    readOnlyView.value = false;
     form.value = blankForm();
     // Ensure all active languages have an entry
     for (const l of langStore.activeLanguages) {
@@ -274,6 +284,7 @@ function openNewForm(): void {
 }
 
 async function openEditForm(cat: Category): Promise<void> {
+    readOnlyView.value = isReadOnlyStatus(cat.status);
     form.value = {
         id: cat.id,
         status: cat.status,
@@ -314,22 +325,19 @@ function closeForm(): void {
     formOpen.value = false;
     formLoading.value = false;
     form.value = blankForm();
+    readOnlyView.value = false;
 }
 
 // ─── Translatable toggle ──────────────────────────────────────────────────────
 
 function onTranslatableToggle(value: boolean): void {
-    if (form.value.status === 'PUBLISHED') return;
+    if (!isEditable.value) return;
     form.value.status = value ? 'APPROVED' : 'DRAFT';
 }
 
 // ─── Row actions ──────────────────────────────────────────────────────────────
 
 function onEditRowClick(cat: Category): void {
-    if (cat.status === 'PUBLISHED') {
-        $q.notify({ color: 'red', message: t('warning.published_edit') });
-        return;
-    }
     void openEditForm(cat);
 }
 
@@ -362,6 +370,7 @@ function onPublishedToggle(newValue: boolean, cat: Category): void {
 // ─── Save ─────────────────────────────────────────────────────────────────────
 
 async function onSave(): Promise<void> {
+    if (!isEditable.value) return;
     const srcLang = form.value.sourceLang;
     const srcTitle = (form.value.translations[srcLang] ?? '').trim();
 

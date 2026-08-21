@@ -39,6 +39,7 @@
 import { logger } from 'src/services/Logger';
 import { apiGet, apiPost, apiPatch, apiPut, apiDelete } from './client';
 import type { MockRegistry, MockRequestConfig, MockReplyTuple } from './mock';
+import type {TranslationListFields} from './translation-state.api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -54,7 +55,7 @@ export interface UserTypeDataExtra {
  * Returned by list (GET /user-types) and create (POST /user-types).
  * Contains only the sourceLang translation.
  */
-export interface UserType {
+export interface UserType extends TranslationListFields {
     id: number;
     user_type: string;
     description: string;

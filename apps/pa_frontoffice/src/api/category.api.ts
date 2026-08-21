@@ -43,6 +43,7 @@
 import { logger } from 'src/services/Logger';
 import { apiGet, apiPost, apiPatch, apiPut, apiDelete } from './client';
 import type { MockRegistry, MockRequestConfig, MockReplyTuple } from './mock';
+import type {TranslationListFields} from './translation-state.api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -54,7 +55,7 @@ export type TranslationStatus = 'DRAFT' | 'APPROVED' | 'PUBLISHED' | 'STALE';
  * Flat DTO — returned by list and create.
  * Contains only the sourceLang translation.
  */
-export interface Category {
+export interface Category extends TranslationListFields {
     id: number;
     title: string;
     status: CategoryStatus;

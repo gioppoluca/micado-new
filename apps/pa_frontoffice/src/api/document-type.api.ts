@@ -36,6 +36,7 @@
 import { logger } from 'src/services/Logger';
 import { apiGet, apiPost, apiPatch, apiPut, apiDelete } from './client';
 import type { MockRegistry, MockRequestConfig, MockReplyTuple } from './mock';
+import type {TranslationListFields} from './translation-state.api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -66,7 +67,7 @@ export interface DocumentTypeDataExtra {
  * Flat, legacy-compatible DTO.
  * Returned by list and create. Contains only sourceLang translation.
  */
-export interface DocumentType {
+export interface DocumentType extends TranslationListFields {
     id: number;
     /** Document name in the source language. Maps to content_revision_translation.title. */
     document: string;

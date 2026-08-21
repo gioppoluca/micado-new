@@ -867,6 +867,15 @@ export default {
     "item_validation_success": "Validierung angefordert."
   }
   ,
+  "translation_chip": {
+    "missing": "Übersetzung fehlt",
+    "sent": "An Weblate gesendet",
+    "translated": "Übersetzt",
+    "send_missing": "Fehlende Übersetzungen an Weblate senden",
+    "send_success": "Fehlende Übersetzungen wurden an Weblate gesendet.",
+    "send_none": "Keine neuen Übersetzungen zu senden.",
+    "send_failed": "Fehlende Übersetzungen konnten nicht gesendet werden."
+  },
   "ngo_comments": {
     "dialog_title": "Kommentare von NGO-Organisationen",
     "no_comments": "Zu diesem Prozess liegen noch keine NGO-Kommentare vor.",

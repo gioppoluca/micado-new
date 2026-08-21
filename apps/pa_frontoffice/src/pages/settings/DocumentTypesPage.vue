@@ -59,6 +59,9 @@
              FORM
              ════════════════════════════════════════════════════════════════════ -->
         <q-card v-if="formOpen" class="q-pa-md q-mb-lg">
+            <q-banner v-if="readOnlyView" dense rounded class="bg-blue-1 text-primary q-mb-md">
+                <q-icon name="visibility" class="q-mr-sm" />{{ t('button.view') }} — {{ form.status }}
+            </q-banner>
 
             <q-linear-progress v-if="formLoading" indeterminate color="accent" class="q-mb-sm" />
 
@@ -66,7 +69,7 @@
             <HelpLabel :field-label="t('input_labels.doc_type')" :help-label="t('help.doc_type_description')"
                 class="q-mb-xs" />
             <MultiLangEditorTabs v-if="!formLoading" ref="mlTabsRef" v-model="form.translations"
-                :languages="sortedLanguages" :show-title="true" :title-max-length="titleLimit" :readonly="false"
+                :languages="sortedLanguages" :show-title="true" :title-max-length="titleLimit" :readonly="!isEditable"
                 data-cy="doctype_multilang_tabs" />
 
             <!-- 2. Issuer + Icon -->
@@ -190,7 +193,7 @@
                 </div>
                 <div class="col-auto q-pt-xs">
                     <q-toggle :model-value="form.status === 'APPROVED'" color="accent"
-                        :disable="form.status === 'PUBLISHED'" @update:model-value="onTranslatableToggle" />
+                        :disable="!isEditable" @update:model-value="onTranslatableToggle" />
                 </div>
             </div>
 
@@ -225,9 +228,9 @@
             <!-- Action buttons -->
             <div class="row q-gutter-sm q-mt-md">
                 <q-btn data-cy="canceldoctype" no-caps class="delete-button" unelevated rounded
-                    :label="t('button.cancel')" @click="closeForm" />
-                <q-btn data-cy="savedoctype" no-caps color="accent" unelevated rounded :label="t('button.save')"
-                    :disable="formLoading || form.status === 'PUBLISHED'" :loading="store.loading"
+                    :label="t(isEditable ? 'button.cancel' : 'button.close')" @click="closeForm" />
+                <q-btn v-if="isEditable" data-cy="savedoctype" no-caps color="accent" unelevated rounded :label="t('button.save')"
+                    :disable="formLoading" :loading="store.loading"
                     @click="() => { void onSave(); }" />
             </div>
         </q-card>
@@ -263,8 +266,8 @@
                         <q-item-label class="text-weight-medium">{{ dt.document }}</q-item-label>
                         <q-item-label caption class="row items-center q-gutter-x-xs q-mt-xs">
                             <span class="text-grey-7">{{ t('input_labels.available_transl') }}</span>
-                            <q-chip dense color="grey-4" text-color="white" size="sm" class="q-ma-none lang-chip"
-                                :label="dt.sourceLang.toUpperCase()" />
+                            <TranslationStatusChips :states="dt.translationStates" :revision-id="dt.revisionId"
+                                :revision-status="dt.status" @dispatched="store.fetchAll()" />
                         </q-item-label>
                     </q-item-section>
 
@@ -279,8 +282,11 @@
                     </q-item-section>
 
                     <q-item-section style="min-width:48px; max-width:48px" class="flex flex-center">
-                        <q-btn :data-cy="`editdoc${dt.id}`" flat round icon="edit" size="sm" color="orange"
-                            @click="onEditRowClick(dt)" />
+                        <q-btn :data-cy="`${isReadOnlyStatus(dt.status) ? 'viewdoc' : 'editdoc'}${dt.id}`" flat round
+                            :icon="isReadOnlyStatus(dt.status) ? 'visibility' : 'edit'" size="sm"
+                            :color="isReadOnlyStatus(dt.status) ? 'primary' : 'orange'" @click="onEditRowClick(dt)">
+                            <q-tooltip>{{ t(isReadOnlyStatus(dt.status) ? 'button.view' : 'button.edit') }}</q-tooltip>
+                        </q-btn>
                     </q-item-section>
 
                     <q-item-section style="min-width:48px; max-width:48px" class="flex flex-center">
@@ -331,6 +337,7 @@ import { v4 as uuidv4 } from 'uuid';
 import HelpLabel from 'src/components/HelpLabel.vue';
 import MultiLangEditorTabs from 'src/components/rich-text-editor/MultiLangEditorTabs.vue';
 import PictureHotspotEditor from 'src/components/settings/PictureHotspotEditor.vue';
+import TranslationStatusChips from 'src/components/settings/TranslationStatusChips.vue';
 import { useDocumentTypeStore } from 'src/stores/document-type-store';
 import { useLanguageStore } from 'src/stores/language-store';
 import { useAppStore } from 'src/stores/app-store';
@@ -387,6 +394,7 @@ interface FormState {
 
 const formOpen = ref(false);
 const isNew = ref(false);
+const readOnlyView = ref(false);
 
 function blankForm(): FormState {
     const src = app.requireDefaultLang();
@@ -401,7 +409,10 @@ function blankForm(): FormState {
 }
 
 const form = ref<FormState>(blankForm());
-const isEditable = computed(() => form.value.status !== 'PUBLISHED');
+const isEditable = computed(() => !readOnlyView.value);
+function isReadOnlyStatus(status: DocumentTypeStatus): boolean {
+    return status === 'APPROVED' || status === 'PUBLISHED';
+}
 
 const sortedLanguages = computed(() => {
     const src = form.value.sourceLang;
@@ -492,10 +503,12 @@ function onModelSelected(file: File | File[] | null): void {
 function openNewForm(): void {
     form.value = blankForm();
     isNew.value = true;
+    readOnlyView.value = false;
     formOpen.value = true;
 }
 
 async function openEditForm(dt: DocumentType): Promise<void> {
+    readOnlyView.value = isReadOnlyStatus(dt.status);
     form.value = {
         ...blankForm(),
         id: dt.id, status: dt.status, sourceLang: dt.sourceLang,
@@ -546,20 +559,18 @@ function closeForm(): void {
     formOpen.value = false;
     formLoading.value = false;
     form.value = blankForm();
+    readOnlyView.value = false;
     iconSizeError.value = null;
     modelSizeError.value = null;
 }
 
 function onTranslatableToggle(value: boolean): void {
-    if (form.value.status === 'PUBLISHED') return;
+    if (!isEditable.value) return;
     form.value.status = value ? 'APPROVED' : 'DRAFT';
 }
 
 // ── Row actions ────────────────────────────────────────────────────────────────
 function onEditRowClick(dt: DocumentType): void {
-    if (dt.status === 'PUBLISHED') {
-        $q.notify({ color: 'red', message: t('warning.published_edit') }); return;
-    }
     void openEditForm(dt);
 }
 
@@ -581,6 +592,7 @@ function onPublishedToggle(newValue: boolean, dt: DocumentType): void {
 
 // ── Save ───────────────────────────────────────────────────────────────────────
 async function onSave(): Promise<void> {
+    if (!isEditable.value) return;
     const latestTranslations = mlTabsRef.value?.getAllTranslations() ?? form.value.translations;
 
     if (mlTabsRef.value?.hasAnyError()) {

@@ -48,6 +48,9 @@
 
         <!-- Add / Edit form -->
         <q-card v-if="formOpen" class="q-pa-md q-mb-lg">
+            <q-banner v-if="readOnlyView" dense rounded class="bg-blue-1 text-primary q-mb-md">
+                <q-icon name="visibility" class="q-mr-sm" />{{ t('button.view') }} — {{ form.status }}
+            </q-banner>
             <div v-if="formLoading" class="row justify-center q-py-xl">
                 <q-spinner size="2rem" color="accent" />
             </div>
@@ -58,7 +61,7 @@
                     <HelpLabel class="col" :field-label="t('translation_states.translatable')"
                         :help-label="form.status === 'APPROVED' ? t('help.source_frozen') : t('help.source_editable')" />
                     <q-toggle :model-value="form.status === 'APPROVED'" color="accent"
-                        :disable="form.status === 'PUBLISHED'" @update:model-value="onTranslatableToggle" />
+                        :disable="!isEditable" @update:model-value="onTranslatableToggle" />
                 </div>
 
                 <!-- Revision history -->
@@ -86,7 +89,7 @@
                 <!-- MultiLang tabs -->
                 <MultiLangEditorTabs v-if="sortedLanguages.length > 0" ref="mlTabsRef" v-model="form.translations"
                     :languages="sortedLanguages" show-title :title-max-length="200"
-                    :readonly="form.status === 'PUBLISHED'" class="q-mb-md" />
+                    :readonly="!isEditable" class="q-mb-md" />
 
                 <!-- Icon -->
                 <HelpLabel :field-label="t('help.topic_icon')" :help-label="t('help.topic_icon')"
@@ -109,15 +112,15 @@
                     class="q-mb-xs" />
                 <TopicTreeSelect v-model="form.parentId" :topics="store.topics"
                     :max-selectable-depth="maxSelectableDepth" v-bind="isNew ? {} : { excludeId: form.id }"
-                    :placeholder="t('input_labels.select_topic')" :disabled="form.status === 'PUBLISHED'"
+                    :placeholder="t('input_labels.select_topic')" :disabled="!isEditable"
                     class="q-mb-md" />
 
                 <!-- Actions -->
                 <div class="row q-gutter-sm q-mt-md">
-                    <q-btn class="cancel_button" no-caps unelevated rounded :label="t('button.cancel')"
+                    <q-btn class="cancel_button" no-caps unelevated rounded :label="t(isEditable ? 'button.cancel' : 'button.close')"
                         @click="closeForm" />
                     <q-space />
-                    <q-btn class="save_button" no-caps color="accent" unelevated rounded :label="t('button.save')"
+                    <q-btn v-if="isEditable" class="save_button" no-caps color="accent" unelevated rounded :label="t('button.save')"
                         :loading="store.loading" @click="onSave" />
                 </div>
             </template>
@@ -154,10 +157,8 @@
                         {{ topic.topic }}
                     </q-item-label>
                     <q-item-label caption class="q-mt-xs">
-                        <q-chip v-for="lang in displayLangs(topic)" :key="lang" dense size="xs" color="grey-3"
-                            text-color="grey-8">
-                            {{ lang.toUpperCase() }}
-                        </q-chip>
+                        <TranslationStatusChips :states="topic.translationStates" :revision-id="topic.revisionId"
+                            :revision-status="topic.status" @dispatched="store.fetchAll()" />
                     </q-item-label>
                 </q-item-section>
                 <q-item-section class="col-2 text-center">
@@ -175,9 +176,10 @@
                 </q-item-section>
                 <q-item-section class="col-2 text-center">
                     <div class="row justify-center q-gutter-xs">
-                        <q-btn :data-cy="`edittopic${topic.id}`" flat round icon="edit" size="sm" color="orange"
-                            @click="onEditRowClick(topic)">
-                            <q-tooltip>{{ t('button.edit') }}</q-tooltip>
+                        <q-btn :data-cy="`${isReadOnlyStatus(topic.status) ? 'viewtopic' : 'edittopic'}${topic.id}`"
+                            flat round :icon="isReadOnlyStatus(topic.status) ? 'visibility' : 'edit'" size="sm"
+                            :color="isReadOnlyStatus(topic.status) ? 'primary' : 'orange'" @click="onEditRowClick(topic)">
+                            <q-tooltip>{{ t(isReadOnlyStatus(topic.status) ? 'button.view' : 'button.edit') }}</q-tooltip>
                         </q-btn>
                         <q-btn flat round icon="download" size="sm" color="grey-7" @click="exportTopic(topic)">
                             <q-tooltip>{{ t('button.export') }}</q-tooltip>
@@ -223,6 +225,7 @@ import { topicStatusKey } from 'src/api/topic.api';
 import type { Topic, TopicFull, TopicTranslation, RevisionSummary } from 'src/api/topic.api';
 import { settingsApi } from 'src/api/settings.api';
 import MultiLangEditorTabs from 'src/components/rich-text-editor/MultiLangEditorTabs.vue';
+import TranslationStatusChips from 'src/components/settings/TranslationStatusChips.vue';
 import TopicTreeSelect from 'src/components/settings/TopicTreeSelect.vue';
 import HelpLabel from 'src/components/HelpLabel.vue';
 import { logger } from 'src/services/Logger';
@@ -252,6 +255,7 @@ interface FormState {
 const formOpen = ref(false);
 const formLoading = ref(false);
 const isNew = ref(false);
+const readOnlyView = ref(false);
 const mlTabsRef = ref<InstanceType<typeof MultiLangEditorTabs> | null>(null);
 
 function blankForm(): FormState {
@@ -265,7 +269,10 @@ function blankForm(): FormState {
 }
 
 const form = ref<FormState>(blankForm());
-const isEditable = computed(() => form.value.status !== 'PUBLISHED');
+const isEditable = computed(() => !readOnlyView.value);
+function isReadOnlyStatus(status: Topic['status']): boolean {
+    return status === 'APPROVED' || status === 'PUBLISHED';
+}
 const sortedLanguages = computed(() => {
     const src = form.value.sourceLang;
     const active = langStore.activeLanguages;
@@ -300,17 +307,17 @@ async function loadMaxDepth(): Promise<void> {
 function parentLabel(parentId: number): string {
     return store.topics.find(t => t.id === parentId)?.topic ?? `#${parentId}`;
 }
-function displayLangs(topic: Topic): string[] { return [topic.sourceLang]; }
 function statusColor(status: Topic['status']): string {
     return status === 'PUBLISHED' ? 'positive' : status === 'APPROVED' ? 'orange' : status === 'ARCHIVED' ? 'grey' : 'blue-grey';
 }
 function formatDate(iso: string): string { return new Date(iso).toLocaleDateString(); }
 
 function openNewForm(): void {
-    form.value = blankForm(); isNew.value = true; formOpen.value = true;
+    form.value = blankForm(); isNew.value = true; readOnlyView.value = false; formOpen.value = true;
 }
 
 async function openEditForm(topic: Topic): Promise<void> {
+    readOnlyView.value = isReadOnlyStatus(topic.status);
     form.value = {
         id: topic.id, status: topic.status, sourceLang: topic.sourceLang,
         iconPreview: topic.dataExtra?.icon ?? '', parentId: topic.parentId,
@@ -339,10 +346,10 @@ async function openEditForm(topic: Topic): Promise<void> {
 
 function closeForm(): void {
     formOpen.value = false; formLoading.value = false;
-    form.value = blankForm(); iconSizeError.value = null; iconFileRef.value = null;
+    form.value = blankForm(); readOnlyView.value = false; iconSizeError.value = null; iconFileRef.value = null;
 }
 function onTranslatableToggle(value: boolean): void {
-    if (form.value.status === 'PUBLISHED') return;
+    if (!isEditable.value) return;
     form.value.status = value ? 'APPROVED' : 'DRAFT';
 }
 
@@ -362,7 +369,6 @@ function onIconSelected(file: File | File[] | null): void {
 }
 
 function onEditRowClick(topic: Topic): void {
-    if (topic.status === 'PUBLISHED') { $q.notify({ color: 'red', message: t('warning.published_edit') }); return; }
     void openEditForm(topic);
 }
 function onDeleteRowClick(topic: Topic): void {
@@ -387,6 +393,7 @@ function onPublishedToggle(newValue: boolean, topic: Topic): void {
 }
 
 async function onSave(): Promise<void> {
+    if (!isEditable.value) return;
     const latestTranslations = mlTabsRef.value?.getAllTranslations() ?? form.value.translations;
     if (mlTabsRef.value?.hasAnyError()) { $q.notify({ color: 'negative', message: t('warning.req_fields') }); return; }
     const srcLang = form.value.sourceLang;
