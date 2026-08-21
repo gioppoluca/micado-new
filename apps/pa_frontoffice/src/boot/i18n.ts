@@ -29,7 +29,10 @@ declare module 'vue-i18n' {
 // Passing no generics lets TypeScript infer Legacy=false from the options
 // literal and correctly type global.locale as WritableComputedRef<string>.
 export const i18n = createI18n({
-  locale: 'en-US',
+  // loadData resolves the mandatory official language before the app mounts.
+  // An empty initial locale prevents English from becoming an implicit guard.
+  locale: '',
+  fallbackLocale: false,
   legacy: false,
   messages,
 });

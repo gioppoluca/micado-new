@@ -15,7 +15,7 @@ INSERT INTO languages (
   ('it',    'it',    'italiano',   true,  false, 20, 'Italian Female',    true),
   -- Keep a language inactive until the Migrant UI has a matching message bundle.
   ('es',    'es-ES', 'español',    false, false, 30, 'Spanish Female',    true),
-  ('de',    'de-DE', 'deutsch',    false, false, 40, 'Deutsch Female',    true),
+  ('de',    'de-DE', 'deutsch',    true,  false, 40, 'Deutsch Female',    true),
   ('nl',    'nl-NL', 'nederlands', false, false, 50, 'Dutch Female',      true),
   ('fa',    'fa-IR', 'dari',       false, false, 60, NULL,                false),
   ('ur',    'ur-PK', 'urdu',       false, false, 70, NULL,                false),
@@ -40,7 +40,7 @@ INSERT INTO app_settings (key, value, description) VALUES
   ('pa_tenant',             'pa_frontoffice',     'Keycloak realm for the PA frontend'),
   ('migrant_tenant',        'migrants',           'Keycloak realm for the Migrant frontend'),
   ('migrant_domain_name',   'migrants.localhost', 'Public hostname of the Migrant frontend'),
-  ('translationState',      '[{"value":"editing","translation":[{"lang":"it","state":"In modifica"},{"lang":"en","state":"Editing"}]},{"value":"translatable","translation":[{"lang":"it","state":"Traducibile"},{"lang":"en","state":"Translatable"}]},{"value":"translating","translation":[{"lang":"it","state":"In traduzione"},{"lang":"en","state":"Translating"}]},{"value":"translated","translation":[{"lang":"it","state":"Tradotto"},{"lang":"en","state":"Translated"}]}]', 'Translation workflow state options (JSON array)'),
+  ('translationState',      '[{"value":"editing","translation":[{"lang":"it","state":"In modifica"},{"lang":"en","state":"Editing"},{"lang":"de","state":"In Bearbeitung"}]},{"value":"translatable","translation":[{"lang":"it","state":"Traducibile"},{"lang":"en","state":"Translatable"},{"lang":"de","state":"Übersetzbar"}]},{"value":"translating","translation":[{"lang":"it","state":"In traduzione"},{"lang":"en","state":"Translating"},{"lang":"de","state":"In Übersetzung"}]},{"value":"translated","translation":[{"lang":"it","state":"Tradotto"},{"lang":"en","state":"Translated"},{"lang":"de","state":"Übersetzt"}]}]', 'Translation workflow state options (JSON array)'),
   -- Survey settings
   ('internal_survey',       'false',              'Use internal survey (true) or external (false)'),
   ('survey_local',          '',                   'URL for the local survey'),
@@ -81,23 +81,34 @@ ON CONFLICT (flag_key) DO NOTHING;
 INSERT INTO features_flags_i18n (flag_id, lang, label) VALUES
   (1,  'it', 'Portafoglio documenti'),
   (1,  'en', 'Document wallet'),
+  (1,  'de', 'Dokumentenmappe'),
   (2,  'en', 'Glossary'),
   (2,  'it', 'Glossario'),
+  (2,  'de', 'Glossar'),
   (3,  'en', 'Chatbot assistant'),
+  (3,  'it', 'Assistente chatbot'),
+  (3,  'de', 'Chatbot-Assistent'),
   (4,  'it', 'Gestione processi'),
   (4,  'en', 'Process management'),
+  (4,  'de', 'Prozessverwaltung'),
   (5,  'it', 'Piano individuale integrazione'),
   (5,  'en', 'Individual integration plan'),
+  (5,  'de', 'Individueller Integrationsplan'),
   (6,  'it', 'Gestione eventi'),
   (6,  'en', 'Event management'),
+  (6,  'de', 'Veranstaltungsverwaltung'),
   (7,  'it', 'GeoPortale'),
   (7,  'en', 'GeoPortal'),
+  (7,  'de', 'Geoportal'),
   (8,  'it', 'Funzionalità standard'),
   (8,  'en', 'Core features'),
+  (8,  'de', 'Kernfunktionen'),
   (9,  'it', 'Area notizie'),
   (9,  'en', 'Information portal'),
+  (9,  'de', 'Informationsportal'),
   (10, 'it', 'Il migrante può fare login'),
-  (10, 'en', 'Migrant can login')
+  (10, 'en', 'Migrant can login'),
+  (10, 'de', 'Migranten können sich anmelden')
 ON CONFLICT (flag_id, lang) DO UPDATE
 SET label = EXCLUDED.label;
 

@@ -1,7 +1,3 @@
-/**
- * src/i18n/it-IT/index.ts — Italian strings. Mirrors en-US structure exactly.
- */
-
 export default {
     failed: 'Operazione fallita',
     success: 'Operazione completata',
