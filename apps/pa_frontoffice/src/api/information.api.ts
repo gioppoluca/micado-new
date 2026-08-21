@@ -336,7 +336,8 @@ export function registerInformationMocks(mock: MockRegistry): void {
     mock.onPost('/information').reply((cfg: MockRequestConfig): MockReplyTuple => {
         const body = (cfg as unknown as { data?: string }).data;
         const input: Partial<CreateInformationPayload> = body ? JSON.parse(body) : {};
-        const srcLang = input.sourceLang ?? 'it';
+        if (!input.sourceLang) return [422, { error: 'sourceLang is required' }];
+        const srcLang = input.sourceLang;
         const srcTitle = input.translations?.[srcLang]?.title ?? input.title ?? 'Nuova informazione';
         const srcDesc = input.translations?.[srcLang]?.description ?? input.description ?? '';
 

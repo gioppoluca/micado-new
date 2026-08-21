@@ -441,7 +441,8 @@ export function registerProcessMocks(mock: MockRegistry): void {
     mock.onPost('/processes').reply((cfg: MockRequestConfig): MockReplyTuple => {
         const body = (cfg as unknown as { data?: string }).data;
         const input: Partial<CreateProcessPayload> = body ? JSON.parse(body) : {};
-        const srcLang = input.sourceLang ?? 'it';
+        if (!input.sourceLang) return [422, { error: 'sourceLang is required' }];
+        const srcLang = input.sourceLang;
         const srcTitle = input.translations?.[srcLang]?.title ?? input.title ?? 'Nuovo processo';
         const newItem: Process = {
             id: _nextId++,

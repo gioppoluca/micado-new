@@ -37,13 +37,13 @@ export const useAppStore = defineStore('app', () => {
     // ── State ─────────────────────────────────────────────────────────────────
 
     /** BCP-47 / lang key of the platform default language (e.g. 'en') */
-    const defaultLang = ref<string>('en');
+    const defaultLang = ref<string>('');
 
     /** Human-readable name of the default language (e.g. 'English') */
-    const defaultLangName = ref<string>('English');
+    const defaultLangName = ref<string>('');
 
     /** Currently active UI language — starts equal to defaultLang */
-    const userLang = ref<string>('en');
+    const userLang = ref<string>('');
 
     /** Keycloak realm / tenant for the PA application */
     const paTenant = ref<string>('');
@@ -66,24 +66,42 @@ export const useAppStore = defineStore('app', () => {
 
     // ── Getters ───────────────────────────────────────────────────────────────
 
-    /**
-     * Flat { value, label } options for the current userLang.
-     * Falls back to English, then to the raw value if nothing matches.
-     */
+    /** Flat options in the UI language, falling back only to the official language. */
     const translationStateOptions = computed<TranslationStateOption[]>(() =>
         translationStates.value.map((entry) => {
+            const official = requireDefaultLang();
             const match =
                 entry.translation.find((t) => t.lang === userLang.value) ??
-                entry.translation.find((t) => t.lang === 'en') ??
-                entry.translation[0];
+                entry.translation.find((t) => t.lang === official);
+            if (!match) {
+                throw new Error(
+                    `Translation state '${entry.value}' has no label in MICADO default language '${official}'`,
+                );
+            }
             return {
                 value: entry.value,
-                label: match?.state ?? entry.value,
+                label: match.state,
             };
         }),
     );
 
     // ── Actions ───────────────────────────────────────────────────────────────
+
+    /** Returns the bootstrapped official language or stops the application. */
+    function requireDefaultLang(): string {
+        if (!bootstrapped.value || !defaultLang.value) {
+            throw new Error('MICADO default language has not been bootstrapped');
+        }
+        return defaultLang.value;
+    }
+
+    /** Returns the official language name or stops the application. */
+    function requireDefaultLangName(): string {
+        if (!bootstrapped.value || !defaultLangName.value) {
+            throw new Error('MICADO default language name has not been bootstrapped');
+        }
+        return defaultLangName.value;
+    }
 
     /**
      * Called by the loadData boot with the raw values extracted from the
@@ -133,6 +151,8 @@ export const useAppStore = defineStore('app', () => {
         translationStateOptions,
         // actions
         bootstrap,
+        requireDefaultLang,
+        requireDefaultLangName,
         setUserLang,
     };
 });

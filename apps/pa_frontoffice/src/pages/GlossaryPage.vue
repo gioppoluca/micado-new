@@ -198,7 +198,7 @@ const isNew = ref(false);
 const mlTabsRef = ref<InstanceType<typeof MultiLangEditorTabs> | null>(null);
 
 function blankForm(): FormState {
-    const src = app.defaultLang || 'it';
+    const src = app.requireDefaultLang();
     return {
         id: -1,
         status: 'DRAFT',
@@ -237,7 +237,7 @@ function onCsvFileSelected(event: Event): void {
     const reader = new FileReader();
     reader.onload = (e) => {
         const content = e.target?.result as string;
-        csvRows.value = parseCsvRows(content, app.defaultLang || 'it');
+        csvRows.value = parseCsvRows(content, app.requireDefaultLang());
         csvDialogOpen.value = true;
     };
     reader.onerror = () => {

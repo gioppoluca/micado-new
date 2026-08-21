@@ -197,7 +197,7 @@
                 <q-card-section class="text-center">
                     <p class="text-body1">{{ t('input_labels.import') }}</p>
                     <p v-if="importPayload" class="text-caption text-grey-7">
-                        {{ importPayload.translations?.[importPayload.sourceLang ?? 'it']?.title ?? '(no title)' }}
+                        {{ importPayload.translations?.[importPayload.sourceLang ?? '']?.title ?? '(no title)' }}
                     </p>
                 </q-card-section>
                 <q-card-actions align="center" class="q-gutter-sm">
@@ -255,7 +255,7 @@ const isNew = ref(false);
 const mlTabsRef = ref<InstanceType<typeof MultiLangEditorTabs> | null>(null);
 
 function blankForm(): FormState {
-    const src = app.defaultLang || 'it';
+    const src = app.requireDefaultLang();
     return {
         id: -1, status: 'DRAFT', sourceLang: src,
         iconPreview: '', parentId: null,
@@ -461,7 +461,7 @@ async function confirmImport(): Promise<void> {
     if (!importPayload.value) return;
     importDialogOpen.value = false;
     const payload = importPayload.value;
-    const srcLang = payload.sourceLang ?? app.defaultLang ?? 'it';
+    const srcLang = payload.sourceLang ?? app.requireDefaultLang();
     const srcTr = payload.translations?.[srcLang];
     const created = await store.create({
         topic: srcTr?.title ?? 'Imported topic', description: srcTr?.description ?? '',

@@ -346,6 +346,7 @@ export function registerTopicMocks(mock: MockRegistry): void {
     mock.onPost('/topics').reply((cfg: MockRequestConfig): MockReplyTuple => {
         const body = (cfg as unknown as { data?: string }).data;
         const input: Partial<CreateTopicPayload> = body ? JSON.parse(body) : {};
+        if (!input.sourceLang) return [422, { error: 'sourceLang is required' }];
         const parentId = input.parentId ?? null;
         const depth = parentId !== null ? computeMockDepth(parentId) + 1 : 0;
         const newItem: Topic = {
@@ -353,7 +354,7 @@ export function registerTopicMocks(mock: MockRegistry): void {
             topic: input.topic ?? 'Nuovo topic',
             description: input.description ?? '',
             status: 'DRAFT',
-            sourceLang: input.sourceLang ?? 'it',
+            sourceLang: input.sourceLang,
             dataExtra: input.dataExtra ?? { icon: '' },
             parentId,
             depth,

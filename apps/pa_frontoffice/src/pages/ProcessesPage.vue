@@ -355,7 +355,7 @@ const filteredBySearch = computed(() => {
     );
 });
 
-const defaultLangName = computed(() => appStore.defaultLangName ?? 'English');
+const defaultLangName = computed(() => appStore.requireDefaultLangName());
 
 function onPageChange(page: number): void {
     activeFilter.value = { ...activeFilter.value, page };
@@ -386,7 +386,7 @@ function blankForm(): FormState {
     return {
         id: -1,
         status: 'DRAFT',
-        sourceLang: appStore.defaultLang || 'it',
+        sourceLang: appStore.requireDefaultLang(),
         title: '',
         description: '',
         topicPickId: null,

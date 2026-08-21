@@ -374,7 +374,7 @@ interface StepForm {
 const stepForm = ref<StepForm>(blankStepForm());
 
 function blankStepForm(): StepForm {
-    const src = appStore.defaultLang || 'it';
+    const src = appStore.requireDefaultLang();
     return {
         translations: { [src]: { title: '', description: '' } },
         url: '', location: '', iconUrl: '', cost: '', isFree: true, requiredDocuments: [],
@@ -390,7 +390,7 @@ interface LinkForm {
 const linkForm = ref<LinkForm>(blankLinkForm());
 
 function blankLinkForm(): LinkForm {
-    const src = appStore.defaultLang || 'it';
+    const src = appStore.requireDefaultLang();
     return { translations: { [src]: { title: '', description: '' } } };
 }
 
@@ -405,7 +405,7 @@ const docTypeOptions = computed(() => docTypeStore.documentTypes);
 // ─── Language helpers ─────────────────────────────────────────────────────────
 
 const sortedLanguages = computed(() => {
-    const src = appStore.defaultLang || 'it';
+    const src = appStore.requireDefaultLang();
     const active = langStore.activeLanguages;
     return [
         ...active.filter(l => l.lang === src),
@@ -445,7 +445,7 @@ function clearSelection(): void {
 
 function addStep(): void {
     const id = crypto.randomUUID();
-    const srcLang = appStore.defaultLang || 'it';
+    const srcLang = appStore.requireDefaultLang();
     const existingCount = nodes.value.length;
 
     const newNode: FlowNode = {
@@ -509,7 +509,7 @@ function openStepFormById(nodeId: string, isNew: boolean): void {
 function saveStep(): void {
     if (!activeNodeId.value) return;
     const nodeId = activeNodeId.value;
-    const srcLang = appStore.defaultLang || 'it';
+    const srcLang = appStore.requireDefaultLang();
     const srcTitle = (stepForm.value.translations[srcLang]?.title ?? '').trim();
 
     if (!srcTitle) {
@@ -581,7 +581,7 @@ function onNodeDragStop({ node }: NodeDragEvent): void {
 // ─── Connect (drag between handles) → add edge ───────────────────────────────
 
 function onConnect(connection: Connection): void {
-    const srcLang = appStore.defaultLang || 'it';
+    const srcLang = appStore.requireDefaultLang();
     const newEdge: FlowEdge = {
         id: crypto.randomUUID(),
         source: connection.source,
@@ -632,7 +632,7 @@ function openEdgeFormById(edgeId: string): void {
 function saveLink(): void {
     if (!activeEdgeId.value) return;
     const edgeId = activeEdgeId.value;
-    const srcLang = appStore.defaultLang || 'it';
+    const srcLang = appStore.requireDefaultLang();
     const srcLabel = (linkForm.value.translations[srcLang]?.title ?? '').trim();
 
     const updatedTranslations: Record<string, { title: string; tStatus: 'DRAFT' | 'APPROVED' | 'PUBLISHED' | 'STALE' }> = {};
@@ -710,7 +710,7 @@ async function onSaveGraph(): Promise<void> {
             // n.data is optional in VueFlow's Node<> — provide fallback
             data: n.data ?? {
                 title: '', description: '', status: 'DRAFT' as const,
-                sourceLang: 'it', requiredDocuments: [], translations: {},
+                sourceLang: appStore.requireDefaultLang(), requiredDocuments: [], translations: {},
             },
         };
     });
@@ -728,7 +728,7 @@ async function onSaveGraph(): Promise<void> {
             // e.data is optional in VueFlow's Edge<> — provide fallback
             data: e.data ?? {
                 status: 'DRAFT' as const,
-                sourceLang: 'it',
+                sourceLang: appStore.requireDefaultLang(),
                 translations: {},
             },
         };
@@ -753,7 +753,7 @@ async function onSaveGraph(): Promise<void> {
                 target: e.target,
                 type: e.type ?? 'step-link',
                 label: e.label ?? '',
-                data: e.data ?? { status: 'DRAFT' as const, sourceLang: 'it', translations: {} },
+                data: e.data ?? { status: 'DRAFT' as const, sourceLang: appStore.requireDefaultLang(), translations: {} },
             }));
             void fitView();
         }
@@ -773,7 +773,7 @@ onMounted(async () => {
     // Load process title for banner
     const full = await store.getOne(processId.value);
     if (full) {
-        const srcLang = full.sourceLang ?? 'it';
+        const srcLang = full.sourceLang ?? appStore.requireDefaultLang();
         processTitle.value = full.translations?.[srcLang]?.title ?? '';
     }
 
@@ -792,7 +792,7 @@ onMounted(async () => {
             target: e.target,
             type: e.type ?? 'step-link',
             label: e.label ?? '',
-            data: e.data ?? { status: 'DRAFT' as const, sourceLang: 'it', translations: {} },
+            data: e.data ?? { status: 'DRAFT' as const, sourceLang: appStore.requireDefaultLang(), translations: {} },
         }));
     }
 

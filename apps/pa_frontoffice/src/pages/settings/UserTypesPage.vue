@@ -284,7 +284,7 @@
                 <div class="q-pt-lg text-center">
                     <p class="text-grey-7">{{ t('input_labels.import') }}</p>
                     <p v-if="importPayload" class="text-weight-bold">
-                        {{ importPayload.translations?.[importPayload.sourceLang ?? 'en']?.title
+                        {{ importPayload.translations?.[importPayload.sourceLang ?? '']?.title
                             ?? '(no title)' }}
                     </p>
                 </div>
@@ -383,7 +383,7 @@ const formOpen = ref(false);
 const isNew = ref(false);
 
 function blankForm(): FormState {
-    const src = app.defaultLang || 'en';
+    const src = app.requireDefaultLang();
     return {
         id: -1,
         status: 'DRAFT',
@@ -703,7 +703,7 @@ async function onImportConfirmed(): Promise<void> {
     const payload = importPayload.value;
     if (!payload) return;
 
-    const srcLang = payload.sourceLang ?? app.defaultLang ?? 'en';
+    const srcLang = payload.sourceLang ?? app.requireDefaultLang();
     const srcTr = payload.translations?.[srcLang];
 
     await store.create({

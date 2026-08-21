@@ -364,12 +364,13 @@ export function registerDocumentTypeMocks(mock: MockRegistry): void {
     mock.onPost('/document-types').reply((cfg: MockRequestConfig): MockReplyTuple => {
         const body = (cfg as unknown as { data?: string }).data;
         const input: Partial<CreateDocumentTypePayload> = body ? JSON.parse(body) : {};
+        if (!input.sourceLang) return [422, { error: 'sourceLang is required' }];
         const newItem: DocumentType = {
             id: _nextId++,
             document: input.document ?? 'New document type',
             description: input.description ?? '',
             status: 'DRAFT',
-            sourceLang: input.sourceLang ?? 'it',
+            sourceLang: input.sourceLang,
             dataExtra: {
                 validable: false,
                 ...(input.dataExtra ?? {}),

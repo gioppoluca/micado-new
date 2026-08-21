@@ -279,12 +279,13 @@ export function registerUserTypeMocks(mock: MockRegistry): void {
     mock.onPost('/user-types').reply((cfg: MockRequestConfig): MockReplyTuple => {
         const body = (cfg as unknown as { data?: string }).data;
         const input: Partial<CreateUserTypePayload> = body ? JSON.parse(body) : {};
+        if (!input.sourceLang) return [422, { error: 'sourceLang is required' }];
         const newItem: UserType = {
             id: _nextId++,
             user_type: input.user_type ?? 'New type',
             description: input.description ?? '',
             status: 'DRAFT',
-            sourceLang: input.sourceLang ?? 'en',
+            sourceLang: input.sourceLang,
             dataExtra: input.dataExtra ?? { icon: '' },
         };
         mockStore.push(newItem);

@@ -187,7 +187,7 @@ export function registerMicadoEntitiesMocks(mock: MockRegistry): void {
             id: g.id,
             title: g.title ?? '',
             description: g.description ?? '',
-            lang: g.translations[0]?.lang ?? 'it',
+            lang: g.translations[0]?.lang ?? (() => { throw new Error('Mock glossary language is missing'); })(),
             published: g.published,
         }))];
     });

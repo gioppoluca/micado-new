@@ -636,7 +636,7 @@ const formLoading = ref(false);
 const isNew = ref(false);
 
 function blankForm(): FormState {
-    const src = app.defaultLang || 'it';
+    const src = app.requireDefaultLang();
     return {
         id: -1,
         status: 'DRAFT',

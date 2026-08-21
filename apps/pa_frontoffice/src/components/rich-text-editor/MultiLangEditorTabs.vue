@@ -65,8 +65,12 @@ const emit = defineEmits<{
     (e: 'update:modelValue', v: Record<string, { title?: string; description: string }>): void;
 }>();
 
-/** Tab attiva: codice lingua. Default alla prima lingua della lista */
-const activeTab = ref(props.languages[0]?.lang ?? 'en');
+/** The official default language must be present in the supplied active list. */
+const defaultLanguage = props.languages.find(language => language.isDefault);
+if (!defaultLanguage) {
+    throw new Error('MICADO default language is missing from multilingual editor languages');
+}
+const activeTab = ref(defaultLanguage.lang);
 
 /** Ref agli editor per lingua — usati da getAllTranslations() */
 const editorRefs = ref<Record<string, InstanceType<typeof RichTextEditor> | null>>({});

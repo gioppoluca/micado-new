@@ -35,8 +35,8 @@
  * ──────────────
  * The backend stores a short lang tag (e.g. 'en', 'fr', 'ar').
  * The i18n messages bundle uses BCP-47 keys ('en-US', 'fr-FR', …).
- * LANG_TO_LOCALE maps known short tags → message keys; unmapped tags fall
- * back to 'en-US'.
+ * LANG_TO_LOCALE maps known short tags → message keys. An unmapped official
+ * language is a configuration error, not a reason to invent another default.
  */
 
 import { defineBoot } from '#q-app/wrappers';
@@ -70,7 +70,11 @@ const LANG_TO_LOCALE: Record<string, string> = {
 };
 
 function toLocaleKey(lang: string): string {
-    return LANG_TO_LOCALE[lang] ?? 'en-US';
+    const locale = LANG_TO_LOCALE[lang];
+    if (!locale) {
+        throw new Error(`MICADO default language '${lang}' has no PA locale mapping`);
+    }
+    return locale;
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
