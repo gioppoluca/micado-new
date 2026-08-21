@@ -1,5 +1,7 @@
 SET search_path TO micado;
 
+BEGIN;
+
 
 -- -----------------------------------------------------------------------------
 -- 1) LANGUAGES
@@ -11,13 +13,14 @@ INSERT INTO languages (
 ) VALUES
   ('en',    'en-us', 'english',    true,  true,  10, 'UK English Female', true),
   ('it',    'it',    'italiano',   true,  false, 20, 'Italian Female',    true),
-  ('es',    'es',    'español',    true,  false, 30, 'Spanish Female',    true),
-  ('de',    'de',    'deutsch',    true,  false, 40, 'Deutsch Female',    true),
-  ('nl',    'nl',    'nederlands', true,  false, 50, 'Dutch Female',      true),
-  ('fa_IR', 'fa-IR', 'Darii',      true,  false, 60, NULL,                false),
-  ('ur',    'he',    'urdu',       true,  false, 70, NULL,                false),
-  ('uk',    'uk',    'ukrainian',  true,  false, 80, NULL,                false),
-  ('ru',    'ru',    'russian',    true,  false, 90, NULL,                false)
+  -- Keep a language inactive until the Migrant UI has a matching message bundle.
+  ('es',    'es-ES', 'español',    false, false, 30, 'Spanish Female',    true),
+  ('de',    'de-DE', 'deutsch',    false, false, 40, 'Deutsch Female',    true),
+  ('nl',    'nl-NL', 'nederlands', false, false, 50, 'Dutch Female',      true),
+  ('fa',    'fa-IR', 'dari',       false, false, 60, NULL,                false),
+  ('ur',    'ur-PK', 'urdu',       false, false, 70, NULL,                false),
+  ('uk',    'uk-UA', 'ukrainian',  false, false, 80, NULL,                false),
+  ('ru',    'ru-RU', 'russian',    false, false, 90, NULL,                false)
 ON CONFLICT (lang) DO UPDATE
 SET
   iso_code     = EXCLUDED.iso_code,
@@ -805,7 +808,7 @@ WHERE ci.type_code = 'TOPIC'
 INSERT INTO content_revision_translation (
   revision_id, lang, title, description, t_status
 )
-SELECT cr.id, 'en', 'Cultural', NULL, 'PUBLISHED'
+SELECT cr.id, 'en', 'Culture', NULL, 'PUBLISHED'
 FROM content_item ci
 JOIN content_revision cr ON cr.item_id = ci.id
 WHERE ci.type_code = 'TOPIC'
@@ -887,7 +890,7 @@ WHERE ci.type_code = 'TOPIC'
 INSERT INTO content_revision_translation (
   revision_id, lang, title, description, t_status
 )
-SELECT cr.id, 'en', 'House', NULL, 'PUBLISHED'
+SELECT cr.id, 'en', 'Housing', NULL, 'PUBLISHED'
 FROM content_item ci
 JOIN content_revision cr ON cr.item_id = ci.id
 WHERE ci.type_code = 'TOPIC'
@@ -897,7 +900,7 @@ WHERE ci.type_code = 'TOPIC'
 INSERT INTO content_revision_translation (
   revision_id, lang, title, description, t_status
 )
-SELECT cr.id, 'it', 'Casa', NULL, 'PUBLISHED'
+SELECT cr.id, 'it', 'Alloggio', NULL, 'PUBLISHED'
 FROM content_item ci
 JOIN content_revision cr ON cr.item_id = ci.id
 WHERE ci.type_code = 'TOPIC'
@@ -907,7 +910,7 @@ WHERE ci.type_code = 'TOPIC'
 INSERT INTO content_revision_translation (
   revision_id, lang, title, description, t_status
 )
-SELECT cr.id, 'de', 'aggiornato', NULL, 'PUBLISHED'
+SELECT cr.id, 'de', 'Wohnen', NULL, 'PUBLISHED'
 FROM content_item ci
 JOIN content_revision cr ON cr.item_id = ci.id
 WHERE ci.type_code = 'TOPIC'
@@ -1209,7 +1212,7 @@ WHERE ci.type_code = 'USER_TYPE'
 INSERT INTO content_revision_translation (
   revision_id, lang, title, description, t_status
 )
-SELECT cr.id, 'en', 'Migrant ', '', 'PUBLISHED'
+SELECT cr.id, 'en', 'Migrant', '', 'PUBLISHED'
 FROM content_item ci
 JOIN content_revision cr ON cr.item_id = ci.id
 WHERE ci.type_code = 'USER_TYPE'
@@ -1219,7 +1222,7 @@ WHERE ci.type_code = 'USER_TYPE'
 INSERT INTO content_revision_translation (
   revision_id, lang, title, description, t_status
 )
-SELECT cr.id, 'it', 'Migrante ', '', 'PUBLISHED'
+SELECT cr.id, 'it', 'Migrante', '', 'PUBLISHED'
 FROM content_item ci
 JOIN content_revision cr ON cr.item_id = ci.id
 WHERE ci.type_code = 'USER_TYPE'
@@ -1294,6 +1297,196 @@ WHERE cr.item_id = ci.id
   AND ci.type_code = 'USER_TYPE'
   AND ci.external_key = '3'
   AND cr.revision_no = 1;
+
+-- ============================================================================
+-- NORMALIZED MULTILINGUAL COVERAGE
+-- English is mandatory on every published revision. Italian provides the
+-- principal alternate-language coverage; selected German/Dutch rows above are
+-- intentionally retained to exercise multilingual resolution and fallback.
+-- ============================================================================
+
+INSERT INTO content_revision_translation (revision_id, lang, title, description, t_status)
+SELECT cr.id, tr.lang, tr.title, tr.description, 'PUBLISHED'
+FROM content_item ci
+JOIN content_revision cr ON cr.item_id = ci.id AND cr.revision_no = 1
+JOIN (VALUES
+  ('1', 'en', 'Administration', 'Public administration and civic services.'),
+  ('1', 'it', 'Amministrazione', 'Pubblica amministrazione e servizi civici.'),
+  ('2', 'en', 'Culture', 'Culture, community and social participation.'),
+  ('2', 'it', 'Cultura', 'Cultura, comunità e partecipazione sociale.'),
+  ('3', 'en', 'Finance', 'Banking, taxes and personal finance.'),
+  ('3', 'it', 'Finanza', 'Servizi bancari, tasse e finanza personale.'),
+  ('4', 'en', 'Housing', 'Housing, rent and accommodation services.'),
+  ('4', 'it', 'Alloggio', 'Casa, affitto e servizi abitativi.'),
+  ('4', 'de', 'Wohnen', 'Wohnung, Miete und Wohnungsdienste.'),
+  ('5', 'en', 'Health', 'Healthcare and access to medical services.'),
+  ('5', 'it', 'Salute', 'Assistenza sanitaria e accesso ai servizi medici.'),
+  ('6', 'en', 'Education', 'Schools, training and language learning.'),
+  ('6', 'it', 'Istruzione', 'Scuola, formazione e apprendimento linguistico.'),
+  ('7', 'en', 'Employment', 'Employment, contracts and professional training.'),
+  ('7', 'it', 'Lavoro', 'Lavoro, contratti e formazione professionale.')
+) AS tr(external_key, lang, title, description)
+  ON tr.external_key = ci.external_key
+WHERE ci.type_code = 'TOPIC'
+ON CONFLICT (revision_id, lang) DO UPDATE SET
+  title = EXCLUDED.title,
+  description = EXCLUDED.description,
+  t_status = EXCLUDED.t_status;
+
+INSERT INTO content_revision_translation (revision_id, lang, title, description, t_status)
+SELECT cr.id, tr.lang, tr.title, tr.description, 'PUBLISHED'
+FROM content_item ci
+JOIN content_revision cr ON cr.item_id = ci.id AND cr.revision_no = 1
+JOIN (VALUES
+  ('1', 'en', 'Refugee', 'A person formally recognized as a refugee.'),
+  ('1', 'it', 'Rifugiato', 'Una persona formalmente riconosciuta come rifugiata.'),
+  ('2', 'en', 'Migrant', 'A person who has moved to another country.'),
+  ('2', 'it', 'Migrante', 'Una persona che si è trasferita in un altro paese.'),
+  ('3', 'en', 'Asylum seeker', 'A person whose request for protection is being examined.'),
+  ('3', 'it', 'Richiedente asilo', 'Una persona la cui richiesta di protezione è in esame.')
+) AS tr(external_key, lang, title, description)
+  ON tr.external_key = ci.external_key
+WHERE ci.type_code = 'USER_TYPE'
+ON CONFLICT (revision_id, lang) DO UPDATE SET
+  title = EXCLUDED.title,
+  description = EXCLUDED.description,
+  t_status = EXCLUDED.t_status;
+
+-- ============================================================================
+-- PUBLISHED DEMONSTRATION CONTENT
+-- One coherent item for every public content endpoint, linked to the seeded
+-- taxonomy. All revisions use English as source and have a published English
+-- translation. Italian is available as the preferred user-language example.
+-- ============================================================================
+
+DO $$
+DECLARE
+  category_information UUID;
+  category_event UUID;
+  document_type UUID;
+  glossary_term UUID;
+  information_item UUID;
+  event_item UUID;
+  process_item UUID;
+  step_one UUID;
+  step_two UUID;
+  step_link UUID;
+  revision UUID;
+BEGIN
+  INSERT INTO content_item (type_code, external_key) VALUES ('CATEGORY', '1')
+  RETURNING id INTO category_information;
+  INSERT INTO content_revision (item_id, revision_no, status, source_lang, data_extra, approved_at, published_at)
+  VALUES (category_information, 1, 'PUBLISHED', 'en', '{"subtype":"information"}', NOW(), NOW())
+  RETURNING id INTO revision;
+  INSERT INTO content_revision_translation (revision_id, lang, title, description, t_status) VALUES
+    (revision, 'en', 'Public services', '', 'PUBLISHED'),
+    (revision, 'it', 'Servizi pubblici', '', 'PUBLISHED');
+  UPDATE content_item SET published_revision_id = revision WHERE id = category_information;
+
+  INSERT INTO content_item (type_code, external_key) VALUES ('CATEGORY', '2')
+  RETURNING id INTO category_event;
+  INSERT INTO content_revision (item_id, revision_no, status, source_lang, data_extra, approved_at, published_at)
+  VALUES (category_event, 1, 'PUBLISHED', 'en', '{"subtype":"event"}', NOW(), NOW())
+  RETURNING id INTO revision;
+  INSERT INTO content_revision_translation (revision_id, lang, title, description, t_status) VALUES
+    (revision, 'en', 'Courses and meetings', '', 'PUBLISHED'),
+    (revision, 'it', 'Corsi e incontri', '', 'PUBLISHED');
+  UPDATE content_item SET published_revision_id = revision WHERE id = category_event;
+
+  INSERT INTO content_item (type_code, external_key) VALUES ('DOCUMENT_TYPE', '1')
+  RETURNING id INTO document_type;
+  INSERT INTO content_revision (item_id, revision_no, status, source_lang, data_extra, approved_at, published_at)
+  VALUES (document_type, 1, 'PUBLISHED', 'en',
+    '{"icon":"","issuer":"Italian Ministry of the Interior","validable":true,"validity_duration":365,"pictures":[]}',
+    NOW(), NOW()) RETURNING id INTO revision;
+  INSERT INTO content_revision_translation (revision_id, lang, title, description, t_status) VALUES
+    (revision, 'en', 'Residence permit', 'Document authorising a foreign national to reside in Italy.', 'PUBLISHED'),
+    (revision, 'it', 'Permesso di soggiorno', 'Documento che autorizza un cittadino straniero a soggiornare in Italia.', 'PUBLISHED');
+  UPDATE content_item SET published_revision_id = revision WHERE id = document_type;
+
+  INSERT INTO content_item (type_code, external_key) VALUES ('GLOSSARY', '1')
+  RETURNING id INTO glossary_term;
+  INSERT INTO content_revision (item_id, revision_no, status, source_lang, data_extra, approved_at, published_at)
+  VALUES (glossary_term, 1, 'PUBLISHED', 'en', '{}', NOW(), NOW()) RETURNING id INTO revision;
+  INSERT INTO content_revision_translation (revision_id, lang, title, description, t_status) VALUES
+    (revision, 'en', 'Residence permit', 'Official authorization to live in Italy for a specified period.', 'PUBLISHED'),
+    (revision, 'it', 'Permesso di soggiorno', 'Autorizzazione ufficiale a vivere in Italia per un determinato periodo.', 'PUBLISHED'),
+    (revision, 'de', 'Aufenthaltserlaubnis', 'Amtliche Erlaubnis, für einen bestimmten Zeitraum in Italien zu leben.', 'PUBLISHED');
+  UPDATE content_item SET published_revision_id = revision WHERE id = glossary_term;
+
+  INSERT INTO content_item (type_code, external_key) VALUES ('INFORMATION', '1')
+  RETURNING id INTO information_item;
+  INSERT INTO content_revision (item_id, revision_no, status, source_lang, data_extra, approved_at, published_at)
+  VALUES (information_item, 1, 'PUBLISHED', 'en', '{}', NOW(), NOW()) RETURNING id INTO revision;
+  INSERT INTO content_revision_translation (revision_id, lang, title, description, t_status) VALUES
+    (revision, 'en', 'Registering with the health service', 'How to register and choose a family doctor.', 'PUBLISHED'),
+    (revision, 'it', 'Iscrizione al servizio sanitario', 'Come iscriversi e scegliere il medico di famiglia.', 'PUBLISHED');
+  UPDATE content_item SET published_revision_id = revision WHERE id = information_item;
+
+  INSERT INTO content_item (type_code, external_key) VALUES ('EVENT', '1')
+  RETURNING id INTO event_item;
+  INSERT INTO content_revision (item_id, revision_no, status, source_lang, data_extra, approved_at, published_at)
+  VALUES (event_item, 1, 'PUBLISHED', 'en',
+    '{"startDate":"2026-09-15T09:00:00.000Z","endDate":"2026-09-15T12:00:00.000Z","location":"MICADO Community Centre","isFree":true,"cost":null}',
+    NOW(), NOW()) RETURNING id INTO revision;
+  INSERT INTO content_revision_translation (revision_id, lang, title, description, t_status) VALUES
+    (revision, 'en', 'Welcome and orientation meeting', 'Free meeting about local services and support.', 'PUBLISHED'),
+    (revision, 'it', 'Incontro di accoglienza e orientamento', 'Incontro gratuito sui servizi e sul supporto locale.', 'PUBLISHED');
+  UPDATE content_item SET published_revision_id = revision WHERE id = event_item;
+
+  INSERT INTO content_item (type_code, external_key) VALUES ('PROCESS', '1')
+  RETURNING id INTO process_item;
+  INSERT INTO content_revision (item_id, revision_no, status, source_lang, data_extra, approved_at, published_at)
+  VALUES (process_item, 1, 'PUBLISHED', 'en', '{}', NOW(), NOW()) RETURNING id INTO revision;
+  INSERT INTO content_revision_translation (revision_id, lang, title, description, t_status) VALUES
+    (revision, 'en', 'Apply for a residence permit', 'Guide to preparing and submitting the application.', 'PUBLISHED'),
+    (revision, 'it', 'Richiedere il permesso di soggiorno', 'Guida alla preparazione e presentazione della domanda.', 'PUBLISHED');
+  UPDATE content_item SET published_revision_id = revision WHERE id = process_item;
+
+  INSERT INTO content_item (type_code, external_key) VALUES ('STEP', '1')
+  RETURNING id INTO step_one;
+  INSERT INTO content_revision (item_id, revision_no, status, source_lang, data_extra, approved_at, published_at)
+  VALUES (step_one, 1, 'PUBLISHED', 'en',
+    '{"processId":1,"posX":100,"posY":100,"location":"Post office","cost":"16 EUR","isFree":false,"url":"","iconUrl":"","requiredDocuments":[1]}',
+    NOW(), NOW()) RETURNING id INTO revision;
+  INSERT INTO content_revision_translation (revision_id, lang, title, description, t_status) VALUES
+    (revision, 'en', 'Prepare the application kit', 'Collect the required documents and complete the application form.', 'PUBLISHED'),
+    (revision, 'it', 'Preparare il kit della domanda', 'Raccogliere i documenti richiesti e compilare il modulo.', 'PUBLISHED');
+  UPDATE content_item SET published_revision_id = revision WHERE id = step_one;
+
+  INSERT INTO content_item (type_code, external_key) VALUES ('STEP', '2')
+  RETURNING id INTO step_two;
+  INSERT INTO content_revision (item_id, revision_no, status, source_lang, data_extra, approved_at, published_at)
+  VALUES (step_two, 1, 'PUBLISHED', 'en',
+    '{"processId":1,"posX":400,"posY":100,"location":"Police headquarters","cost":"","isFree":true,"url":"","iconUrl":"","requiredDocuments":[1]}',
+    NOW(), NOW()) RETURNING id INTO revision;
+  INSERT INTO content_revision_translation (revision_id, lang, title, description, t_status) VALUES
+    (revision, 'en', 'Attend the appointment', 'Bring the receipt and original documents to the appointment.', 'PUBLISHED'),
+    (revision, 'it', 'Presentarsi all’appuntamento', 'Portare la ricevuta e i documenti originali all’appuntamento.', 'PUBLISHED');
+  UPDATE content_item SET published_revision_id = revision WHERE id = step_two;
+
+  INSERT INTO content_item (type_code, external_key) VALUES ('STEP_LINK', '1')
+  RETURNING id INTO step_link;
+  INSERT INTO content_revision (item_id, revision_no, status, source_lang, data_extra, approved_at, published_at)
+  VALUES (step_link, 1, 'PUBLISHED', 'en',
+    '{"processId":1,"sourceStepId":1,"targetStepId":2}', NOW(), NOW())
+  RETURNING id INTO revision;
+  INSERT INTO content_revision_translation (revision_id, lang, title, description, t_status) VALUES
+    (revision, 'en', 'After submitting the application', '', 'PUBLISHED'),
+    (revision, 'it', 'Dopo la presentazione della domanda', '', 'PUBLISHED');
+  UPDATE content_item SET published_revision_id = revision WHERE id = step_link;
+
+  INSERT INTO content_item_relation (relation_type, parent_item_id, child_item_id, sort_order) VALUES
+    ('category', category_information, information_item, 0),
+    ('topic', (SELECT id FROM content_item WHERE type_code = 'TOPIC' AND external_key = '5'), information_item, 0),
+    ('user_type', (SELECT id FROM content_item WHERE type_code = 'USER_TYPE' AND external_key = '2'), information_item, 0),
+    ('category', category_event, event_item, 0),
+    ('topic', (SELECT id FROM content_item WHERE type_code = 'TOPIC' AND external_key = '2'), event_item, 0),
+    ('user_type', (SELECT id FROM content_item WHERE type_code = 'USER_TYPE' AND external_key = '2'), event_item, 0),
+    ('topic', (SELECT id FROM content_item WHERE type_code = 'TOPIC' AND external_key = '1'), process_item, 0),
+    ('user_type', (SELECT id FROM content_item WHERE type_code = 'USER_TYPE' AND external_key = '2'), process_item, 0),
+    ('document_type', document_type, process_item, 0);
+END $$;
 
 COMMIT;
 

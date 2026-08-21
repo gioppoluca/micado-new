@@ -1,10 +1,12 @@
 SET ROLE micado;
 SET search_path TO micado;
 
+BEGIN;
+
 -- Step 1: insert items without published_revision_id (circular FK)
 INSERT INTO content_item (id, type_code, slug, external_key, published_revision_id, created_at, created_by, updated_at, updated_by) VALUES
-  ('5f7922c2-becc-47b2-9b34-fbf4de85210c'::uuid, 'INFORMATION', NULL, '1', NULL, '2026-04-15 23:18:28.327576+02', '{"sub": "cb818947-34b9-4f19-8883-ffcd7a48b969", "name": "Luca Gioppo", "realm": "pa_frontoffice", "username": "pa-admin"}', '2026-04-15 23:19:07.826973+02', '{"sub": "cb818947-34b9-4f19-8883-ffcd7a48b969", "name": "Luca Gioppo", "realm": "pa_frontoffice", "username": "pa-admin"}'),
-  ('981818dd-7852-4474-a4b6-19d67e9b15d0'::uuid, 'EVENT',       NULL, '1', NULL, '2026-04-15 23:20:00.465276+02', '{"sub": "cb818947-34b9-4f19-8883-ffcd7a48b969", "name": "Luca Gioppo", "realm": "pa_frontoffice", "username": "pa-admin"}', '2026-04-15 23:20:09.545909+02', '{"sub": "cb818947-34b9-4f19-8883-ffcd7a48b969", "name": "Luca Gioppo", "realm": "pa_frontoffice", "username": "pa-admin"}');
+  ('5f7922c2-becc-47b2-9b34-fbf4de85210c'::uuid, 'INFORMATION', NULL, '9001', NULL, '2026-04-15 23:18:28.327576+02', '{"sub": "cb818947-34b9-4f19-8883-ffcd7a48b969", "name": "Luca Gioppo", "realm": "pa_frontoffice", "username": "pa-admin"}', '2026-04-15 23:19:07.826973+02', '{"sub": "cb818947-34b9-4f19-8883-ffcd7a48b969", "name": "Luca Gioppo", "realm": "pa_frontoffice", "username": "pa-admin"}'),
+  ('981818dd-7852-4474-a4b6-19d67e9b15d0'::uuid, 'EVENT',       NULL, '9001', NULL, '2026-04-15 23:20:00.465276+02', '{"sub": "cb818947-34b9-4f19-8883-ffcd7a48b969", "name": "Luca Gioppo", "realm": "pa_frontoffice", "username": "pa-admin"}', '2026-04-15 23:20:09.545909+02', '{"sub": "cb818947-34b9-4f19-8883-ffcd7a48b969", "name": "Luca Gioppo", "realm": "pa_frontoffice", "username": "pa-admin"}');
 
 -- Step 2: insert revisions (item_id FK is now satisfied)
 INSERT INTO content_revision (id, item_id, revision_no, status, source_lang, data_extra, created_at, created_by, approved_at, approved_by, published_at, published_by) VALUES
