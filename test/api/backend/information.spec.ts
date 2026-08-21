@@ -43,7 +43,7 @@ async function createInfo(api: APIRequestContext, overrides: Record<string, unkn
         data: {
             title: 'Test Information',
             description: 'A **test** information item.',
-            sourceLang: 'it',
+            sourceLang: 'en',
             ...overrides,
         },
     });
@@ -53,7 +53,7 @@ async function createInfo(api: APIRequestContext, overrides: Record<string, unkn
 
 async function createInfoCategory(api: APIRequestContext, title: string): Promise<number> {
     const res = await api.post('/categories', {
-        data: { title, sourceLang: 'it', subtype: 'information' },
+        data: { title, sourceLang: 'en', subtype: 'information' },
     });
     return (await res.json() as Record<string, unknown>).id as number;
 }
@@ -69,7 +69,7 @@ test.describe('Information API — CRUD lifecycle', () => {
             data: {
                 title: 'Permesso di soggiorno',
                 description: 'Guida al **permesso di soggiorno**.',
-                sourceLang: 'it',
+                sourceLang: 'en',
                 translations: {
                     it: { title: 'Permesso di soggiorno', description: 'Guida al **permesso di soggiorno**.' },
                     en: { title: 'Residence permit', description: 'Guide to the residence permit.' },
@@ -79,7 +79,7 @@ test.describe('Information API — CRUD lifecycle', () => {
         expect(postRes.status()).toBe(200);
         const created = await postRes.json() as Record<string, unknown>;
         expect(created.id).toBeTruthy();
-        expect(created.title).toBe('Permesso di soggiorno');
+        expect(created.title).toBe('Residence permit');
         expect(created.status).toBe('DRAFT');
         // No dataExtra in information items
         expect(created.dataExtra).toBeUndefined();
@@ -106,7 +106,7 @@ test.describe('Information API — CRUD lifecycle', () => {
         await api.put(`/information/${infoId}`, {
             data: {
                 status: 'APPROVED',
-                sourceLang: 'it',
+                sourceLang: 'en',
                 categoryId: null,
                 topicIds: [],
                 userTypeIds: [],
@@ -122,8 +122,8 @@ test.describe('Information API — CRUD lifecycle', () => {
         const afterPut = await afterPutRes.json() as Record<string, unknown>;
         expect(afterPut.status).toBe('APPROVED');
         const afterPutTrs = afterPut.translations as Record<string, Record<string, string>>;
-        expect(afterPutTrs.it?.tStatus).toBe('APPROVED');
-        expect(afterPutTrs.en?.tStatus).toBe('STALE');
+        expect(afterPutTrs.it?.tStatus).toBe('STALE');
+        expect(afterPutTrs.en?.tStatus).toBe('APPROVED');
 
         // PATCH status back to DRAFT
         await api.patch(`/information/${infoId}`, { data: { status: 'DRAFT' } });
@@ -153,11 +153,11 @@ test.describe('Information API — Relation management', () => {
         // Assign category + relations via PUT
         await api.put(`/information/${infoId}`, {
             data: {
-                sourceLang: 'it',
+                sourceLang: 'en',
                 categoryId: catId,
                 topicIds: [],
                 userTypeIds: [],
-                translations: { it: { title: 'Test', description: '' } },
+                translations: { en: { title: 'Test', description: '' } },
             },
         });
 
@@ -169,11 +169,11 @@ test.describe('Information API — Relation management', () => {
         // Clear category
         await api.put(`/information/${infoId}`, {
             data: {
-                sourceLang: 'it',
+                sourceLang: 'en',
                 categoryId: null,
                 topicIds: [],
                 userTypeIds: [],
-                translations: { it: { title: 'Test', description: '' } },
+                translations: { en: { title: 'Test', description: '' } },
             },
         });
         const afterClear = await (await api.get(`/information/${infoId}`)).json() as Record<string, unknown>;
@@ -198,14 +198,14 @@ test.describe('Information API — Filters', () => {
 
         await api.put(`/information/${id1}`, {
             data: {
-                sourceLang: 'it', categoryId: cat1, topicIds: [], userTypeIds: [],
-                translations: { it: { title: 'Info Lavoro', description: '' } },
+                sourceLang: 'en', categoryId: cat1, topicIds: [], userTypeIds: [],
+                translations: { en: { title: 'Info Lavoro', description: '' } },
             },
         });
         await api.put(`/information/${id2}`, {
             data: {
-                sourceLang: 'it', categoryId: cat2, topicIds: [], userTypeIds: [],
-                translations: { it: { title: 'Info Salute', description: '' } },
+                sourceLang: 'en', categoryId: cat2, topicIds: [], userTypeIds: [],
+                translations: { en: { title: 'Info Salute', description: '' } },
             },
         });
 
@@ -252,7 +252,7 @@ test.describe('Information API — Translation workflow', () => {
 
         await api.put(`/information/${infoId}`, {
             data: {
-                status: 'APPROVED', sourceLang: 'it',
+                status: 'APPROVED', sourceLang: 'en',
                 categoryId: null, topicIds: [], userTypeIds: [],
                 translations: {
                     it: { title: 'Test IT', description: '**testo**' },
@@ -263,8 +263,8 @@ test.describe('Information API — Translation workflow', () => {
 
         const afterApprove = await (await api.get(`/information/${infoId}`)).json() as Record<string, unknown>;
         const trs = afterApprove.translations as Record<string, Record<string, string>>;
-        expect(trs.it?.tStatus).toBe('APPROVED');
-        expect(trs.en?.tStatus).toBe('STALE');
+        expect(trs.it?.tStatus).toBe('STALE');
+        expect(trs.en?.tStatus).toBe('APPROVED');
 
         const publishRes = await api.get(`/information/to-production?id=${infoId}`);
         expect(publishRes.status()).toBe(204);
@@ -284,19 +284,19 @@ test.describe('Information API — Migrant endpoint', () => {
         const pub = await publicApi();
 
         const infoId = await createInfo(admin, {
-            translations: { it: { title: 'Info Pubblica', description: 'Contenuto pubblico.' } },
+            translations: { en: { title: 'Info Pubblica', description: 'Contenuto pubblico.' } },
         });
 
         await admin.put(`/information/${infoId}`, {
             data: {
-                status: 'APPROVED', sourceLang: 'it',
+                status: 'APPROVED', sourceLang: 'en',
                 categoryId: null, topicIds: [], userTypeIds: [],
-                translations: { it: { title: 'Info Pubblica', description: 'Contenuto pubblico.' } },
+                translations: { en: { title: 'Info Pubblica', description: 'Contenuto pubblico.' } },
             },
         });
         await admin.get(`/information/to-production?id=${infoId}`);
 
-        const res = await pub.get('/information-migrant?defaultlang=it&currentlang=it');
+        const res = await pub.get('/information-migrant?defaultlang=en&currentlang=it');
         expect(res.status()).toBe(200);
         const list = await res.json() as Array<Record<string, unknown>>;
         const found = list.find(i => i.id === infoId);
@@ -307,7 +307,7 @@ test.describe('Information API — Migrant endpoint', () => {
 
         // DRAFT items should not appear
         const draftId = await createInfo(admin, { title: 'Bozza' });
-        const res2 = await pub.get('/information-migrant?defaultlang=it&currentlang=it');
+        const res2 = await pub.get('/information-migrant?defaultlang=en&currentlang=it');
         const list2 = await res2.json() as Array<Record<string, unknown>>;
         expect(list2.some(i => i.id === draftId)).toBe(false);
 

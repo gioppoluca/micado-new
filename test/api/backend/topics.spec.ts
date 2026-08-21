@@ -59,7 +59,7 @@ test.describe('Topics API — CRUD lifecycle', () => {
             data: {
                 topic: 'Alloggio',
                 description: 'Tutto ciò che riguarda abitazioni e residenza',
-                sourceLang: 'it',
+                sourceLang: 'en',
                 dataExtra: { icon: 'data:image/png;base64,iVBORw0KGgo=' },
                 translations: {
                     it: { title: 'Alloggio', description: 'Tutto ciò che riguarda abitazioni e residenza' },
@@ -70,7 +70,7 @@ test.describe('Topics API — CRUD lifecycle', () => {
         expect(postRes.status()).toBe(200);
         const created = await postRes.json() as Record<string, unknown>;
         expect(created.id).toBeTruthy();
-        expect(created.topic).toBe('Alloggio');
+        expect(created.topic).toBe('Housing');
         expect(created.status).toBe('DRAFT');
         expect(created.parentId).toBeNull();
         expect(created.depth).toBe(0);
@@ -104,7 +104,7 @@ test.describe('Topics API — CRUD lifecycle', () => {
         const putRes = await api.put(`/topics/${topicId}`, {
             data: {
                 status: 'DRAFT',
-                sourceLang: 'it',
+                sourceLang: 'en',
                 dataExtra: { icon: 'data:image/png;base64,UPDATED==' },
                 translations: {
                     it: { title: 'Alloggio (aggiornato)', description: 'Descrizione aggiornata' },
@@ -134,7 +134,7 @@ test.describe('Topics API — CRUD lifecycle', () => {
         expect(afterPatch.status).toBe('APPROVED');
         // Non-source translation (en) should be STALE after approval
         const afterPatchTr = afterPatch.translations as Record<string, Record<string, string>>;
-        expect(afterPatchTr.en?.tStatus).toBe('STALE');
+        expect(afterPatchTr.en?.tStatus).toBe('APPROVED');
 
         // ── DELETE ───────────────────────────────────────────────────────────
         const delRes = await api.delete(`/topics/${topicId}`);
@@ -156,9 +156,9 @@ test.describe('Topics API — Parent-child hierarchy', () => {
         const parentRes = await api.post('/topics', {
             data: {
                 topic: 'Salute',
-                sourceLang: 'it',
+                sourceLang: 'en',
                 dataExtra: {},
-                translations: { it: { title: 'Salute' } },
+                translations: { en: { title: 'Salute' } },
             },
         });
         expect(parentRes.status()).toBe(200);
@@ -171,10 +171,10 @@ test.describe('Topics API — Parent-child hierarchy', () => {
         const childRes = await api.post('/topics', {
             data: {
                 topic: 'Salute mentale',
-                sourceLang: 'it',
+                sourceLang: 'en',
                 dataExtra: {},
                 parentId: parentId,
-                translations: { it: { title: 'Salute mentale' } },
+                translations: { en: { title: 'Salute mentale' } },
             },
         });
         expect(childRes.status()).toBe(200);
@@ -203,10 +203,10 @@ test.describe('Topics API — Parent-child hierarchy', () => {
         const cycleRes = await api.put(`/topics/${parentId}`, {
             data: {
                 status: 'DRAFT',
-                sourceLang: 'it',
+                sourceLang: 'en',
                 dataExtra: {},
                 parentId: childId,  // would create a cycle
-                translations: { it: { title: 'Salute' } },
+                translations: { en: { title: 'Salute' } },
             },
         });
         expect(cycleRes.status()).toBe(422);
@@ -227,20 +227,20 @@ test.describe('Topics API — Parent-child hierarchy', () => {
         const api = await adminApi();
 
         const p1Res = await api.post('/topics', {
-            data: { topic: 'ParentA', sourceLang: 'it', dataExtra: {}, translations: { it: { title: 'ParentA' } } },
+            data: { topic: 'ParentA', sourceLang: 'en', dataExtra: {}, translations: { en: { title: 'ParentA' } } },
         });
         const p1 = await p1Res.json() as Record<string, unknown>;
 
         const p2Res = await api.post('/topics', {
-            data: { topic: 'ParentB', sourceLang: 'it', dataExtra: {}, translations: { it: { title: 'ParentB' } } },
+            data: { topic: 'ParentB', sourceLang: 'en', dataExtra: {}, translations: { en: { title: 'ParentB' } } },
         });
         const p2 = await p2Res.json() as Record<string, unknown>;
 
         const childRes = await api.post('/topics', {
             data: {
-                topic: 'Child', sourceLang: 'it', dataExtra: {},
+                topic: 'Child', sourceLang: 'en', dataExtra: {},
                 parentId: p1.id as number,
-                translations: { it: { title: 'Child' } },
+                translations: { en: { title: 'Child' } },
             },
         });
         const child = await childRes.json() as Record<string, unknown>;
@@ -267,15 +267,15 @@ test.describe('Topics API — Parent-child hierarchy', () => {
         const api = await adminApi();
 
         const parentRes = await api.post('/topics', {
-            data: { topic: 'Root', sourceLang: 'it', dataExtra: {}, translations: { it: { title: 'Root' } } },
+            data: { topic: 'Root', sourceLang: 'en', dataExtra: {}, translations: { en: { title: 'Root' } } },
         });
         const parent = await parentRes.json() as Record<string, unknown>;
 
         const childRes = await api.post('/topics', {
             data: {
-                topic: 'WillBeRoot', sourceLang: 'it', dataExtra: {},
+                topic: 'WillBeRoot', sourceLang: 'en', dataExtra: {},
                 parentId: parent.id as number,
-                translations: { it: { title: 'WillBeRoot' } },
+                translations: { en: { title: 'WillBeRoot' } },
             },
         });
         const child = await childRes.json() as Record<string, unknown>;
@@ -306,7 +306,7 @@ test.describe('Topics API — Translation workflow', () => {
         const postRes = await api.post('/topics', {
             data: {
                 topic: 'Lavoro',
-                sourceLang: 'it',
+                sourceLang: 'en',
                 dataExtra: {},
                 translations: {
                     it: { title: 'Lavoro', description: 'Temi legati al lavoro' },
@@ -321,7 +321,7 @@ test.describe('Topics API — Translation workflow', () => {
         await api.put(`/topics/${topicId}`, {
             data: {
                 status: 'APPROVED',
-                sourceLang: 'it',
+                sourceLang: 'en',
                 dataExtra: {},
                 translations: {
                     it: { title: 'Lavoro', description: 'Temi legati al lavoro' },
@@ -330,13 +330,13 @@ test.describe('Topics API — Translation workflow', () => {
             },
         });
 
-        // GET: en translation should be STALE, it should stay DRAFT
+        // GET: official source en is APPROVED; non-source it is STALE
         const afterApproveRes = await api.get(`/topics/${topicId}`);
         const afterApprove = await afterApproveRes.json() as Record<string, unknown>;
         expect(afterApprove.status).toBe('APPROVED');
         const trs = afterApprove.translations as Record<string, Record<string, string>>;
-        expect(trs.it?.tStatus).toBe('APPROVED');
-        expect(trs.en?.tStatus).toBe('STALE');
+        expect(trs.it?.tStatus).toBe('STALE');
+        expect(trs.en?.tStatus).toBe('APPROVED');
 
         // Publish
         const publishRes = await api.get(`/topics/to-production?id=${topicId}`);
@@ -362,7 +362,7 @@ test.describe('Topics API — Migrant frontend', () => {
         const parentRes = await admin.post('/topics', {
             data: {
                 topic: 'Educazione',
-                sourceLang: 'it',
+                sourceLang: 'en',
                 dataExtra: { icon: 'data:image/png;base64,abc=' },
                 translations: {
                     it: { title: 'Educazione' },
@@ -374,12 +374,12 @@ test.describe('Topics API — Migrant frontend', () => {
         const parentId = parent.id as number;
 
         await admin.put(`/topics/${parentId}`, {
-            data: { status: 'APPROVED', sourceLang: 'it', dataExtra: { icon: 'data:image/png;base64,abc=' }, translations: { it: { title: 'Educazione' } } },
+            data: { status: 'APPROVED', sourceLang: 'en', dataExtra: { icon: 'data:image/png;base64,abc=' }, translations: { en: { title: 'Educazione' } } },
         });
         await admin.get(`/topics/to-production?id=${parentId}`);
 
         // Migrant endpoint: unauthenticated, should return the published topic
-        const migrantRes = await pub.get('/topics-migrant?defaultlang=it&currentlang=it');
+        const migrantRes = await pub.get('/topics-migrant?defaultlang=en&currentlang=it');
         expect(migrantRes.status()).toBe(200);
         const migrantList = await migrantRes.json() as Array<Record<string, unknown>>;
         const found = migrantList.find(t => t.id === parentId);
@@ -389,7 +389,7 @@ test.describe('Topics API — Migrant frontend', () => {
         expect(found!.icon).toBeTruthy();
 
         // Language fallback: request with unknown lang falls back to defaultlang
-        const fallbackRes = await pub.get(`/topics-migrant?defaultlang=it&currentlang=xx`);
+        const fallbackRes = await pub.get(`/topics-migrant?defaultlang=en&currentlang=xx`);
         expect(fallbackRes.status()).toBe(200);
         const fallbackList = await fallbackRes.json() as Array<Record<string, unknown>>;
         const fallbackFound = fallbackList.find(t => t.id === parentId);

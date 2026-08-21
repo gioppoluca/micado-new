@@ -33,6 +33,79 @@ test.describe('Languages API CRUD', () => {
         }
     });
 
+    test('public content APIs cannot override the official default language', async () => {
+        const api = await request.newContext({ baseURL });
+
+        try {
+            const defaultResponse = await api.get('/languages/default');
+            expect(defaultResponse.status()).toBe(200);
+            const official = (await defaultResponse.json() as { lang: string }).lang;
+            const invalid = official === 'en' ? 'it' : 'en';
+            const endpoints = [
+                '/processes-migrant',
+                '/topics-migrant',
+                '/glossaries-migrant',
+                '/glossary-items',
+                '/user-types-migrant',
+                '/information-migrant',
+                '/categories-migrant',
+                '/document-types-migrant',
+                '/events-migrant',
+            ];
+
+            for (const endpoint of endpoints) {
+                const response = await api.get(`${endpoint}?defaultlang=${invalid}&currentlang=${official}`);
+                expect(response.status(), endpoint).toBe(400);
+            }
+        } finally {
+            await api.dispose();
+        }
+    });
+
+    test('content creation resolves sourceLang through the official-language service', async () => {
+        const api = await request.newContext({
+            baseURL,
+            extraHTTPHeaders: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        });
+        let createdId: number | null = null;
+
+        try {
+            const defaultResponse = await api.get('/languages/default');
+            expect(defaultResponse.status()).toBe(200);
+            const official = (await defaultResponse.json() as { lang: string }).lang;
+            const invalid = official === 'en' ? 'it' : 'en';
+
+            const createResponse = await api.post('/glossaries', {
+                data: {
+                    title: 'Default language contract test',
+                    description: '',
+                },
+            });
+            expect(createResponse.status()).toBe(200);
+            const created = await createResponse.json() as { id: number; sourceLang: string };
+            createdId = created.id;
+            expect(created.sourceLang).toBe(official);
+
+            const invalidResponse = await api.post('/glossaries', {
+                data: {
+                    title: 'Invalid source language test',
+                    description: '',
+                    sourceLang: invalid,
+                },
+            });
+            expect(invalidResponse.status()).toBe(400);
+        } finally {
+            if (createdId !== null) {
+                const deleteResponse = await api.delete(`/glossaries/${createdId}`);
+                expect(deleteResponse.status()).toBe(204);
+            }
+            await api.dispose();
+        }
+    });
+
     test('GET /languages/default fails when no default language is configured', async () => {
         const admin = await request.newContext({
             baseURL,
@@ -61,6 +134,9 @@ test.describe('Languages API CRUD', () => {
                 error?: { statusCode?: number };
             };
             expect(error.error?.statusCode).toBe(503);
+
+            const contentResponse = await publicApi.get('/topics-migrant');
+            expect(contentResponse.status()).toBe(503);
         } finally {
             if (originalDefaultLang) {
                 const restoreResponse = await admin.patch(`/languages/${originalDefaultLang}`, {

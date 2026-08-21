@@ -48,7 +48,7 @@ async function createProcess(
 ): Promise<number> {
     const res = await api.post('/processes', {
         data: {
-            sourceLang: 'it',
+            sourceLang: 'en',
             translations: {
                 it: { title: 'Processo di test', description: 'Descrizione del processo.' },
                 en: { title: 'Test process', description: 'Process description.' },
@@ -64,7 +64,7 @@ async function createProcess(
 }
 
 /** Build a minimal valid graph payload with N nodes in a chain. */
-function buildChainGraph(nodeCount: number, sourceLang = 'it') {
+function buildChainGraph(nodeCount: number, sourceLang = 'en') {
     const nodes = Array.from({ length: nodeCount }, (_, i) => ({
         id: `node-${i}`,
         type: 'step',
@@ -119,7 +119,7 @@ test.describe('Processes API — CRUD lifecycle', () => {
         // POST — create
         const postRes = await api.post('/processes', {
             data: {
-                sourceLang: 'it',
+                sourceLang: 'en',
                 translations: {
                     it: { title: 'Permesso di soggiorno', description: 'Guida **passo passo**.' },
                     en: { title: 'Residence permit', description: 'Step-by-step guide.' },
@@ -132,7 +132,7 @@ test.describe('Processes API — CRUD lifecycle', () => {
         expect(postRes.status()).toBe(200);
         const created = (await postRes.json()) as Record<string, unknown>;
         expect(created.id).toBeTruthy();
-        expect(created.title).toBe('Permesso di soggiorno');
+        expect(created.title).toBe('Residence permit');
         expect(created.status).toBe('DRAFT');
         // Process has no dataExtra
         expect(created.dataExtra).toBeUndefined();
@@ -166,7 +166,7 @@ test.describe('Processes API — CRUD lifecycle', () => {
         const putRes = await api.put(`/processes/${processId}`, {
             data: {
                 status: 'APPROVED',
-                sourceLang: 'it',
+                sourceLang: 'en',
                 topicIds: [],
                 userTypeIds: [],
                 producedDocTypeIds: [],
@@ -182,7 +182,7 @@ test.describe('Processes API — CRUD lifecycle', () => {
         expect(afterPut.status).toBe('APPROVED');
         // Non-source translations must be STALE after APPROVED
         const afterTrs = afterPut.translations as Record<string, Record<string, string>>;
-        expect(afterTrs.en?.tStatus).toBe('STALE');
+        expect(afterTrs.en?.tStatus).toBe('APPROVED');
 
         // PATCH — revert to DRAFT
         const patchRes = await api.patch(`/processes/${processId}`, { data: { status: 'DRAFT' } });
@@ -210,7 +210,7 @@ test.describe('Processes API — Relations', () => {
 
         // Create a document type to reference
         const dtRes = await api.post('/document-types', {
-            data: { sourceLang: 'it', translations: { it: { title: 'Carta d\'identità', description: '' } } },
+            data: { sourceLang: 'en', translations: { en: { title: 'Carta d\'identità', description: '' } } },
         });
         const dtId = ((await dtRes.json()) as Record<string, unknown>).id as number;
 
@@ -223,8 +223,8 @@ test.describe('Processes API — Relations', () => {
         // Clear document type via PUT
         await api.put(`/processes/${processId}`, {
             data: {
-                sourceLang: 'it', topicIds: [], userTypeIds: [], producedDocTypeIds: [],
-                translations: { it: { title: 'Processo di test', description: '' } },
+                sourceLang: 'en', topicIds: [], userTypeIds: [], producedDocTypeIds: [],
+                translations: { en: { title: 'Processo di test', description: '' } },
             },
         });
         const afterClear = (await (await api.get(`/processes/${processId}`)).json()) as Record<string, unknown>;
@@ -325,7 +325,7 @@ test.describe('Processes API — Graph node/edge content', () => {
                         title: 'Vai alla Questura',
                         description: 'Presentarsi con i **documenti** richiesti.',
                         status: 'DRAFT',
-                        sourceLang: 'it',
+                        sourceLang: 'en',
                         location: 'Questura di Milano',
                         cost: '30 €',
                         isFree: false,
@@ -336,8 +336,8 @@ test.describe('Processes API — Graph node/edge content', () => {
                             { documentTypeId: 2, cost: '0 €', isOut: true },
                         ],
                         translations: {
-                            it: { title: 'Vai alla Questura', description: 'Presentarsi con i **documenti** richiesti.', tStatus: 'DRAFT' },
-                            en: { title: 'Go to Questura', description: 'Attend with the required **documents**.', tStatus: 'STALE' },
+                            it: { title: 'Vai alla Questura', description: 'Presentarsi con i **documenti** richiesti.', tStatus: 'STALE' },
+                            en: { title: 'Go to Questura', description: 'Attend with the required **documents**.', tStatus: 'DRAFT' },
                         },
                     },
                 },
@@ -380,7 +380,7 @@ test.describe('Processes API — Graph node/edge content', () => {
         expect(trs.it?.title).toBe('Vai alla Questura');
         expect(trs.it?.description).toContain('**');
         expect(trs.en?.title).toBe('Go to Questura');
-        expect(trs.en?.tStatus).toBe('STALE');
+        expect(trs.en?.tStatus).toBe('DRAFT');
 
         await api.delete(`/processes/${processId}`);
     });
@@ -394,19 +394,19 @@ test.describe('Processes API — Graph node/edge content', () => {
                 {
                     id: 'n1', type: 'step', position: { x: 0, y: 0 },
                     data: {
-                        title: 'Step A', description: '', status: 'DRAFT', sourceLang: 'it',
+                        title: 'Step A', description: '', status: 'DRAFT', sourceLang: 'en',
                         location: '', cost: '', isFree: true, url: '', iconUrl: '',
                         requiredDocuments: [],
-                        translations: { it: { title: 'Step A', description: '', tStatus: 'DRAFT' } },
+                        translations: { en: { title: 'Step A', description: '', tStatus: 'DRAFT' } },
                     },
                 },
                 {
                     id: 'n2', type: 'step', position: { x: 200, y: 0 },
                     data: {
-                        title: 'Step B', description: '', status: 'DRAFT', sourceLang: 'it',
+                        title: 'Step B', description: '', status: 'DRAFT', sourceLang: 'en',
                         location: '', cost: '', isFree: true, url: '', iconUrl: '',
                         requiredDocuments: [],
-                        translations: { it: { title: 'Step B', description: '', tStatus: 'DRAFT' } },
+                        translations: { en: { title: 'Step B', description: '', tStatus: 'DRAFT' } },
                     },
                 },
             ],
@@ -419,7 +419,7 @@ test.describe('Processes API — Graph node/edge content', () => {
                     label: 'Procedi a Step B',
                     data: {
                         status: 'DRAFT',
-                        sourceLang: 'it',
+                        sourceLang: 'en',
                         translations: {
                             it: { title: 'Procedi a Step B', tStatus: 'DRAFT' },
                             en: { title: 'Proceed to Step B', tStatus: 'DRAFT' },
@@ -438,7 +438,7 @@ test.describe('Processes API — Graph node/edge content', () => {
         expect(reloaded.edges.length).toBe(1);
 
         const edge = reloaded.edges[0]!;
-        expect(edge.label).toBe('Procedi a Step B');
+        expect(edge.label).toBe('Proceed to Step B');
         const edgeData = edge.data as Record<string, unknown>;
         const edgeTrs = edgeData.translations as Record<string, Record<string, string>>;
         expect(edgeTrs.it?.title).toBe('Procedi a Step B');
@@ -493,7 +493,7 @@ test.describe('Processes API — Translation workflow', () => {
         // Mark APPROVED
         await api.put(`/processes/${processId}`, {
             data: {
-                status: 'APPROVED', sourceLang: 'it',
+                status: 'APPROVED', sourceLang: 'en',
                 topicIds: [], userTypeIds: [], producedDocTypeIds: [],
                 translations: {
                     it: { title: 'Processo', description: 'Testo sorgente.' },
@@ -504,8 +504,8 @@ test.describe('Processes API — Translation workflow', () => {
 
         const afterApprove = (await (await api.get(`/processes/${processId}`)).json()) as Record<string, unknown>;
         const trs = afterApprove.translations as Record<string, Record<string, string>>;
-        expect(trs.it?.tStatus).toBe('APPROVED');
-        expect(trs.en?.tStatus).toBe('STALE');
+        expect(trs.it?.tStatus).toBe('STALE');
+        expect(trs.en?.tStatus).toBe('APPROVED');
 
         // Publish
         const pubRes = await api.get(`/processes/to-production?id=${processId}`);
@@ -527,9 +527,9 @@ test.describe('Processes API — Translation workflow', () => {
         // Approve and publish process
         await api.put(`/processes/${processId}`, {
             data: {
-                status: 'APPROVED', sourceLang: 'it',
+                status: 'APPROVED', sourceLang: 'en',
                 topicIds: [], userTypeIds: [], producedDocTypeIds: [],
-                translations: { it: { title: 'Processo', description: 'Desc.' } },
+                translations: { en: { title: 'Processo', description: 'Desc.' } },
             },
         });
         await api.get(`/processes/to-production?id=${processId}`);
@@ -560,7 +560,7 @@ test.describe('Processes API — Pagination', () => {
         const ids: number[] = [];
         for (let i = 0; i < 4; i++) {
             ids.push(await createProcess(api, {
-                translations: { it: { title: `Processo ${i}`, description: '' } },
+                translations: { en: { title: `Processo ${i}`, description: '' } },
             }));
         }
 
@@ -599,15 +599,15 @@ test.describe('Processes API — Migrant endpoint', () => {
         // Approve and publish
         await admin.put(`/processes/${processId}`, {
             data: {
-                status: 'APPROVED', sourceLang: 'it',
+                status: 'APPROVED', sourceLang: 'en',
                 topicIds: [], userTypeIds: [], producedDocTypeIds: [],
-                translations: { it: { title: 'Processo pubblico', description: 'Contenuto.' } },
+                translations: { en: { title: 'Processo pubblico', description: 'Contenuto.' } },
             },
         });
         await admin.get(`/processes/to-production?id=${processId}`);
 
         // Should appear in migrant endpoint
-        const res = await pub.get('/processes-migrant?defaultlang=it&currentlang=it');
+        const res = await pub.get('/processes-migrant?defaultlang=en&currentlang=it');
         expect(res.status()).toBe(200);
         const list = (await res.json()) as Array<Record<string, unknown>>;
         const found = list.find(p => p.id === processId);
@@ -618,9 +618,9 @@ test.describe('Processes API — Migrant endpoint', () => {
 
         // DRAFT processes must not appear
         const draftId = await createProcess(admin, {
-            translations: { it: { title: 'Bozza', description: '' } },
+            translations: { en: { title: 'Bozza', description: '' } },
         });
-        const res2 = await pub.get('/processes-migrant?defaultlang=it&currentlang=it');
+        const res2 = await pub.get('/processes-migrant?defaultlang=en&currentlang=it');
         const list2 = (await res2.json()) as Array<Record<string, unknown>>;
         expect(list2.some(p => p.id === draftId)).toBe(false);
 
