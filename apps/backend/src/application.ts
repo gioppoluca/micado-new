@@ -2,7 +2,7 @@ import { BootMixin } from '@loopback/boot';
 import { ApplicationConfig } from '@loopback/core';
 import { RestExplorerBindings, RestExplorerComponent } from '@loopback/rest-explorer';
 import { RepositoryMixin } from '@loopback/repository';
-import { RestApplication } from '@loopback/rest';
+import {Request, RestApplication, RestBindings} from '@loopback/rest';
 import { ServiceMixin } from '@loopback/service-proxy';
 import { AuthenticationComponent, registerAuthenticationStrategy } from '@loopback/authentication';
 import { AuthorizationBindings, AuthorizationComponent, AuthorizationDecision, AuthorizationOptions, AuthorizationTags } from '@loopback/authorization';
@@ -41,6 +41,25 @@ export class MicadoBackend extends BootMixin(
       ),
     });
     this.component(LoggingComponent);
+
+    // TODO This will have to be removed when the weblate integration will be consolidated
+    // Preserve the exact HTTP bytes before body-parser deserializes JSON.
+    // Standard Webhooks signatures are calculated over the raw payload, so
+    // JSON.stringify(parsedBody) is not guaranteed to reproduce the signed
+    // content (whitespace and escaping are significant).
+    this.restServer.bind(RestBindings.REQUEST_BODY_PARSER_OPTIONS).to({
+      json: {
+        verify: (request: Request, _response: unknown, buffer: Buffer) => {
+          (request as Request & {rawBody?: Buffer}).rawBody = Buffer.from(buffer);
+          console.log(
+            `[WeblateRawBodyCapture] invoked method=${request.method}` +
+            ` url=${request.originalUrl ?? request.url}` +
+            ` bytes=${buffer.length}` +
+            ` body=${buffer.toString('utf8')}`,
+          );
+        },
+      },
+    });
 
     this.sequence(MySequence);
     this.static('/', path.join(__dirname, '../public'));
