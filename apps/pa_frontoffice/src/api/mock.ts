@@ -23,6 +23,7 @@ import { logger } from 'src/services/Logger';
 export interface MockRequestConfig {
     url?: string | undefined;
     params?: Record<string, string | boolean | number | undefined> | undefined;
+    data?: unknown;
 }
 
 /** What a handler callback must return: [httpStatus, responseData?] */
@@ -102,6 +103,7 @@ function createMockRegistry(): MockRegistry {
             const mockConfig: MockRequestConfig = {
                 url: config.url,
                 params: config.params as MockRequestConfig['params'],
+                data: config.data,
             };
 
             // Simulate realistic network latency

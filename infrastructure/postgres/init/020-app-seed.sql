@@ -41,6 +41,7 @@ INSERT INTO app_settings (key, value, description) VALUES
   -- Survey settings
   ('internal_survey',       'false',              'Use internal survey (true) or external (false)'),
   ('survey_local',          '',                   'URL for the local survey'),
+  ('survey_en',             '',                   'URL for the English-language migrant survey'),
   ('survey_pa',             '',                   'URL for the PA survey'),
   ('survey_cso',            '',                   'URL for the CSO survey'),
   -- Helpdesk settings
@@ -48,7 +49,15 @@ INSERT INTO app_settings (key, value, description) VALUES
   ('helpdesk_ngo',          '',                   'Helpdesk URL for NGO operators'),
   ('helpdesk_migrant',      '',                   'Helpdesk URL for migrants'),
   ('feedback_email',        '',                   'Support / feedback email address'),
-  ('duration_of_new',       '7',                  'Number of days a content item is shown as new')
+  ('duration_of_new',       '7',                  'Number of days a content item is shown as new'),
+  -- Content and presentation
+  ('topic.max_depth',       '99',                 'Maximum selectable topic hierarchy depth'),
+  ('policy',                '',                   'Privacy policy text shown in the migrant application'),
+  ('welcome.info',          '',                   'Welcome-page description for information content'),
+  ('welcome.guides',        '',                   'Welcome-page description for process guides'),
+  ('welcome.event',         '',                   'Welcome-page description for events'),
+  ('welcome.plan',          '',                   'Welcome-page description for intervention plans'),
+  ('welcome.doc',           '',                   'Welcome-page description for migrant documents')
 ON CONFLICT (key) DO NOTHING;
 
 -- Seed flags

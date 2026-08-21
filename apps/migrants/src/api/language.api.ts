@@ -5,6 +5,7 @@
  *
  * Real endpoints (from backend LanguageController):
  *   GET    /languages           → list (filterable by active, q)
+ *   GET    /languages/default   → platform default language
  *   GET    /languages/:lang     → single language
  *   POST   /languages           → create  [admin roles only]
  *   PATCH  /languages/:lang     → partial update [admin roles only]
@@ -52,6 +53,12 @@ export const languageApi = {
     async list(params?: LanguageListParams): Promise<Language[]> {
         logger.info('[language.api] list', params);
         return apiGet<Language[]>('/languages', { params });
+    },
+
+    /** Fetch the unique active platform default language. Auth: public. */
+    async getDefault(): Promise<Language> {
+        logger.info('[language.api] getDefault');
+        return apiGet<Language>('/languages/default');
     },
 
     /**
@@ -133,6 +140,14 @@ export function registerLanguageMocks(mock: MockRegistry): void {
 
         logger.debug('[mock] GET /languages', { count: result.length });
         return [200, result];
+    });
+
+    // Register the exact route before the /languages/:lang matcher.
+    mock.onGet('/languages/default').reply((): MockReplyTuple => {
+        const found = MOCK_LANGUAGES.find(l => l.isDefault && l.active);
+        if (!found) return [503, { error: { statusCode: 503, message: 'Service Unavailable' } }];
+        logger.debug('[mock] GET /languages/default', { lang: found.lang });
+        return [200, found];
     });
 
     // GET /languages/:lang

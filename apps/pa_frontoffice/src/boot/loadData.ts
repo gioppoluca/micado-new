@@ -20,19 +20,14 @@
  * • keycloak runs after us so its redirect-back URL processing happens in an
  *   already-localised app.
  *
- * Failure strategy
- * ────────────────
- * If either API call fails the boot catches, logs, and continues:
- *   • language list  → empty  (components handle this gracefully)
- *   • default locale → 'en-US' (the i18n fallback set in boot/i18n.ts)
- *   • tenant values  → empty strings
+ * The language list and official default are mandatory. If either cannot be
+ * loaded, boot fails because content cannot be edited safely without knowing
+ * the instance language configuration. Ancillary settings remain optional.
  *
  * Default language source of truth
  * ─────────────────────────────────
- * The default language is read exclusively from the languages table
- * (languages.is_default = true), NOT from the settings table.
- * The settings table previously held a 'default_language' key which is now
- * removed to avoid dual sources of truth that can drift out of sync.
+ * The default language is read exclusively through GET /languages/default,
+ * backed by languages.is_default = true.
  * The PA settings UI (ActiveLanguageSelector) writes isDefault via
  * PATCH /languages/:lang — the languages table is the single source.
  *
@@ -51,6 +46,7 @@ import type { WritableComputedRef } from 'vue';
 // so app.config.globalProperties.$i18n is undefined at runtime.
 // The named export from boot/i18n.ts is the correct way to share the instance.
 import { i18n } from 'src/boot/i18n';
+import { languageApi } from 'src/api/language.api';
 import { settingsApi } from 'src/api/settings.api';
 import { useLanguageStore } from 'src/stores/language-store';
 import { useAppStore } from 'src/stores/app-store';
@@ -85,31 +81,33 @@ export default defineBoot(async () => {
     const langStore = useLanguageStore();
     const appStore = useAppStore();
 
-    // ── 1. Fetch languages and settings in parallel ───────────────────────────
-    // Languages are always needed first: the default language is determined
-    // exclusively from languages.is_default, not from the settings table.
+    // ── 1. Fetch mandatory language data and optional settings ────────────────
 
-    const [, settingsResult] = await Promise.allSettled([
-        langStore.fetchAll(),
+    const [defaultLanguageResult, settingsResult] = await Promise.allSettled([
+        languageApi.getDefault(),
         settingsApi.list(),
     ]);
 
-    // ── 2. Derive default language from languages table ───────────────────────
-    // Single source of truth: languages.is_default = true.
-    // Fallback chain: is_default row → first active language → hard 'en'.
+    await langStore.fetchAll();
+    if (langStore.error) {
+        throw new Error(`MICADO language bootstrap failed: ${langStore.error}`);
+    }
+    if (defaultLanguageResult.status === 'rejected') {
+        logger.error('[boot:loadData] failed to load the default language', defaultLanguageResult.reason);
+        throw defaultLanguageResult.reason;
+    }
 
-    const defaultLangObject =
-        langStore.defaultLanguage ??
-        langStore.activeLanguages[0] ??
-        null;
+    const defaultLanguage = defaultLanguageResult.value;
+    const defaultInList = langStore.languages.find(language => language.lang === defaultLanguage.lang);
+    if (!defaultInList?.active || !defaultInList.isDefault) {
+        throw new Error(
+            `MICADO default language '${defaultLanguage.lang}' is inconsistent with the language list`,
+        );
+    }
 
-    const defaultLangKey = defaultLangObject?.lang ?? 'en';
-    const defaultLangName = defaultLangObject?.name ?? defaultLangKey;
-
-    logger.info('[boot:loadData] default language resolved', {
-        lang: defaultLangKey,
-        source: langStore.defaultLanguage ? 'is_default' : langStore.activeLanguages[0] ? 'first_active' : 'hardcoded_fallback',
-    });
+    const defaultLangKey = defaultLanguage.lang;
+    const defaultLangName = defaultLanguage.name;
+    logger.info('[boot:loadData] default language resolved', { lang: defaultLangKey });
 
     // ── 3. Switch i18n locale ─────────────────────────────────────────────────
     // i18n.global.locale is a Ref<string> in Composition API mode (legacy: false).

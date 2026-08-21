@@ -5,6 +5,7 @@
  *
  * Real endpoints (from backend LanguageController):
  *   GET    /languages           → list (filterable by active, q)
+ *   GET    /languages/default   → platform default language
  *   GET    /languages/:lang     → single language
  *   POST   /languages           → create  [admin roles only]
  *   PATCH  /languages/:lang     → partial update [admin roles only]
@@ -148,8 +149,8 @@ export function registerLanguageMocks(mock: MockRegistry): void {
     // GET /languages/default — registered before /:lang so axios-mock-adapter
     // matches the exact string before the wildcard regex.
     mock.onGet('/languages/default').reply((): MockReplyTuple => {
-        const found = MOCK_LANGUAGES.find(l => l.isDefault);
-        if (!found) return [404, { error: 'No default language configured' }];
+        const found = MOCK_LANGUAGES.find(l => l.isDefault && l.active);
+        if (!found) return [503, { error: { statusCode: 503, message: 'Service Unavailable' } }];
         logger.debug('[mock] GET /languages/default', { lang: found.lang });
         return [200, found];
     });

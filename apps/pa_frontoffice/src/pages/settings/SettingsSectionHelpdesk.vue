@@ -59,20 +59,23 @@ let durationSnapshot = 0;
 
 onMounted(async () => {
     const keys = ['helpdesk_pa', 'helpdesk_ngo', 'helpdesk_migrant', 'feedback_email', 'duration_of_new'];
-    await Promise.allSettled(
-        keys.map(async (key) => {
-            try {
+    try {
+        await Promise.all(
+            keys.map(async (key) => {
                 const s = await settingsApi.getByKey(key);
                 if (key === 'duration_of_new') {
                     durationOfNew.value = Number(s.value) || 0;
                 } else {
                     values[key] = s.value;
                 }
-            } catch {
-                // setting not yet in DB — keep default empty value
-            }
-        }),
-    );
+            }),
+        );
+    } catch (e) {
+        $q.notify({
+            type: 'negative',
+            message: isApiError(e) ? e.message : t('error.generic'),
+        });
+    }
 });
 
 function startDuration(): void { durationSnapshot = durationOfNew.value; editingDuration.value = true; }

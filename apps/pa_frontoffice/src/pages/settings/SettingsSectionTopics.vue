@@ -52,7 +52,7 @@ import { isApiError } from 'src/api/client';
 import { logger } from 'src/services/Logger';
 
 const SETTING_KEY = 'topic.max_depth';
-/** Default when the setting is absent: no practical limit. */
+/** Initial UI value; the persisted setting is mandatory. */
 const DEFAULT_MAX_DEPTH = 99;
 
 const { t } = useI18n();
@@ -67,14 +67,14 @@ onMounted(async () => {
     try {
         const rows = await settingsApi.list('topic.');
         const row = rows.find(r => r.key === SETTING_KEY);
-        if (row) {
-            const parsed = Number(row.value);
-            maxDepth.value = Number.isFinite(parsed) ? parsed : DEFAULT_MAX_DEPTH;
-        }
+        if (!row) throw new Error(`Required setting '${SETTING_KEY}' is missing`);
+        const parsed = Number(row.value);
+        if (!Number.isFinite(parsed)) throw new Error(`Required setting '${SETTING_KEY}' is invalid`);
+        maxDepth.value = parsed;
         logger.info('[SettingsSectionTopics] loaded', { maxDepth: maxDepth.value });
-    } catch {
-        // Setting not yet in DB — keep default
-        logger.info('[SettingsSectionTopics] setting not found, using default', { default: DEFAULT_MAX_DEPTH });
+    } catch (e) {
+        logger.error('[SettingsSectionTopics] required setting unavailable', { error: e });
+        $q.notify({ type: 'negative', message: e instanceof Error ? e.message : t('error.generic') });
     }
 });
 

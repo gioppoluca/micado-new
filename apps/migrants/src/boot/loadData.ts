@@ -5,21 +5,18 @@
  *
  * Boot order: envvar → mock → i18n → axios → loadData → keycloak → router-guard
  *
- * ── Language selection priority ───────────────────────────────────────────────
+ * ── Language selection ────────────────────────────────────────────────────────
  *
  *   1. localStorage key "micado:lang" — persisted user choice (wins on refresh)
- *   2. Backend setting default_language — server-configured default
- *   3. 'en' — hardcoded fallback
+ *   2. GET /languages/default — official instance default
  *
  *   When the user explicitly picks a language (MainLayout.selectLanguage),
  *   the key is written to localStorage.  On next page load this boot reads it
  *   back and restores the choice before any component renders.
  *
- * ── Failure strategy ──────────────────────────────────────────────────────────
- *   If either API call fails the boot catches, logs, and continues:
- *     • language list  → empty  (components handle this gracefully)
- *     • default locale → 'en-US' (the i18n fallback set in boot/i18n.ts)
- *     • tenant values  → empty strings
+ * The language list and official default are mandatory. If either cannot be
+ * loaded or they disagree, boot fails instead of selecting a guessed language.
+ * Public settings remain optional ancillary configuration.
  */
 
 import { defineBoot } from '#q-app/wrappers';
@@ -62,23 +59,37 @@ function toLocaleKey(lang: string): string {
 export default defineBoot(async () => {
     logger.info('[boot:loadData] starting');
 
-    // ── 1. Fetch languages and settings in parallel ───────────────────────────
+    // ── 1. Fetch the mandatory default and optional settings ──────────────────
 
-    const [languagesResult, settingsResult] = await Promise.allSettled([
-        languageApi.list(),
+    const [defaultLanguageResult, settingsResult] = await Promise.allSettled([
+        languageApi.getDefault(),
         settingsApi.list(),
     ]);
 
-    // ── 2. Populate language store ────────────────────────────────────────────
+    // ── 2. Populate and validate the mandatory language configuration ─────────
 
     const langStore = useLanguageStore();
-
-    if (languagesResult.status === 'fulfilled') {
-        await langStore.fetchAll();
-        logger.info('[boot:loadData] languages loaded', { count: languagesResult.value.length });
-    } else {
-        logger.error('[boot:loadData] failed to load languages', languagesResult.reason);
+    await langStore.fetchAll();
+    if (langStore.error) {
+        throw new Error(`MICADO language bootstrap failed: ${langStore.error}`);
     }
+    if (defaultLanguageResult.status === 'rejected') {
+        logger.error('[boot:loadData] failed to load the default language', defaultLanguageResult.reason);
+        throw defaultLanguageResult.reason;
+    }
+
+    const defaultLanguage = defaultLanguageResult.value;
+    const defaultInList = langStore.languages.find(language => language.lang === defaultLanguage.lang);
+    if (!defaultInList?.active || !defaultInList.isDefault) {
+        throw new Error(
+            `MICADO default language '${defaultLanguage.lang}' is inconsistent with the language list`,
+        );
+    }
+
+    logger.info('[boot:loadData] languages loaded', {
+        count: langStore.languages.length,
+        defaultLang: defaultLanguage.lang,
+    });
 
     // ── 3. Process settings ───────────────────────────────────────────────────
 
@@ -97,13 +108,12 @@ export default defineBoot(async () => {
     //
     //   Priority:
     //     a) user's persisted choice from localStorage  ← wins on page refresh
-    //     b) server-configured default_language setting
-    //     c) hardcoded fallback 'en'
+    //     b) official instance default returned by /languages/default
     //
     //   We also validate that the persisted lang actually exists in the active
     //   language list (in case an admin removed it after the user's last visit).
 
-    const serverDefaultLang = get('default_language') || 'en';
+    const serverDefaultLang = defaultLanguage.lang;
 
     const storedLang = (() => {
         try {
@@ -114,7 +124,7 @@ export default defineBoot(async () => {
         }
     })();
 
-    const availableLangs = langStore.languages.map(l => l.lang);
+    const availableLangs = langStore.activeLanguages.map(l => l.lang);
 
     // Validate the stored lang is still active; fall back to server default if not.
     const effectiveLang = (storedLang && availableLangs.includes(storedLang))
@@ -150,12 +160,9 @@ export default defineBoot(async () => {
 
     // ── 7. Populate app store ─────────────────────────────────────────────────
 
-    const defaultLangObject = langStore.languages.find(l => l.lang === serverDefaultLang);
-    const defaultLangName = defaultLangObject?.name ?? serverDefaultLang;
-
     appStore.bootstrap({
         defaultLang: serverDefaultLang,   // canonical server default — never overridden
-        defaultLangName,
+        defaultLangName: defaultLanguage.name,
         paTenant: get('pa_tenant'),
         migrantTenant: get('migrant_tenant'),
         migrantDomain: get('migrant_domain_name'),

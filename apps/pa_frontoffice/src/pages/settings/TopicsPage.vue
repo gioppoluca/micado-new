@@ -285,17 +285,16 @@ onMounted(async () => {
 
 async function loadMaxDepth(): Promise<void> {
     try {
-        // Use the list endpoint with prefix to avoid a 404 when the setting
-        // has not yet been inserted into app_settings. An absent key returns
-        // an empty array, not a 404, so the catch block is never triggered
-        // and the console stays clean.
         const rows = await settingsApi.list('topic.');
         const row = rows.find(r => r.key === 'topic.max_depth');
-        if (row) {
-            const parsed = Number(row.value);
-            if (Number.isFinite(parsed)) maxSelectableDepth.value = parsed;
-        }
-    } catch { /* network error — keep default 99 */ }
+        if (!row) throw new Error("Required setting 'topic.max_depth' is missing");
+        const parsed = Number(row.value);
+        if (!Number.isFinite(parsed)) throw new Error("Required setting 'topic.max_depth' is invalid");
+        maxSelectableDepth.value = parsed;
+    } catch (e) {
+        logger.error('[TopicsPage] required setting unavailable', { error: e });
+        $q.notify({ type: 'negative', message: e instanceof Error ? e.message : t('error.generic') });
+    }
 }
 
 function parentLabel(parentId: number): string {

@@ -32,9 +32,7 @@
  *
  * Handles survey-related settings: type toggle + URL fields.
  *
- * NOTE: PATCH /settings is not yet in the OpenAPI spec.
- * saveSetting() is stubbed and will notify with a TODO warning until
- * the backend endpoint is available.
+ * The setting keys are application-defined and must all exist in the seed.
  */
 import { reactive, ref, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -64,20 +62,23 @@ const urlFields = [
 
 onMounted(async () => {
     const keys = ['internal_survey', 'survey_local', 'survey_pa', 'survey_cso'];
-    await Promise.allSettled(
-        keys.map(async (key) => {
-            try {
+    try {
+        await Promise.all(
+            keys.map(async (key) => {
                 const s = await settingsApi.getByKey(key);
                 if (key === 'internal_survey') {
                     fields.internalSurvey = s.value === 'true';
                 } else {
                     fields[key] = s.value;
                 }
-            } catch {
-                // setting not yet in DB — keep default empty value
-            }
-        }),
-    );
+            }),
+        );
+    } catch (e) {
+        $q.notify({
+            type: 'negative',
+            message: isApiError(e) ? e.message : t('error.generic'),
+        });
+    }
 });
 
 async function saveSetting(key: string): Promise<void> {

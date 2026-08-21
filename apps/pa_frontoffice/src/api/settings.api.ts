@@ -46,8 +46,9 @@ export const settingsApi = {
     },
 
     /**
-     * Create or update a setting by key.
-     * Auth: pa_editor, admin
+     * Update an application-declared setting. Unknown keys return 404 and are
+     * never created dynamically.
+     * Auth: pa_operator, pa_admin
      */
     async patch(key: string, value: string): Promise<PublicSetting> {
         logger.info('[settings.api] patch', { key });
@@ -60,14 +61,15 @@ export const settingsApi = {
 const MOCK_SETTINGS: PublicSetting[] = [
     { key: 'app_name', value: 'Micado PA' },
     // ── App-bootstrap keys (read by loadData boot) ──────────────────────────
-    // NOTE: default_language removed — single source of truth is
-    // languages.is_default in the languages table, not the settings table.
+    // The platform default language is intentionally not a setting. It is
+    // exposed by GET /languages/default from languages.is_default.
     { key: 'pa_tenant', value: 'micado_pa' },
     { key: 'migrant_tenant', value: 'micado_migrant' },
     { key: 'migrant_domain_name', value: 'migrants.micado.local' },
     // ── Survey settings ─────────────────────────────────────────────────────
     { key: 'internal_survey', value: 'false' },
     { key: 'survey_local', value: '' },
+    { key: 'survey_en', value: '' },
     { key: 'survey_pa', value: '' },
     { key: 'survey_cso', value: '' },
     // ── Helpdesk settings ───────────────────────────────────────────────────
@@ -76,6 +78,13 @@ const MOCK_SETTINGS: PublicSetting[] = [
     { key: 'helpdesk_migrant', value: '' },
     { key: 'feedback_email', value: '' },
     { key: 'duration_of_new', value: '7' },
+    { key: 'topic.max_depth', value: '99' },
+    { key: 'policy', value: '' },
+    { key: 'welcome.info', value: '' },
+    { key: 'welcome.guides', value: '' },
+    { key: 'welcome.event', value: '' },
+    { key: 'welcome.plan', value: '' },
+    { key: 'welcome.doc', value: '' },
     {
         key: 'translationState',
         value: JSON.stringify([
@@ -136,8 +145,17 @@ export function registerSettingsMocks(mock: MockRegistry): void {
 
     mock.onPatch(/\/settings\/.+/).reply((config: MockRequestConfig): MockReplyTuple => {
         const key = (config.url ?? '').split('/settings/').pop() ?? '';
+        const setting = MOCK_SETTINGS.find(s => s.key === key);
+        if (!setting) return [404, { error: `Setting '${key}' not found` }];
+        const body = typeof config.data === 'string'
+            ? JSON.parse(config.data) as { value?: string }
+            : config.data as { value?: string } | undefined;
+        if (body?.value === undefined || body.value === null) {
+            return [422, { error: 'value is required' }];
+        }
+        setting.value = body.value;
         logger.debug('[mock] PATCH /settings', { key });
-        return [200, { key, value: '' }];
+        return [200, { key, value: setting.value }];
     });
 
     logger.debug('[mock] settings handlers registered');

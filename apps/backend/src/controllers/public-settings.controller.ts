@@ -69,10 +69,8 @@ export class PublicSettingsController {
     /**
      * PATCH /settings/{key}
      *
-     * Generic setting update.
-     * NOTE: 'default_language' is explicitly rejected here — the platform
-     * default language is managed exclusively via PATCH /languages/:lang
-     * with { isDefault: true }. The settings table no longer holds this key.
+     * Updates a setting declared by the application seed. Unknown keys return
+     * 404 and are never created dynamically.
      */
     @patch('/settings/{key}')
     @authenticate('keycloak')
@@ -91,6 +89,9 @@ export class PublicSettingsController {
             },
         },
     })
+    @response(404, {
+        description: 'The setting key is not declared by the application',
+    })
     async patchByKey(
         @param.path.string('key') key: string,
         @requestBody() body: { value: string },
@@ -98,21 +99,9 @@ export class PublicSettingsController {
         if (body.value === undefined || body.value === null) {
             throw new HttpErrors.UnprocessableEntity('value is required');
         }
-        // Guard: default_language is no longer managed via settings.
-        // Use PATCH /languages/:lang with { isDefault: true } instead.
-        if (key === 'default_language') {
-            throw new HttpErrors.Gone(
-                'The default_language setting is deprecated. ' +
-                'Use PATCH /languages/:lang with { isDefault: true } instead.',
-            );
-        }
         this.logger.info(`[settings.patch] key=${key}`);
-        const existing = await this.settingsRepo.findOne({ where: { key } });
-        if (existing) {
-            await this.settingsRepo.updateById(key, { value: body.value });
-        } else {
-            await this.settingsRepo.create({ key, value: body.value });
-        }
+        await this.settingsRepo.findById(key);
+        await this.settingsRepo.updateById(key, { value: body.value });
         return { key, value: body.value };
     }
 }
