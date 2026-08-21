@@ -31,6 +31,14 @@ export const environment = Object.freeze({
   backendPublicPath: '/ping',
   keycloakAdminUsername: optionalEnvironment('KC_BOOTSTRAP_ADMIN_USERNAME'),
   keycloakAdminPassword: optionalEnvironment('KC_BOOTSTRAP_ADMIN_PASSWORD'),
+  // Realm-seeded users — same variables (and .env) used to resolve the
+  // ${VAR} placeholders in infrastructure/keycloak/realms/*.json.
+  paBaseUrl: publicUrl('pa'),
+  paAdminUsername: optionalEnvironment('PA_ADMIN_USERNAME', 'pa-admin'),
+  paAdminPassword: optionalEnvironment('PA_ADMIN_PASSWORD'),
+  ngoBaseUrl: publicUrl('ngo'),
+  ngoAdminUsername: optionalEnvironment('NGO_ADMIN_USERNAME', 'ngo-admin'),
+  ngoAdminPassword: optionalEnvironment('NGO_ADMIN_PASSWORD'),
 });
 
 export const webServices = Object.freeze([
