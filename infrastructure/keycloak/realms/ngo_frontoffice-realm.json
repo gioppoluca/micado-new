@@ -63,10 +63,14 @@
     {
       "username": "ngo-admin",
       "enabled": true,
+      "email": "${NGO_ADMIN_EMAIL}",
+      "firstName": "${NGO_ADMIN_FIRST_NAME}",
+      "lastName": "${NGO_ADMIN_LAST_NAME}",
+      "emailVerified": true,
       "credentials": [
         {
           "type": "password",
-          "value": "ngo-admin",
+          "value": "${NGO_ADMIN_PASSWORD}",
           "temporary": false
         }
       ],
@@ -77,10 +81,11 @@
     {
       "username": "ngo-operator",
       "enabled": true,
+      "emailVerified": true,
       "credentials": [
         {
           "type": "password",
-          "value": "ngo-operator",
+          "value": "${NGO_OPERATOR_PASSWORD}",
           "temporary": false
         }
       ],

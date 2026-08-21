@@ -513,6 +513,9 @@ test.describe('Processes API — Translation workflow', () => {
 
         const afterPub = (await (await api.get(`/processes/${processId}`)).json()) as Record<string, unknown>;
         expect(afterPub.status).toBe('PUBLISHED');
+        const publishedTranslations = afterPub.translations as Record<string, Record<string, string>>;
+        expect(publishedTranslations.en?.tStatus).toBe('PUBLISHED');
+        expect(publishedTranslations.it?.tStatus).toBe('STALE');
 
         await api.delete(`/processes/${processId}`);
     });
@@ -592,19 +595,21 @@ test.describe('Processes API — Migrant endpoint', () => {
 
         const processId = await createProcess(admin, {
             translations: {
-                it: { title: 'Processo pubblico', description: 'Contenuto.' },
+                en: { title: 'Public process', description: 'Content.' },
             },
         });
 
         // Approve and publish
-        await admin.put(`/processes/${processId}`, {
+        const approveRes = await admin.put(`/processes/${processId}`, {
             data: {
                 status: 'APPROVED', sourceLang: 'en',
                 topicIds: [], userTypeIds: [], producedDocTypeIds: [],
-                translations: { en: { title: 'Processo pubblico', description: 'Contenuto.' } },
+                translations: { en: { title: 'Public process', description: 'Content.' } },
             },
         });
-        await admin.get(`/processes/to-production?id=${processId}`);
+        expect(approveRes.status()).toBe(204);
+        const publishRes = await admin.get(`/processes/to-production?id=${processId}`);
+        expect(publishRes.status()).toBe(204);
 
         // Should appear in migrant endpoint
         const res = await pub.get('/processes-migrant?defaultlang=en&currentlang=it');
@@ -612,7 +617,8 @@ test.describe('Processes API — Migrant endpoint', () => {
         const list = (await res.json()) as Array<Record<string, unknown>>;
         const found = list.find(p => p.id === processId);
         expect(found).toBeTruthy();
-        expect(found!.title).toBe('Processo pubblico');
+        expect(found!.title).toBe('Public process');
+        expect(found!.lang).toBe('en');
         // No dataExtra in migrant DTO
         expect(found!.dataExtra).toBeUndefined();
 

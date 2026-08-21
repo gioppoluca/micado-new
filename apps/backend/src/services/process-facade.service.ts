@@ -451,6 +451,17 @@ export class ProcessFacadeService {
             await this.contentRevisionRepository.updateById(old.id!, { status: 'ARCHIVED' });
         }
 
+        // Only translations that completed approval become publicly readable.
+        // STALE/DRAFT translations remain excluded from migrant endpoints.
+        const translations = await this.contentRevisionTranslationRepository.find({
+            where: { revisionId: approved.id!, tStatus: 'APPROVED' },
+        });
+        for (const translation of translations) {
+            await this.contentRevisionTranslationRepository.updateById(translation.id!, {
+                tStatus: 'PUBLISHED',
+            });
+        }
+
         // Also publish current DRAFT revisions for all steps and step-links
         // so they are available on the migrant frontend
         await this.publishGraphRevisions(id, stamp);

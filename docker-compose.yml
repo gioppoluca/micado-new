@@ -92,6 +92,26 @@ services:
       KC_HOSTNAME_STRICT: "false"
       KC_HOSTNAME_STRICT_HTTPS: "false"
       KC_HEALTH_ENABLED: "true"
+      # Forwarded so Keycloak can resolve the ${VAR} placeholders used inside
+      # infrastructure/keycloak/realms/*.json at --import-realm time. Keycloak
+      # substitutes these from its OWN process environment (this list), not
+      # from the host .env file directly — the .env values only reach the
+      # container because Compose interpolates them here.
+      MIGRANTS_ADMIN_PASSWORD: ${MIGRANTS_ADMIN_PASSWORD}
+      MIGRANTS_ADMIN_EMAIL: ${MIGRANTS_ADMIN_EMAIL}
+      MIGRANTS_ADMIN_FIRST_NAME: ${MIGRANTS_ADMIN_FIRST_NAME}
+      MIGRANTS_ADMIN_LAST_NAME: ${MIGRANTS_ADMIN_LAST_NAME}
+      MIGRANTS_USER_PASSWORD: ${MIGRANTS_USER_PASSWORD}
+      PA_ADMIN_PASSWORD: ${PA_ADMIN_PASSWORD}
+      PA_ADMIN_EMAIL: ${PA_ADMIN_EMAIL}
+      PA_ADMIN_FIRST_NAME: ${PA_ADMIN_FIRST_NAME}
+      PA_ADMIN_LAST_NAME: ${PA_ADMIN_LAST_NAME}
+      PA_OPERATOR_PASSWORD: ${PA_OPERATOR_PASSWORD}
+      NGO_ADMIN_PASSWORD: ${NGO_ADMIN_PASSWORD}
+      NGO_ADMIN_EMAIL: ${NGO_ADMIN_EMAIL}
+      NGO_ADMIN_FIRST_NAME: ${NGO_ADMIN_FIRST_NAME}
+      NGO_ADMIN_LAST_NAME: ${NGO_ADMIN_LAST_NAME}
+      NGO_OPERATOR_PASSWORD: ${NGO_OPERATOR_PASSWORD}
     volumes:
       - keycloak_data:/opt/keycloak/data
       - ./infrastructure/keycloak/realms:/opt/keycloak/data/import:ro

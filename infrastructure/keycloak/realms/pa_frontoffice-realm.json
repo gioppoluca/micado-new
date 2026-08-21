@@ -49,10 +49,14 @@
     {
       "username": "pa-admin",
       "enabled": true,
+      "email": "${PA_ADMIN_EMAIL}",
+      "firstName": "${PA_ADMIN_FIRST_NAME}",
+      "lastName": "${PA_ADMIN_LAST_NAME}",
+      "emailVerified": true,
       "credentials": [
         {
           "type": "password",
-          "value": "pa-admin",
+          "value": "${PA_ADMIN_PASSWORD}",
           "temporary": false
         }
       ],
@@ -63,10 +67,11 @@
     {
       "username": "pa-operator",
       "enabled": true,
+      "emailVerified": true,
       "credentials": [
         {
           "type": "password",
-          "value": "pa-operator",
+          "value": "${PA_OPERATOR_PASSWORD}",
           "temporary": false
         }
       ],

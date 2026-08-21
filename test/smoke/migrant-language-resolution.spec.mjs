@@ -17,7 +17,13 @@ test.describe('Migrant language resolution', () => {
   test.use({locale: 'it-IT'});
 
   test('official default is the fallback and a persisted user choice wins', async ({page}) => {
-    await page.addInitScript(() => localStorage.removeItem('micado:lang'));
+    await page.addInitScript(() => {
+      const initializedKey = 'micado:test-language-storage-initialized';
+      if (sessionStorage.getItem(initializedKey) !== 'true') {
+        localStorage.removeItem('micado:lang');
+        sessionStorage.setItem(initializedKey, 'true');
+      }
+    });
 
     const defaultResponsePromise = page.waitForResponse(response =>
       hasPath(response.url(), '/languages/default'),

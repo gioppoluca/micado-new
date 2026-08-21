@@ -52,10 +52,11 @@
     {
       "username": "migrants-user",
       "enabled": true,
+      "emailVerified": true,
       "credentials": [
         {
           "type": "password",
-          "value": "migrants-user",
+          "value": "${MIGRANTS_USER_PASSWORD}",
           "temporary": false
         }
       ],
@@ -66,10 +67,14 @@
     {
       "username": "migrants-admin",
       "enabled": true,
+      "email": "${MIGRANTS_ADMIN_EMAIL}",
+      "firstName": "${MIGRANTS_ADMIN_FIRST_NAME}",
+      "lastName": "${MIGRANTS_ADMIN_LAST_NAME}",
+      "emailVerified": true,
       "credentials": [
         {
           "type": "password",
-          "value": "migrants-admin",
+          "value": "${MIGRANTS_ADMIN_PASSWORD}",
           "temporary": false
         }
       ],
