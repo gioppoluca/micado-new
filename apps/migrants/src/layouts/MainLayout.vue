@@ -33,17 +33,19 @@ import { useLanguageStore } from 'src/stores/language-store';
 import { useTopicStore } from 'src/stores/topic-store';
 import { useGlossaryStore } from 'src/stores/glossary-store';
 import { useContentStore } from 'src/stores/content-store';
+import { useAppStore } from 'src/stores/app-store';
 import { isEnabled } from 'src/features/feature-flipping';
 import { logger } from 'src/services/Logger';
 import ApiDebugOverlay from 'src/components/ApiDebugOverlay.vue';
-import { LANG_STORAGE_KEY } from 'src/boot/loadData';
+import { LANG_STORAGE_KEY, toLocaleKey } from 'src/boot/loadData';
 
 // ─── Stores ───────────────────────────────────────────────────────────────────
 
 const router = useRouter();
 const route = useRoute();
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const auth = useAuthStore();
+const appStore = useAppStore();
 const languageStore = useLanguageStore();
 const topicStore = useTopicStore();
 const glossaryStore = useGlossaryStore();
@@ -59,10 +61,7 @@ const isAuth = computed(() => auth.authenticated);
 
 /** Short language code shown in the header button (e.g. "IT", "EN"). */
 const currentLang = computed(
-  () =>
-    languageStore.selected?.lang?.toUpperCase() ??
-    languageStore.defaultLanguage?.lang?.toUpperCase() ??
-    'EN',
+  () => appStore.resolveContentLanguages(languageStore.selected?.lang).currentlang.toUpperCase(),
 );
 
 /**
@@ -128,6 +127,8 @@ function selectLanguage(langCode: string): void {
   const lang = languageStore.languages.find(l => l.lang === langCode);
   if (!lang) return;
   languageStore.select(lang);
+  appStore.setUserLang(langCode);
+  locale.value = toLocaleKey(langCode);
   // Persist the user's choice so it survives page refresh.
   // The loadData boot reads this key back before any component renders.
   try {

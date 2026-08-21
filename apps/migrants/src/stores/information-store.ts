@@ -87,8 +87,7 @@ export const useInformationStore = defineStore('information-migrant', (): Inform
     function buildParams(page: number): InformationMigrantParams {
         const f = filter.value;
         return {
-            defaultlang: appStore.defaultLang || 'it',
-            currentlang: languageStore.selected?.lang || appStore.defaultLang || 'it',
+            ...appStore.resolveContentLanguages(languageStore.selected?.lang),
             ...(f.categoryId !== undefined ? { categoryId: f.categoryId } : {}),
             ...(f.topicIds?.length ? { topicIds: f.topicIds.join(',') } : {}),
             ...(f.userTypeIds?.length ? { userTypeIds: f.userTypeIds.join(',') } : {}),

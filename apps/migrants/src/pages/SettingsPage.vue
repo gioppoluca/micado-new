@@ -28,16 +28,26 @@
 import { onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useLanguageStore } from 'src/stores/language-store';
+import { useAppStore } from 'src/stores/app-store';
 import { logger } from 'src/services/Logger';
 import type { Language } from 'src/api/language.api';
+import { LANG_STORAGE_KEY, toLocaleKey } from 'src/boot/loadData';
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const langStore = useLanguageStore();
+const appStore = useAppStore();
 
 // ─── Actions ──────────────────────────────────────────────────────────────────
 
 function selectLanguage(lang: Language): void {
   langStore.select(lang);
+  appStore.setUserLang(lang.lang);
+  locale.value = toLocaleKey(lang.lang);
+  try {
+    localStorage.setItem(LANG_STORAGE_KEY, lang.lang);
+  } catch {
+    logger.warn('[SettingsPage] localStorage unavailable — language choice will not persist');
+  }
   logger.info('[SettingsPage] language selected', { lang: lang.lang });
 }
 

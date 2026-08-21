@@ -42,22 +42,15 @@ const topicLabels = computed(() =>
 /** Format an ISO date string using the current locale. */
 function formatDate(iso: string | undefined): string {
     if (!iso) return '';
-    const lang = langStore.selected?.lang ?? 'en';
-    try {
-        return new Date(iso).toLocaleString(lang, {
-            weekday: 'long', day: '2-digit', month: 'long',
-            year: 'numeric', hour: '2-digit', minute: '2-digit',
-        });
-    } catch {
-        return new Date(iso).toLocaleString('en');
-    }
+    const lang = appStore.resolveContentLanguages(langStore.selected?.lang).currentlang;
+    return new Date(iso).toLocaleString(lang, {
+        weekday: 'long', day: '2-digit', month: 'long',
+        year: 'numeric', hour: '2-digit', minute: '2-digit',
+    });
 }
 
 function getLangParams() {
-    return {
-        defaultlang: appStore.defaultLang || 'it',
-        currentlang: langStore.selected?.lang || appStore.defaultLang || 'it',
-    };
+    return appStore.resolveContentLanguages(langStore.selected?.lang);
 }
 
 async function load(id: number): Promise<void> {

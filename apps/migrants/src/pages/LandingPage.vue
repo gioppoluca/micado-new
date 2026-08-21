@@ -79,12 +79,17 @@ import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth-store';
 import { useLanguageStore } from '../stores/language-store';
+import { useAppStore } from '../stores/app-store';
 import type { Language } from '../api/language.api';
 import { logger } from '../services/Logger';
+import { useI18n } from 'vue-i18n';
+import { LANG_STORAGE_KEY, toLocaleKey } from 'src/boot/loadData';
 
 const auth = useAuthStore();
 const langStore = useLanguageStore();
+const appStore = useAppStore();
 const router = useRouter();
+const { locale } = useI18n();
 const loginLoading = ref(false);
 
 // ── Load languages once the user is authenticated ────────────────────────────
@@ -109,6 +114,13 @@ async function doLogin(): Promise<void> {
 // ── Language selection ────────────────────────────────────────────────────────
 function selectLanguage(lang: Language): void {
     langStore.select(lang);
+    appStore.setUserLang(lang.lang);
+    locale.value = toLocaleKey(lang.lang);
+    try {
+        localStorage.setItem(LANG_STORAGE_KEY, lang.lang);
+    } catch {
+        logger.warn('[LandingPage] localStorage unavailable — language choice will not persist');
+    }
     logger.info('[LandingPage] language selected', { lang: lang.lang });
     // Navigate to the main app with the selected language
     void router.push({ path: '/', query: { lang: lang.lang } });

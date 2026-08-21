@@ -31,19 +31,24 @@ export interface TranslationStateOption {
     label: string;
 }
 
+export interface ContentLanguageParams {
+    defaultlang: string;
+    currentlang: string;
+}
+
 // ─── Store ────────────────────────────────────────────────────────────────────
 
 export const useAppStore = defineStore('app', () => {
     // ── State ─────────────────────────────────────────────────────────────────
 
     /** BCP-47 / lang key of the platform default language (e.g. 'en') */
-    const defaultLang = ref<string>('en');
+    const defaultLang = ref<string>('');
 
     /** Human-readable name of the default language (e.g. 'English') */
-    const defaultLangName = ref<string>('English');
+    const defaultLangName = ref<string>('');
 
     /** Currently active UI language — starts equal to defaultLang */
-    const userLang = ref<string>('en');
+    const userLang = ref<string>('');
 
     /** Keycloak realm / tenant for the PA application */
     const paTenant = ref<string>('');
@@ -66,24 +71,52 @@ export const useAppStore = defineStore('app', () => {
 
     // ── Getters ───────────────────────────────────────────────────────────────
 
-    /**
-     * Flat { value, label } options for the current userLang.
-     * Falls back to English, then to the raw value if nothing matches.
-     */
+    /** Flat options in the UI language, falling back only to the official language. */
     const translationStateOptions = computed<TranslationStateOption[]>(() =>
         translationStates.value.map((entry) => {
+            const official = requireDefaultLang();
             const match =
                 entry.translation.find((t) => t.lang === userLang.value) ??
-                entry.translation.find((t) => t.lang === 'en') ??
-                entry.translation[0];
+                entry.translation.find((t) => t.lang === official);
+            if (!match) {
+                throw new Error(
+                    `Translation state '${entry.value}' has no label in MICADO default language '${official}'`,
+                );
+            }
             return {
                 value: entry.value,
-                label: match?.state ?? entry.value,
+                label: match.state,
             };
         }),
     );
 
     // ── Actions ───────────────────────────────────────────────────────────────
+
+    function requireDefaultLang(): string {
+        if (!bootstrapped.value || !defaultLang.value) {
+            throw new Error('MICADO default language has not been bootstrapped');
+        }
+        return defaultLang.value;
+    }
+
+    function requireDefaultLangName(): string {
+        if (!bootstrapped.value || !defaultLangName.value) {
+            throw new Error('MICADO default language name has not been bootstrapped');
+        }
+        return defaultLangName.value;
+    }
+
+    /**
+     * Language contract for public content APIs: user choice first, official
+     * language only as translation fallback.
+     */
+    function resolveContentLanguages(selectedLang?: string | null): ContentLanguageParams {
+        const official = requireDefaultLang();
+        return {
+            defaultlang: official,
+            currentlang: selectedLang ?? official,
+        };
+    }
 
     /**
      * Called by the loadData boot with the raw values extracted from the
@@ -93,6 +126,7 @@ export const useAppStore = defineStore('app', () => {
     function bootstrap(payload: {
         defaultLang: string;
         defaultLangName: string;
+        userLang: string;
         paTenant: string;
         migrantTenant: string;
         migrantDomain: string;
@@ -100,7 +134,7 @@ export const useAppStore = defineStore('app', () => {
     }): void {
         defaultLang.value = payload.defaultLang;
         defaultLangName.value = payload.defaultLangName;
-        userLang.value = payload.defaultLang;
+        userLang.value = payload.userLang;
         paTenant.value = payload.paTenant;
         migrantTenant.value = payload.migrantTenant;
         migrantDomain.value = payload.migrantDomain;
@@ -133,6 +167,9 @@ export const useAppStore = defineStore('app', () => {
         translationStateOptions,
         // actions
         bootstrap,
+        requireDefaultLang,
+        requireDefaultLangName,
+        resolveContentLanguages,
         setUserLang,
     };
 });

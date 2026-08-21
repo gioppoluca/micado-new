@@ -110,10 +110,8 @@ export const useDocumentStore = defineStore('document', (): DocumentStoreSetup =
         try {
             const appStore = useAppStore();
             const langStore = useLanguageStore();
-            const defaultlang = appStore.defaultLang;
-            const currentlang = langStore.selected?.lang ?? defaultlang;
             const types = await apiGet<MigrantDocumentType[]>('/document-types-migrant', {
-                params: { defaultlang, currentlang },
+                params: appStore.resolveContentLanguages(langStore.selected?.lang),
             });
             documentTypes.value = types;
             logger.info('[document-store] fetchDocumentTypes', { count: types.length });

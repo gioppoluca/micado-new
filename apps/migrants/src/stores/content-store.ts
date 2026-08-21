@@ -122,10 +122,7 @@ export const useContentStore = defineStore('content-migrant', (): ContentStoreSe
     // ── Helpers ────────────────────────────────────────────────────────────────
 
     function getLangParams() {
-        return {
-            defaultlang: appStore.defaultLang || 'it',
-            currentlang: languageStore.selected?.lang || appStore.defaultLang || 'it',
-        };
+        return appStore.resolveContentLanguages(languageStore.selected?.lang);
     }
 
     function topicParam(): string | undefined {

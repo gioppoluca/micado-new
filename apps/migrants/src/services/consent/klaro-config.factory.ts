@@ -16,158 +16,88 @@ export interface KlaroConfigLike {
     services: Array<Record<string, unknown>>;
 }
 
-
 type TranslateFn = (...args: unknown[]) => string;
 
-function normalizeKlaroLang(lang: string): string {
-    const lower = lang.toLowerCase();
-
-    if (lower.startsWith('it')) return 'it';
-    if (lower.startsWith('en')) return 'en';
-
-    return 'en';
+function normalizeKlaroLang(locale: string): string {
+    const lang = locale.trim().split(/[-_]/)[0]?.toLowerCase();
+    if (!lang) {
+        throw new Error('MICADO consent configuration requires an initialized locale');
+    }
+    return lang;
 }
 
-function buildTranslations(t: TranslateFn) {
+function buildTranslation(t: TranslateFn, locale: string) {
+    const translate = (key: string): string => t(key, {}, {locale});
+
     return {
-        it: {
-            consentNotice: {
-                title: t('consent.notice.title', {}, { locale: 'it-IT' }),
-                description: t('consent.notice.description', {}, { locale: 'it-IT' }),
-                learnMore: t('consent.notice.learnMore', {}, { locale: 'it-IT' }),
-            },
-            consentModal: {
-                title: t('consent.modal.title', {}, { locale: 'it-IT' }),
-                description: t('consent.modal.description', {}, { locale: 'it-IT' }),
-                privacyPolicy: {
-                    name: t('consent.modal.privacyPolicyName', {}, { locale: 'it-IT' }),
-                    text: t('consent.modal.privacyPolicyText', {}, { locale: 'it-IT' }),
-                },
-            },
-            ok: t('consent.actions.ok', {}, { locale: 'it-IT' }),
-            acceptAll: t('consent.actions.acceptAll', {}, { locale: 'it-IT' }),
-            decline: t('consent.actions.decline', {}, { locale: 'it-IT' }),
-            declineAll: t('consent.actions.declineAll', {}, { locale: 'it-IT' }),
-            save: t('consent.actions.save', {}, { locale: 'it-IT' }),
-            close: t('consent.actions.close', {}, { locale: 'it-IT' }),
-            purposeItem: {
-                service: t('consent.labels.service', {}, { locale: 'it-IT' }),
-                services: t('consent.labels.services', {}, { locale: 'it-IT' }),
-            },
-            purposes: {
-                necessary: {
-                    title: t('consent.purposes.necessary.title', {}, { locale: 'it-IT' }),
-                    description: t('consent.purposes.necessary.description', {}, { locale: 'it-IT' }),
-                },
-                analytics: {
-                    title: t('consent.purposes.analytics.title', {}, { locale: 'it-IT' }),
-                    description: t('consent.purposes.analytics.description', {}, { locale: 'it-IT' }),
-                },
-                embeddedMedia: {
-                    title: t('consent.purposes.embeddedMedia.title', {}, { locale: 'it-IT' }),
-                    description: t('consent.purposes.embeddedMedia.description', {}, { locale: 'it-IT' }),
-                },
-                externalMaps: {
-                    title: t('consent.purposes.externalMaps.title', {}, { locale: 'it-IT' }),
-                    description: t('consent.purposes.externalMaps.description', {}, { locale: 'it-IT' }),
-                },
-                thirdPartySupport: {
-                    title: t('consent.purposes.thirdPartySupport.title', {}, { locale: 'it-IT' }),
-                    description: t('consent.purposes.thirdPartySupport.description', {}, { locale: 'it-IT' }),
-                },
-            },
-            services: {
-                usageTracker: {
-                    title: t('consent.services.usageTracker.title', {}, { locale: 'it-IT' }),
-                    description: t('consent.services.usageTracker.description', {}, { locale: 'it-IT' }),
-                },
-                youtubeEmbed: {
-                    title: t('consent.services.youtubeEmbed.title', {}, { locale: 'it-IT' }),
-                    description: t('consent.services.youtubeEmbed.description', {}, { locale: 'it-IT' }),
-                },
-                atlasEmbed: {
-                    title: t('consent.services.atlasEmbed.title', {}, { locale: 'it-IT' }),
-                    description: t('consent.services.atlasEmbed.description', {}, { locale: 'it-IT' }),
-                },
-                supportWidget: {
-                    title: t('consent.services.supportWidget.title', {}, { locale: 'it-IT' }),
-                    description: t('consent.services.supportWidget.description', {}, { locale: 'it-IT' }),
-                },
+        consentNotice: {
+            title: translate('consent.notice.title'),
+            description: translate('consent.notice.description'),
+            learnMore: translate('consent.notice.learnMore'),
+        },
+        consentModal: {
+            title: translate('consent.modal.title'),
+            description: translate('consent.modal.description'),
+            privacyPolicy: {
+                name: translate('consent.modal.privacyPolicyName'),
+                text: translate('consent.modal.privacyPolicyText'),
             },
         },
-        en: {
-            consentNotice: {
-                title: t('consent.notice.title', {}, { locale: 'en-US' }),
-                description: t('consent.notice.description', {}, { locale: 'en-US' }),
-                learnMore: t('consent.notice.learnMore', {}, { locale: 'en-US' }),
+        ok: translate('consent.actions.ok'),
+        acceptAll: translate('consent.actions.acceptAll'),
+        decline: translate('consent.actions.decline'),
+        declineAll: translate('consent.actions.declineAll'),
+        save: translate('consent.actions.save'),
+        close: translate('consent.actions.close'),
+        purposeItem: {
+            service: translate('consent.labels.service'),
+            services: translate('consent.labels.services'),
+        },
+        purposes: {
+            necessary: {
+                title: translate('consent.purposes.necessary.title'),
+                description: translate('consent.purposes.necessary.description'),
             },
-            consentModal: {
-                title: t('consent.modal.title', {}, { locale: 'en-US' }),
-                description: t('consent.modal.description', {}, { locale: 'en-US' }),
-                privacyPolicy: {
-                    name: t('consent.modal.privacyPolicyName', {}, { locale: 'en-US' }),
-                    text: t('consent.modal.privacyPolicyText', {}, { locale: 'en-US' }),
-                },
+            analytics: {
+                title: translate('consent.purposes.analytics.title'),
+                description: translate('consent.purposes.analytics.description'),
             },
-            ok: t('consent.actions.ok', {}, { locale: 'en-US' }),
-            acceptAll: t('consent.actions.acceptAll', {}, { locale: 'en-US' }),
-            decline: t('consent.actions.decline', {}, { locale: 'en-US' }),
-            declineAll: t('consent.actions.declineAll', {}, { locale: 'en-US' }),
-            save: t('consent.actions.save', {}, { locale: 'en-US' }),
-            close: t('consent.actions.close', {}, { locale: 'en-US' }),
-            purposeItem: {
-                service: t('consent.labels.service', {}, { locale: 'en-US' }),
-                services: t('consent.labels.services', {}, { locale: 'en-US' }),
+            embeddedMedia: {
+                title: translate('consent.purposes.embeddedMedia.title'),
+                description: translate('consent.purposes.embeddedMedia.description'),
             },
-            purposes: {
-                necessary: {
-                    title: t('consent.purposes.necessary.title', {}, { locale: 'en-US' }),
-                    description: t('consent.purposes.necessary.description', {}, { locale: 'en-US' }),
-                },
-                analytics: {
-                    title: t('consent.purposes.analytics.title', {}, { locale: 'en-US' }),
-                    description: t('consent.purposes.analytics.description', {}, { locale: 'en-US' }),
-                },
-                embeddedMedia: {
-                    title: t('consent.purposes.embeddedMedia.title', {}, { locale: 'en-US' }),
-                    description: t('consent.purposes.embeddedMedia.description', {}, { locale: 'en-US' }),
-                },
-                externalMaps: {
-                    title: t('consent.purposes.externalMaps.title', {}, { locale: 'en-US' }),
-                    description: t('consent.purposes.externalMaps.description', {}, { locale: 'en-US' }),
-                },
-                thirdPartySupport: {
-                    title: t('consent.purposes.thirdPartySupport.title', {}, { locale: 'en-US' }),
-                    description: t('consent.purposes.thirdPartySupport.description', {}, { locale: 'en-US' }),
-                },
+            externalMaps: {
+                title: translate('consent.purposes.externalMaps.title'),
+                description: translate('consent.purposes.externalMaps.description'),
             },
-            services: {
-                usageTracker: {
-                    title: t('consent.services.usageTracker.title', {}, { locale: 'en-US' }),
-                    description: t('consent.services.usageTracker.description', {}, { locale: 'en-US' }),
-                },
-                youtubeEmbed: {
-                    title: t('consent.services.youtubeEmbed.title', {}, { locale: 'en-US' }),
-                    description: t('consent.services.youtubeEmbed.description', {}, { locale: 'en-US' }),
-                },
-                atlasEmbed: {
-                    title: t('consent.services.atlasEmbed.title', {}, { locale: 'en-US' }),
-                    description: t('consent.services.atlasEmbed.description', {}, { locale: 'en-US' }),
-                },
-                supportWidget: {
-                    title: t('consent.services.supportWidget.title', {}, { locale: 'en-US' }),
-                    description: t('consent.services.supportWidget.description', {}, { locale: 'en-US' }),
-                },
+            thirdPartySupport: {
+                title: translate('consent.purposes.thirdPartySupport.title'),
+                description: translate('consent.purposes.thirdPartySupport.description'),
+            },
+        },
+        services: {
+            usageTracker: {
+                title: translate('consent.services.usageTracker.title'),
+                description: translate('consent.services.usageTracker.description'),
+            },
+            youtubeEmbed: {
+                title: translate('consent.services.youtubeEmbed.title'),
+                description: translate('consent.services.youtubeEmbed.description'),
+            },
+            atlasEmbed: {
+                title: translate('consent.services.atlasEmbed.title'),
+                description: translate('consent.services.atlasEmbed.description'),
+            },
+            supportWidget: {
+                title: translate('consent.services.supportWidget.title'),
+                description: translate('consent.services.supportWidget.description'),
             },
         },
     };
 }
 
-export function createKlaroConfig(
-    lang: string,
-    t: TranslateFn,
-): KlaroConfigLike {
-    const klaroLang = normalizeKlaroLang(lang);
+export function createKlaroConfig(locale: string, t: TranslateFn): KlaroConfigLike {
+    const klaroLang = normalizeKlaroLang(locale);
 
     return {
         version: 1,
@@ -183,7 +113,7 @@ export function createKlaroConfig(
         groupByPurpose: true,
         default: false,
         lang: klaroLang,
-        translations: buildTranslations(t),
+        translations: {[klaroLang]: buildTranslation(t, locale)},
         services: [
             {
                 name: 'usageTracker',

@@ -5,7 +5,7 @@
  *
  * ── Backend contract ──────────────────────────────────────────────────────────
  *
- *   GET /glossaries-migrant?defaultlang=it&currentlang=it
+ *   GET /glossaries-migrant?defaultlang=en&currentlang=it
  *
  *   No authentication required (@authenticate.skip()).
  *   Returns the full published glossary — no pagination, no filters.

@@ -5,7 +5,7 @@
  *
  * ── Backend contract ──────────────────────────────────────────────────────────
  *
- *   GET /categories-migrant?subtype=information|event&defaultlang=it&currentlang=it
+ *   GET /categories-migrant?subtype=information|event&defaultlang=en&currentlang=it
  *
  *   No authentication required (@authenticate.skip()).
  *

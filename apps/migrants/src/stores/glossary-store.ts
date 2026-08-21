@@ -64,17 +64,17 @@ export const useGlossaryStore = defineStore('glossary-migrant', (): GlossaryStor
 
     const sortedTerms = computed<MigrantGlossaryTerm[]>(() =>
         [...terms.value].sort((a, b) =>
-            a.title.localeCompare(b.title, languageStore.selected?.lang ?? 'en'),
+            a.title.localeCompare(
+                b.title,
+                appStore.resolveContentLanguages(languageStore.selected?.lang).currentlang,
+            ),
         ),
     );
 
     // ── Helpers ────────────────────────────────────────────────────────────────
 
     function getLangParams() {
-        return {
-            defaultlang: appStore.defaultLang || 'it',
-            currentlang: languageStore.selected?.lang || appStore.defaultLang || 'it',
-        };
+        return appStore.resolveContentLanguages(languageStore.selected?.lang);
     }
 
     function setError(e: unknown): void {

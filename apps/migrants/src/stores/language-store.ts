@@ -12,7 +12,7 @@
  * The setup function is annotated with an explicit return type interface.
  * Without this, vue-tsc with strict:true infers a narrowed type from the
  * return object literal that can omit functions added incrementally (such as
- * setDefaultByLang), producing false "property does not exist" errors at
+ * selectByLang), producing false "property does not exist" errors at
  * call sites even though the function is present at runtime.
  *
  * The interface uses Ref<T> for state (matching what the setup function
@@ -46,7 +46,7 @@ interface LanguageStoreSetup {
     fetchAll(params?: LanguageListParams): Promise<void>;
     fetchOne(lang: string): Promise<void>;
     select(lang: Language): void;
-    setDefaultByLang(langKey: string): void;
+    selectByLang(langKey: string): void;
     create(payload: CreateLanguagePayload): Promise<Language | null>;
     patch(lang: string, payload: PatchLanguagePayload): Promise<boolean>;
     remove(lang: string): Promise<boolean>;
@@ -120,10 +120,13 @@ export const useLanguageStore = defineStore('language', (): LanguageStoreSetup =
     }
 
     /** Mark a language as selected by its lang key (called by loadData boot). */
-    function setDefaultByLang(langKey: string): void {
-        const found = languages.value.find(l => l.lang === langKey) ?? null;
+    function selectByLang(langKey: string): void {
+        const found = languages.value.find(l => l.lang === langKey);
+        if (!found?.active) {
+            throw new Error(`MICADO selected language '${langKey}' is not active`);
+        }
         selected.value = found;
-        logger.info('[language-store] default set', { langKey, found: !!found });
+        logger.info('[language-store] selected language set', { langKey });
     }
 
     async function create(payload: CreateLanguagePayload): Promise<Language | null> {
@@ -188,7 +191,7 @@ export const useLanguageStore = defineStore('language', (): LanguageStoreSetup =
         fetchAll,
         fetchOne,
         select,
-        setDefaultByLang,
+        selectByLang,
         create,
         patch,
         remove,

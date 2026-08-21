@@ -6,7 +6,7 @@
  * ── Backend contract ──────────────────────────────────────────────────────────
  *
  *   GET /information-migrant
- *     ?defaultlang=it&currentlang=it
+ *     ?defaultlang=en&currentlang=it
  *     &categoryId=1
  *     &topicIds=1,2,3
  *     &userTypeIds=1,2

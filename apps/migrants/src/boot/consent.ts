@@ -16,7 +16,11 @@ declare module '@vue/runtime-core' {
 
 function resolveLocale(): string {
     const locale = i18n.global.locale;
-    return typeof locale === 'string' ? locale : (locale.value ?? 'en-US');
+    const resolved = typeof locale === 'string' ? locale : locale.value;
+    if (!resolved) {
+        throw new Error('MICADO consent boot requires an initialized locale');
+    }
+    return resolved;
 }
 
 function translate(...args: unknown[]): string {

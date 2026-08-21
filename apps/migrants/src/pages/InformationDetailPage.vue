@@ -49,10 +49,7 @@ const topicLabels = computed(() =>
 );
 
 function getLangParams() {
-    return {
-        defaultlang: appStore.defaultLang || 'it',
-        currentlang: langStore.selected?.lang || appStore.defaultLang || 'it',
-    };
+    return appStore.resolveContentLanguages(langStore.selected?.lang);
 }
 
 async function load(id: number): Promise<void> {

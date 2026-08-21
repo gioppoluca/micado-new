@@ -21,7 +21,9 @@ declare module 'vue-i18n' {
 }
 
 export const i18n = createI18n({
-  locale: 'en-US',
+  // loadData sets the validated user/default locale before the app is mounted.
+  locale: '',
+  fallbackLocale: false,
   legacy: false,
   messages,
 });
@@ -31,7 +33,8 @@ export const i18n = createI18n({
 export default defineBoot(({ app }) => {
   /*
   const i18n = createI18n<{ message: MessageSchema }, MessageLanguages>({
-    locale: 'en-US',
+    locale: '',
+    fallbackLocale: false,
     legacy: false,
     messages,
   });

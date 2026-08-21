@@ -5,7 +5,7 @@
  *
  * ── Backend contract ──────────────────────────────────────────────────────────
  *
- *   GET /topics-migrant?defaultlang=it&currentlang=it
+ *   GET /topics-migrant?defaultlang=en&currentlang=it
  *
  *   No authentication required (@authenticate.skip() on the controller).
  *

@@ -32,7 +32,7 @@ const logger = consola.withTag('consent-service');
 
 const state = reactive<ConsentState>({
     ready: false,
-    lang: 'en-US',
+    lang: '',
     purposes: {},
     services: {},
     raw: {},

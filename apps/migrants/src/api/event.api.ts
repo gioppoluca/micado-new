@@ -6,7 +6,7 @@
  * ── Backend contract ──────────────────────────────────────────────────────────
  *
  *   GET /events-migrant
- *     ?defaultlang=it&currentlang=it
+ *     ?defaultlang=en&currentlang=it
  *     &categoryId=1
  *     &topicIds=1,2
  *     &userTypeIds=1

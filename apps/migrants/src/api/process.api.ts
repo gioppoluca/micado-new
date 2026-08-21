@@ -6,7 +6,7 @@
  * ── Backend contract ──────────────────────────────────────────────────────────
  *
  *   GET /processes-migrant
- *     ?defaultlang=it&currentlang=it
+ *     ?defaultlang=en&currentlang=it
  *     &topicIds=1,2
  *     &userTypeIds=1
  *     &page=1&pageSize=20

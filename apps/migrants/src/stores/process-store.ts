@@ -82,8 +82,7 @@ export const useProcessStore = defineStore('process-migrant', (): ProcessStoreSe
     function buildParams(page: number): ProcessMigrantParams {
         const f = filter.value;
         return {
-            defaultlang: appStore.defaultLang || 'it',
-            currentlang: languageStore.selected?.lang || appStore.defaultLang || 'it',
+            ...appStore.resolveContentLanguages(languageStore.selected?.lang),
             ...(f.topicIds?.length ? { topicIds: f.topicIds.join(',') } : {}),
             ...(f.userTypeIds?.length ? { userTypeIds: f.userTypeIds.join(',') } : {}),
             page,

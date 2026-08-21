@@ -50,8 +50,12 @@ const LANG_TO_LOCALE: Record<string, string> = {
     tr: 'tr-TR',
 };
 
-function toLocaleKey(lang: string): string {
-    return LANG_TO_LOCALE[lang] ?? 'en-US';
+export function toLocaleKey(lang: string): string {
+    const locale = LANG_TO_LOCALE[lang];
+    if (!locale) {
+        throw new Error(`MICADO language '${lang}' has no Migrants locale mapping`);
+    }
+    return locale;
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
@@ -138,7 +142,7 @@ export default defineBoot(async () => {
         available: availableLangs,
     });
 
-    langStore.setDefaultByLang(effectiveLang);
+    langStore.selectByLang(effectiveLang);
 
     // ── 5. Switch i18n locale ─────────────────────────────────────────────────
 
@@ -163,6 +167,7 @@ export default defineBoot(async () => {
     appStore.bootstrap({
         defaultLang: serverDefaultLang,   // canonical server default — never overridden
         defaultLangName: defaultLanguage.name,
+        userLang: effectiveLang,
         paTenant: get('pa_tenant'),
         migrantTenant: get('migrant_tenant'),
         migrantDomain: get('migrant_domain_name'),
