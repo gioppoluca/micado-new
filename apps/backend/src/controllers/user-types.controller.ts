@@ -38,7 +38,6 @@ import {
     Filter,
     FilterExcludingWhere,
     Where,
-    repository
 } from '@loopback/repository';
 import {
     del,
@@ -56,8 +55,8 @@ import { inject, service } from '@loopback/core';
 import { WinstonLogger, LoggingBindings } from '@loopback/logging';
 import { UserTypeLegacy } from '../models';
 import { UserTypeFull } from '../models/user-type-full.model';
-import { LanguageRepository } from '../repositories';
 import { UserTypeFacadeService } from '../services/user-type-facade.service';
+import { DefaultLanguageService } from '../services/default-language.service';
 
 // ─── Reusable inline schema fragments ─────────────────────────────────────────
 // Defined once so POST and PUT stay in sync.
@@ -102,19 +101,12 @@ export class UserTypesController {
         @service(UserTypeFacadeService)
         protected userTypeFacadeService: UserTypeFacadeService,
 
+        @service(DefaultLanguageService)
+        protected defaultLanguageService: DefaultLanguageService,
+
         @inject(LoggingBindings.WINSTON_LOGGER)
         protected logger: WinstonLogger,
-
-        @repository(LanguageRepository)
-        protected languageRepository: LanguageRepository,
     ) { }
-
-    /** Returns the platform default language from the languages table. */
-    protected async resolveDefaultLang(requested?: string): Promise<string> {
-        if (requested) return requested;
-        const def = await this.languageRepository.findOne({ where: { isDefault: true } });
-        return def?.lang ?? 'en';
-    }
 
     // ── Create ────────────────────────────────────────────────────────────────
 
@@ -354,7 +346,7 @@ export class UserTypesController {
         @param.query.string('defaultlang') defaultlang?: string,
         @param.query.string('currentlang') currentlang?: string,
     ): Promise<Array<Record<string, unknown>>> {
-        const resolvedDefault = await this.resolveDefaultLang(defaultlang);
+        const resolvedDefault = await this.defaultLanguageService.resolveDefaultLanguageCode(defaultlang);
         return this.userTypeFacadeService.getTranslatedForFrontend(
             resolvedDefault,
             currentlang ?? resolvedDefault,

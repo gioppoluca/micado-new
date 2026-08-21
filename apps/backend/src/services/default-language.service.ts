@@ -64,4 +64,18 @@ export class DefaultLanguageService {
     async getDefaultLanguageCode(): Promise<string> {
         return (await this.getDefaultLanguage()).lang;
     }
+
+    /**
+     * Resolves the official language and rejects attempts to override it through
+     * the legacy `defaultlang` query parameter.
+     */
+    async resolveDefaultLanguageCode(requested?: string): Promise<string> {
+        const official = await this.getDefaultLanguageCode();
+        if (requested && requested !== official) {
+            throw new HttpErrors.BadRequest(
+                `Requested default language '${requested}' does not match MICADO default language '${official}'`,
+            );
+        }
+        return official;
+    }
 }

@@ -30,7 +30,8 @@
  *  existing relations before deletion and throws HTTP 409 if any are found.
  */
 
-import { inject, injectable, BindingScope } from '@loopback/core';
+import { inject, injectable, BindingScope, service } from '@loopback/core';
+import { DefaultLanguageService } from './default-language.service';
 import { repository } from '@loopback/repository';
 import { HttpErrors } from '@loopback/rest';
 import { SecurityBindings, UserProfile } from '@loopback/security';
@@ -61,9 +62,13 @@ const SYSTEM_STAMP: ActorStamp = {
     realm: 'internal',
 };
 
+
 @injectable({ scope: BindingScope.TRANSIENT })
 export class CategoryFacadeService {
     constructor(
+        @service(DefaultLanguageService)
+        protected defaultLanguageService: DefaultLanguageService,
+
         @repository(ContentItemRepository)
         protected contentItemRepository: ContentItemRepository,
 
@@ -146,7 +151,7 @@ export class CategoryFacadeService {
     }): Promise<CategoryLegacy> {
         const stamp = buildActorStamp(this.currentUser);
         const externalKey = String(await this.nextExternalKey());
-        const sourceLang = input.sourceLang ?? 'it';
+        const sourceLang = await this.defaultLanguageService.resolveDefaultLanguageCode(input.sourceLang);
 
         const item = await this.contentItemRepository.create({
             typeCode: CATEGORY_CODE,
@@ -493,7 +498,7 @@ export class CategoryFacadeService {
             itemId: item.id!,
             revisionNo: latest ? latest.revisionNo + 1 : 1,
             status: 'DRAFT',
-            sourceLang: latest?.sourceLang ?? 'it',
+            sourceLang: latest?.sourceLang ?? await this.defaultLanguageService.getDefaultLanguageCode(),
             dataExtra: { subtype: existingSubtype },
             ...(stamp && { createdBy: stamp }),
         });

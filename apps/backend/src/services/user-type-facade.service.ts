@@ -49,7 +49,8 @@
  *   Migrant   → GET /user-types-migrant  flat, PUBLISHED, current lang only
  */
 
-import { inject, injectable, BindingScope } from '@loopback/core';
+import { inject, injectable, BindingScope, service } from '@loopback/core';
+import { DefaultLanguageService } from './default-language.service';
 import { Filter, repository } from '@loopback/repository';
 import { HttpErrors } from '@loopback/rest';
 import { SecurityBindings, UserProfile } from '@loopback/security';
@@ -84,9 +85,13 @@ const SYSTEM_STAMP: ActorStamp = {
 // TRANSIENT scope — a new instance per HTTP request so each instance gets its
 // own currentUser from SecurityBindings. SINGLETON would share one instance
 // across all requests and always hold the first user who triggered instantiation.
+
 @injectable({ scope: BindingScope.TRANSIENT })
 export class UserTypeFacadeService {
     constructor(
+        @service(DefaultLanguageService)
+        protected defaultLanguageService: DefaultLanguageService,
+
         @repository(ContentItemRepository)
         protected contentItemRepository: ContentItemRepository,
 
@@ -196,7 +201,7 @@ export class UserTypeFacadeService {
     }): Promise<UserTypeLegacy> {
         const stamp = buildActorStamp(this.currentUser);
         const externalKey = String(await this.nextExternalKey());
-        const sourceLang = input.sourceLang ?? 'en';
+        const sourceLang = await this.defaultLanguageService.resolveDefaultLanguageCode(input.sourceLang);
 
         const item = await this.contentItemRepository.create({
             typeCode: USER_TYPE_CODE,
@@ -407,7 +412,7 @@ export class UserTypeFacadeService {
 
     async getTranslatedForFrontend(
         defaultLang: string,
-        currentLang = 'en',
+        currentLang: string,
     ): Promise<Array<Record<string, unknown>>> {
         const items = await this.contentItemRepository.find({
             where: { typeCode: USER_TYPE_CODE, publishedRevisionId: { neq: null as unknown as string } },
@@ -642,7 +647,7 @@ export class UserTypeFacadeService {
             itemId: item.id!,
             revisionNo: latest ? latest.revisionNo + 1 : 1,
             status: 'DRAFT',
-            sourceLang: latest?.sourceLang ?? 'en',
+            sourceLang: latest?.sourceLang ?? await this.defaultLanguageService.getDefaultLanguageCode(),
             dataExtra: latest?.dataExtra ?? {},
             ...(stamp && { createdBy: stamp }),
         });

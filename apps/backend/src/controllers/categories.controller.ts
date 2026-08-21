@@ -31,7 +31,6 @@
 
 import {
     CountSchema,
-    repository
 } from '@loopback/repository';
 import {
     del,
@@ -50,7 +49,7 @@ import { WinstonLogger, LoggingBindings } from '@loopback/logging';
 import { CategoryLegacy } from '../models/category-legacy.model';
 import { CategoryFull } from '../models/category-full.model';
 import { CategoryFacadeService } from '../services/category-facade.service';
-import { LanguageRepository } from '../repositories/language.repository';
+import { DefaultLanguageService } from '../services/default-language.service';
 
 const SUBTYPE_SCHEMA = {
     type: 'string' as const,
@@ -80,19 +79,12 @@ export class CategoriesController {
         @service(CategoryFacadeService)
         protected categoryFacadeService: CategoryFacadeService,
 
+        @service(DefaultLanguageService)
+        protected defaultLanguageService: DefaultLanguageService,
+
         @inject(LoggingBindings.WINSTON_LOGGER)
         protected logger: WinstonLogger,
-
-        @repository(LanguageRepository)
-        protected languageRepository: LanguageRepository,
     ) { }
-
-    /** Returns the platform default language from the languages table. */
-    protected async resolveDefaultLang(requested?: string): Promise<string> {
-        if (requested) return requested;
-        const def = await this.languageRepository.findOne({ where: { isDefault: true } });
-        return def?.lang ?? 'en';
-    }
 
     // ── Create ────────────────────────────────────────────────────────────────
 
@@ -304,7 +296,7 @@ export class CategoriesController {
     // ── Migrant frontend ──────────────────────────────────────────────────────
 
     /**
-     * GET /categories-migrant?subtype=event&defaultlang=it&currentlang=it
+     * GET /categories-migrant?subtype=event&defaultlang=en&currentlang=it
      *
      * Public endpoint — published categories only, language-resolved.
      * Used by the migrant app filter panel.
@@ -339,7 +331,7 @@ export class CategoriesController {
         @param.query.string('defaultlang') defaultlang?: string,
         @param.query.string('currentlang') currentlang?: string,
     ): Promise<Array<{ id: number; title: string; lang: string; subtype: string }>> {
-        const resolvedDefault = await this.resolveDefaultLang(defaultlang);
+        const resolvedDefault = await this.defaultLanguageService.resolveDefaultLanguageCode(defaultlang);
         return this.categoryFacadeService.getTranslatedForFrontend(resolvedDefault, currentlang ?? resolvedDefault, subtype);
     }
 }

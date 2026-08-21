@@ -34,7 +34,6 @@ import {
     Filter,
     FilterExcludingWhere,
     Where,
-    repository,
 } from '@loopback/repository';
 import {
     del,
@@ -54,7 +53,7 @@ import { WinstonLogger, LoggingBindings } from '@loopback/logging';
 import { TopicLegacy } from '../models/topic-legacy.model';
 import { TopicFull } from '../models/topic-full.model';
 import { TopicFacadeService } from '../services/topic-facade.service';
-import { LanguageRepository } from '../repositories/language.repository';
+import { DefaultLanguageService } from '../services/default-language.service';
 
 // ─── Reusable inline schema fragments ─────────────────────────────────────────
 
@@ -90,19 +89,12 @@ export class TopicsController {
         @service(TopicFacadeService)
         protected topicFacadeService: TopicFacadeService,
 
+        @service(DefaultLanguageService)
+        protected defaultLanguageService: DefaultLanguageService,
+
         @inject(LoggingBindings.WINSTON_LOGGER)
         protected logger: WinstonLogger,
-
-        @repository(LanguageRepository)
-        protected languageRepository: LanguageRepository,
     ) { }
-
-    /** Returns the platform default language from the languages table. */
-    protected async resolveDefaultLang(requested?: string): Promise<string> {
-        if (requested) return requested;
-        const def = await this.languageRepository.findOne({ where: { isDefault: true } });
-        return def?.lang ?? 'en';
-    }
 
     // ── Create ────────────────────────────────────────────────────────────────
 
@@ -398,7 +390,7 @@ export class TopicsController {
         @param.query.string('defaultlang') defaultlang?: string,
         @param.query.string('currentlang') currentlang?: string,
     ): Promise<Array<Record<string, unknown>>> {
-        const resolvedDefault = await this.resolveDefaultLang(defaultlang);
+        const resolvedDefault = await this.defaultLanguageService.resolveDefaultLanguageCode(defaultlang);
         return this.topicFacadeService.getTranslatedForFrontend(resolvedDefault, currentlang ?? resolvedDefault);
     }
 }

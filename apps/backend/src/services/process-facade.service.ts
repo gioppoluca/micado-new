@@ -50,7 +50,8 @@
  *   STEP and STEP_LINK store processId in data_extra (no relation needed).
  */
 
-import { inject, injectable, BindingScope } from '@loopback/core';
+import { inject, injectable, BindingScope, service } from '@loopback/core';
+import { DefaultLanguageService } from './default-language.service';
 import { repository } from '@loopback/repository';
 import { HttpErrors } from '@loopback/rest';
 import { SecurityBindings, UserProfile } from '@loopback/security';
@@ -117,9 +118,13 @@ export interface ProcessListFilter {
 
 // ── Service ───────────────────────────────────────────────────────────────────
 
+
 @injectable({ scope: BindingScope.TRANSIENT })
 export class ProcessFacadeService {
     constructor(
+        @service(DefaultLanguageService)
+        protected defaultLanguageService: DefaultLanguageService,
+
         @repository(ContentItemRepository)
         protected contentItemRepository: ContentItemRepository,
 
@@ -268,7 +273,7 @@ export class ProcessFacadeService {
     }): Promise<ProcessLegacy> {
         const stamp = buildActorStamp(this.currentUser);
         const externalKey = String(await this.nextExternalKey(PROCESS_CODE));
-        const sourceLang = input.sourceLang ?? 'it';
+        const sourceLang = await this.defaultLanguageService.resolveDefaultLanguageCode(input.sourceLang);
 
         const item = await this.contentItemRepository.create({
             typeCode: PROCESS_CODE,
@@ -457,7 +462,7 @@ export class ProcessFacadeService {
 
     async getTranslatedForFrontend(
         defaultLang: string,
-        currentLang = 'it',
+        currentLang: string,
         filter: ProcessListFilter = {},
     ): Promise<Array<Record<string, unknown>>> {
         const { page = 1, pageSize = 20 } = filter;
@@ -690,7 +695,7 @@ export class ProcessFacadeService {
             nodeIdMap.set(node.id, newExternalKey);
 
             const externalKeyStr = String(newExternalKey);
-            const sourceLang = node.data.sourceLang ?? 'it';
+            const sourceLang = await this.defaultLanguageService.resolveDefaultLanguageCode(node.data.sourceLang);
             const dataExtra: Record<string, unknown> = {
                 processId,
                 posX: node.position.x,
@@ -751,7 +756,7 @@ export class ProcessFacadeService {
 
             const newExternalKey = await this.nextExternalKey(STEP_LINK_CODE);
             const externalKeyStr = String(newExternalKey);
-            const sourceLang = edge.data?.sourceLang ?? 'it';
+            const sourceLang = await this.defaultLanguageService.resolveDefaultLanguageCode(edge.data?.sourceLang);
 
             const dataExtra: Record<string, unknown> = {
                 processId,
@@ -995,7 +1000,7 @@ export class ProcessFacadeService {
             itemId: item.id!,
             revisionNo: latest ? latest.revisionNo + 1 : 1,
             status: 'DRAFT',
-            sourceLang: latest?.sourceLang ?? 'it',
+            sourceLang: latest?.sourceLang ?? await this.defaultLanguageService.getDefaultLanguageCode(),
             dataExtra: latest?.dataExtra ?? {},
             ...(stamp && { createdBy: stamp }),
         });

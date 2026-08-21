@@ -31,7 +31,6 @@
 
 import {
     CountSchema,
-    repository,
 } from '@loopback/repository';
 import {
     del,
@@ -51,7 +50,7 @@ import { WinstonLogger, LoggingBindings } from '@loopback/logging';
 import { EventLegacy } from '../models/event-legacy.model';
 import { EventFull } from '../models/event-full.model';
 import { EventFacadeService, type EventListFilter } from '../services/event-facade.service';
-import { LanguageRepository } from '../repositories/language.repository';
+import { DefaultLanguageService } from '../services/default-language.service';
 
 const STATUS_SCHEMA = { type: 'string' as const, enum: ['DRAFT', 'APPROVED', 'PUBLISHED', 'ARCHIVED'] };
 const TRANSLATIONS_MAP_SCHEMA = {
@@ -83,19 +82,12 @@ export class EventsController {
         @service(EventFacadeService)
         protected eventFacadeService: EventFacadeService,
 
+        @service(DefaultLanguageService)
+        protected defaultLanguageService: DefaultLanguageService,
+
         @inject(LoggingBindings.WINSTON_LOGGER)
         protected logger: WinstonLogger,
-
-        @repository(LanguageRepository)
-        protected languageRepository: LanguageRepository,
     ) { }
-
-    /** Returns the platform default language from the languages table. */
-    protected async resolveDefaultLang(requested?: string): Promise<string> {
-        if (requested) return requested;
-        const def = await this.languageRepository.findOne({ where: { isDefault: true } });
-        return def?.lang ?? 'en';
-    }
 
     // ── Create ────────────────────────────────────────────────────────────────
 
@@ -335,7 +327,7 @@ export class EventsController {
         @param.query.number('pageSize') pageSize?: number,
     ): Promise<Array<Record<string, unknown>>> {
         const filter = this.parseFilter({ categoryId, topicIds, userTypeIds, page, pageSize });
-        const resolvedDefault = await this.resolveDefaultLang(defaultlang);
+        const resolvedDefault = await this.defaultLanguageService.resolveDefaultLanguageCode(defaultlang);
         return this.eventFacadeService.getTranslatedForFrontend(resolvedDefault, currentlang ?? resolvedDefault, filter);
     }
 
@@ -369,7 +361,7 @@ export class EventsController {
         @param.query.string('defaultlang') defaultlang?: string,
         @param.query.string('currentlang') currentlang?: string,
     ): Promise<Record<string, unknown>> {
-        const resolvedDefault = await this.resolveDefaultLang(defaultlang);
+        const resolvedDefault = await this.defaultLanguageService.resolveDefaultLanguageCode(defaultlang);
         const result = await this.eventFacadeService.getTranslatedItemForFrontend(
             id, resolvedDefault, currentlang ?? resolvedDefault,
         );

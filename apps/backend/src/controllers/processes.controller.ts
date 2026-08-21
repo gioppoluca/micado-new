@@ -36,7 +36,7 @@
  *     Frontend re-fetches GET /graph afterwards to get stable numeric IDs.
  */
 
-import { CountSchema, repository } from '@loopback/repository';
+import { CountSchema } from '@loopback/repository';
 import {
     del, get, getModelSchemaRef, HttpErrors, param,
     patch, post, put, requestBody,
@@ -49,7 +49,7 @@ import { ProcessLegacy } from '../models/process-legacy.model';
 import { ProcessFull } from '../models/process-full.model';
 import { ProcessGraph } from '../models/process-graph.model';
 import { ProcessFacadeService, type ProcessListFilter } from '../services/process-facade.service';
-import { LanguageRepository } from '../repositories/language.repository';
+import { DefaultLanguageService } from '../services/default-language.service';
 
 // ── Shared JSON schema fragments ──────────────────────────────────────────────
 
@@ -119,19 +119,12 @@ export class ProcessesController {
         @service(ProcessFacadeService)
         protected processFacadeService: ProcessFacadeService,
 
+        @service(DefaultLanguageService)
+        protected defaultLanguageService: DefaultLanguageService,
+
         @inject(LoggingBindings.WINSTON_LOGGER)
         protected logger: WinstonLogger,
-
-        @repository(LanguageRepository)
-        protected languageRepository: LanguageRepository,
     ) { }
-
-    /** Returns the platform default language from the languages table. */
-    protected async resolveDefaultLang(requested?: string): Promise<string> {
-        if (requested) return requested;
-        const def = await this.languageRepository.findOne({ where: { isDefault: true } });
-        return def?.lang ?? 'en';
-    }
 
     // ── Create ────────────────────────────────────────────────────────────────
 
@@ -385,7 +378,7 @@ export class ProcessesController {
         @param.query.number('pageSize') pageSize?: number,
     ): Promise<Array<Record<string, unknown>>> {
         const filter = this.parseFilter({ topicIds, userTypeIds, page, pageSize });
-        const resolvedDefault = await this.resolveDefaultLang(defaultlang);
+        const resolvedDefault = await this.defaultLanguageService.resolveDefaultLanguageCode(defaultlang);
         return this.processFacadeService.getTranslatedForFrontend(resolvedDefault, currentlang ?? resolvedDefault, filter);
     }
 
@@ -419,7 +412,7 @@ export class ProcessesController {
         @param.query.string('defaultlang') defaultlang?: string,
         @param.query.string('currentlang') currentlang?: string,
     ): Promise<Record<string, unknown>> {
-        const resolvedDefault = await this.resolveDefaultLang(defaultlang);
+        const resolvedDefault = await this.defaultLanguageService.resolveDefaultLanguageCode(defaultlang);
         const result = await this.processFacadeService.getTranslatedItemForFrontend(
             id, resolvedDefault, currentlang ?? resolvedDefault,
         );

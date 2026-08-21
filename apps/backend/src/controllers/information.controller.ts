@@ -28,7 +28,7 @@
  *   pageSize     — max 100 (default 20)
  */
 
-import { CountSchema, repository } from '@loopback/repository';
+import { CountSchema } from '@loopback/repository';
 import {
     del, get, getModelSchemaRef, HttpErrors, param,
     patch, post, put, requestBody,
@@ -37,10 +37,10 @@ import { authenticate } from '@loopback/authentication';
 import { authorize } from '@loopback/authorization';
 import { inject, service } from '@loopback/core';
 import { WinstonLogger, LoggingBindings } from '@loopback/logging';
-import { LanguageRepository } from '../repositories';
 import { InformationLegacy } from '../models/information-legacy.model';
 import { InformationFull } from '../models/information-full.model';
 import { InformationFacadeService, type InformationListFilter } from '../services/information-facade.service';
+import { DefaultLanguageService } from '../services/default-language.service';
 
 const STATUS_SCHEMA = { type: 'string' as const, enum: ['DRAFT', 'APPROVED', 'PUBLISHED', 'ARCHIVED'] };
 const TRANSLATIONS_MAP_SCHEMA = {
@@ -62,19 +62,12 @@ export class InformationController {
         @service(InformationFacadeService)
         protected informationFacadeService: InformationFacadeService,
 
+        @service(DefaultLanguageService)
+        protected defaultLanguageService: DefaultLanguageService,
+
         @inject(LoggingBindings.WINSTON_LOGGER)
         protected logger: WinstonLogger,
-
-        @repository(LanguageRepository)
-        protected languageRepository: LanguageRepository,
     ) { }
-
-    /** Returns the platform default language from the languages table. */
-    protected async resolveDefaultLang(requested?: string): Promise<string> {
-        if (requested) return requested;
-        const def = await this.languageRepository.findOne({ where: { isDefault: true } });
-        return def?.lang ?? 'en';
-    }
 
     // ── Create ────────────────────────────────────────────────────────────────
 
@@ -283,7 +276,7 @@ export class InformationController {
         @param.query.number('pageSize') pageSize?: number,
     ): Promise<Array<Record<string, unknown>>> {
         const filter = this.parseFilter({ categoryId, topicIds, userTypeIds, page, pageSize });
-        const resolvedDefault = await this.resolveDefaultLang(defaultlang);
+        const resolvedDefault = await this.defaultLanguageService.resolveDefaultLanguageCode(defaultlang);
         return this.informationFacadeService.getTranslatedForFrontend(
             resolvedDefault, currentlang ?? resolvedDefault, filter,
         );
@@ -319,7 +312,7 @@ export class InformationController {
         @param.query.string('defaultlang') defaultlang?: string,
         @param.query.string('currentlang') currentlang?: string,
     ): Promise<Record<string, unknown>> {
-        const resolvedDefault = await this.resolveDefaultLang(defaultlang);
+        const resolvedDefault = await this.defaultLanguageService.resolveDefaultLanguageCode(defaultlang);
         const result = await this.informationFacadeService.getTranslatedItemForFrontend(
             id, resolvedDefault, currentlang ?? resolvedDefault,
         );

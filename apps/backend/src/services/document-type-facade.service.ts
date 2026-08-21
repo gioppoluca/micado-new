@@ -34,7 +34,8 @@
  *   present in data_extra.pictures[] at write time.
  */
 
-import { inject, injectable, BindingScope } from '@loopback/core';
+import { inject, injectable, BindingScope, service } from '@loopback/core';
+import { DefaultLanguageService } from './default-language.service';
 import { Filter, repository } from '@loopback/repository';
 import { HttpErrors } from '@loopback/rest';
 import { SecurityBindings, UserProfile } from '@loopback/security';
@@ -73,9 +74,13 @@ const SYSTEM_STAMP: ActorStamp = {
     realm: 'internal',
 };
 
+
 @injectable({ scope: BindingScope.TRANSIENT })
 export class DocumentTypeFacadeService {
     constructor(
+        @service(DefaultLanguageService)
+        protected defaultLanguageService: DefaultLanguageService,
+
         @repository(ContentItemRepository)
         protected contentItemRepository: ContentItemRepository,
 
@@ -213,7 +218,7 @@ export class DocumentTypeFacadeService {
     ): Promise<DocumentTypeLegacy> {
         const stamp = buildActorStamp(this.currentUser);
         const externalKey = String(await this.nextExternalKey());
-        const sourceLang = input.sourceLang ?? 'it';
+        const sourceLang = await this.defaultLanguageService.resolveDefaultLanguageCode(input.sourceLang);
 
         // Ensure every picture in the incoming array has a stable UUID
         const rawDataExtra = (input.dataExtra ?? {}) as Record<string, unknown>;
@@ -433,7 +438,7 @@ export class DocumentTypeFacadeService {
 
     async getTranslatedForFrontend(
         defaultLang: string,
-        currentLang = 'it',
+        currentLang: string,
     ): Promise<Array<Record<string, unknown>>> {
         const items = await this.contentItemRepository.find({
             where: { typeCode: DOCUMENT_TYPE_CODE, publishedRevisionId: { neq: null as unknown as string } },
@@ -899,7 +904,7 @@ export class DocumentTypeFacadeService {
             itemId: item.id!,
             revisionNo: latest ? latest.revisionNo + 1 : 1,
             status: 'DRAFT',
-            sourceLang: latest?.sourceLang ?? 'it',
+            sourceLang: latest?.sourceLang ?? await this.defaultLanguageService.getDefaultLanguageCode(),
             dataExtra: latest?.dataExtra ?? { validable: false },
             ...(stamp && { createdBy: stamp }),
         });
@@ -941,7 +946,7 @@ export class DocumentTypeFacadeService {
             itemId: hotspotItem.id!,
             revisionNo: latest ? latest.revisionNo + 1 : 1,
             status: 'DRAFT',
-            sourceLang: latest?.sourceLang ?? 'it',
+            sourceLang: latest?.sourceLang ?? await this.defaultLanguageService.getDefaultLanguageCode(),
             dataExtra: {},
             ...(stamp && { createdBy: stamp }),
         });

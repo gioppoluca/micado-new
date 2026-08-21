@@ -29,7 +29,8 @@
  *   userTypeIds — ALL specified user types must be linked
  */
 
-import { inject, injectable, BindingScope } from '@loopback/core';
+import { inject, injectable, BindingScope, service } from '@loopback/core';
+import { DefaultLanguageService } from './default-language.service';
 import { repository } from '@loopback/repository';
 import { HttpErrors } from '@loopback/rest';
 import { SecurityBindings, UserProfile } from '@loopback/security';
@@ -68,9 +69,13 @@ export interface InformationListFilter {
     pageSize?: number;
 }
 
+
 @injectable({ scope: BindingScope.TRANSIENT })
 export class InformationFacadeService {
     constructor(
+        @service(DefaultLanguageService)
+        protected defaultLanguageService: DefaultLanguageService,
+
         @repository(ContentItemRepository)
         protected contentItemRepository: ContentItemRepository,
 
@@ -208,7 +213,7 @@ export class InformationFacadeService {
     }): Promise<InformationLegacy> {
         const stamp = buildActorStamp(this.currentUser);
         const externalKey = String(await this.nextExternalKey());
-        const sourceLang = input.sourceLang ?? 'it';
+        const sourceLang = await this.defaultLanguageService.resolveDefaultLanguageCode(input.sourceLang);
 
         const item = await this.contentItemRepository.create({
             typeCode: INFORMATION_CODE,
@@ -393,7 +398,7 @@ export class InformationFacadeService {
 
     async getTranslatedForFrontend(
         defaultLang: string,
-        currentLang = 'it',
+        currentLang: string,
         filter: InformationListFilter = {},
     ): Promise<Array<Record<string, unknown>>> {
         const { page = 1, pageSize = 20 } = filter;
@@ -655,7 +660,7 @@ export class InformationFacadeService {
             itemId: item.id!,
             revisionNo: latest ? latest.revisionNo + 1 : 1,
             status: 'DRAFT',
-            sourceLang: latest?.sourceLang ?? 'it',
+            sourceLang: latest?.sourceLang ?? await this.defaultLanguageService.getDefaultLanguageCode(),
             dataExtra: {},
             ...(stamp && { createdBy: stamp }),
         });

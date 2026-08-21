@@ -33,7 +33,6 @@ import {
     CountSchema,
     Filter,
     FilterExcludingWhere,
-    repository,
 } from '@loopback/repository';
 import {
     del,
@@ -53,7 +52,7 @@ import { WinstonLogger, LoggingBindings } from '@loopback/logging';
 import { GlossaryLegacy } from '../models/glossary-legacy.model';
 import { GlossaryFull } from '../models/glossary-full.model';
 import { GlossaryFacadeService } from '../services/glossary-facade.service';
-import { LanguageRepository } from '../repositories/language.repository';
+import { DefaultLanguageService } from '../services/default-language.service';
 
 // ─── Reusable inline schema fragments ─────────────────────────────────────────
 
@@ -84,19 +83,12 @@ export class GlossariesController {
         @service(GlossaryFacadeService)
         protected glossaryFacadeService: GlossaryFacadeService,
 
+        @service(DefaultLanguageService)
+        protected defaultLanguageService: DefaultLanguageService,
+
         @inject(LoggingBindings.WINSTON_LOGGER)
         protected logger: WinstonLogger,
-
-        @repository(LanguageRepository)
-        protected languageRepository: LanguageRepository,
     ) { }
-
-    /** Returns the platform default language from the languages table. */
-    protected async resolveDefaultLang(requested?: string): Promise<string> {
-        if (requested) return requested;
-        const def = await this.languageRepository.findOne({ where: { isDefault: true } });
-        return def?.lang ?? 'en';
-    }
 
     // ── Create ────────────────────────────────────────────────────────────────
 
@@ -321,7 +313,7 @@ export class GlossariesController {
         @param.query.string('defaultlang') defaultlang?: string,
         @param.query.string('currentlang') currentlang?: string,
     ): Promise<Array<Record<string, unknown>>> {
-        const resolvedDefault = await this.resolveDefaultLang(defaultlang);
+        const resolvedDefault = await this.defaultLanguageService.resolveDefaultLanguageCode(defaultlang);
         return this.glossaryFacadeService.getTranslatedForFrontend(resolvedDefault, currentlang ?? resolvedDefault);
     }
 
@@ -366,7 +358,7 @@ export class GlossariesController {
         @param.query.string('currentlang') currentlang?: string,
         @param.query.boolean('includeDraft') includeDraft = true,
     ): Promise<Array<{ id: number; title: string; description: string; lang: string; published: boolean }>> {
-        const resolvedDefault2 = await this.resolveDefaultLang(defaultlang);
+        const resolvedDefault2 = await this.defaultLanguageService.resolveDefaultLanguageCode(defaultlang);
         return this.glossaryFacadeService.getForMentionPicker(resolvedDefault2, currentlang ?? resolvedDefault2, includeDraft);
     }
 }
