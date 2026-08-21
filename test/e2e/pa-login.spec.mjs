@@ -22,7 +22,7 @@ test('PA frontend: pa-admin can log in via Keycloak and reach a protected page',
 
   const diagnostics = attachPageDiagnostics(page, 'PA-LOGIN');
   try {
-    const {claims, finalUrl} = await loginWithKeycloak({
+    const {claims} = await loginWithKeycloak({
       page,
       testInfo,
       label: 'PA-LOGIN',
@@ -33,13 +33,22 @@ test('PA frontend: pa-admin can log in via Keycloak and reach a protected page',
 
     expect(claims.iss, 'Token was not issued by the pa_frontoffice realm').toContain('/realms/pa_frontoffice');
     expect(claims.realm_access?.roles ?? [], 'pa-admin token is missing the pa_admin role').toContain('pa_admin');
-    expect(finalUrl, 'Did not land back on /profile after login').toBe(`${environment.paBaseUrl}/profile`);
 
-    // src/pages/ProfilePage.vue renders these two lines verbatim from the
-    // Pinia auth store — a stable, markup-independent success signal that
+    // The redirect back from Keycloak still carries the OAuth params (state,
+    // session_state, iss, code) at the instant the token exchange completes —
+    // src/auth/keycloak.ts strips them asynchronously via history.replaceState
+    // right after, so asserting on the full URL here is a race. Assert on the
+    // rendered page first: it auto-retries, so it naturally waits out that
+    // cleanup. src/pages/ProfilePage.vue renders these two lines verbatim from
+    // the Pinia auth store — a stable, markup-independent success signal that
     // does not depend on any data-testid convention (none exists yet).
     await expect(page.getByText(/Authenticated:\s*true/)).toBeVisible();
     await expect(page.getByText(/Roles:.*pa_admin/)).toBeVisible();
+
+    // Now that the page has settled, only the path is worth asserting on —
+    // the query string is an implementation detail of when the cleanup ran.
+    const landedPath = new URL(page.url()).pathname;
+    expect(landedPath, `Did not land on /profile after login (was: ${page.url()})`).toBe('/profile');
 
     await saveKeycloakSession(page, 'pa-admin');
   } finally {

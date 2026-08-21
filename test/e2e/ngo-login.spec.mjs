@@ -1,28 +1,27 @@
 import {test, expect} from '@playwright/test';
 import {environment} from '../helpers/environment.mjs';
 import {attachPageDiagnostics} from '../helpers/diagnostics.mjs';
-import {loginWithKeycloak} from '../helpers/keycloak-login.mjs';
+import {loginWithKeycloak, saveKeycloakSession} from '../helpers/keycloak-login.mjs';
 
 /**
  * NGO frontend browser login.
  *
- * TEMPORARY SCOPE: apps/ngo_frontoffice was not available when this suite
- * was written, so — unlike pa-login.spec.mjs — this test does not know a
- * protected route in the NGO app itself to start from, and guessing one
- * (e.g. assuming it also has a public '/') risks a broken, hanging test.
+ * Verified against the real apps/ngo_frontoffice source: its router
+ * (src/router/routes.ts) and ProfilePage.vue are identical to the PA app's —
+ * /profile requires auth but no specific role, and renders the same two
+ * auth-store lines. See pa-login.spec.mjs for the matching test.
  *
- * Instead it starts from Keycloak's own built-in Account Console for the
- * ngo_frontoffice realm (`/realms/ngo_frontoffice/account/`), which every
- * realm ships with by default and which always requires login. This proves
- * the real login form and ngo_admin role work end to end without depending
- * on any NGO frontend code.
- *
- * Once apps/ngo_frontoffice is available, mirror pa-login.spec.mjs instead:
- *   1. point startUrl at a real requiresAuth route in that app;
- *   2. add the equivalent rendered-page assertion, if one exists;
- *   3. add saveKeycloakSession(page, 'ngo-admin') for future page tests.
+ * This replaces an earlier version of this test that logged in through
+ * Keycloak's built-in Account Console (`/realms/ngo_frontoffice/account/`)
+ * instead of the real ngo_frontoffice app client, because the actual
+ * frontend route wasn't available yet. That was the wrong fix even though
+ * the login itself succeeded: the Account Console authenticates through its
+ * own built-in `account-console` client, which does not carry the realm's
+ * custom roles the way the app's own `ngo_frontoffice` client does — hence
+ * the token came back with an empty roles list. Always authenticate through
+ * the actual client under test, not a Keycloak-provided stand-in.
  */
-test('NGO realm: ngo-admin can log in via Keycloak (Account Console)', async ({page}, testInfo) => {
+test('NGO frontend: ngo-admin can log in via Keycloak and reach a protected page', async ({page}, testInfo) => {
   test.skip(!environment.ngoAdminPassword, 'NGO_ADMIN_PASSWORD is missing from the project .env.');
 
   const diagnostics = attachPageDiagnostics(page, 'NGO-LOGIN');
@@ -31,13 +30,23 @@ test('NGO realm: ngo-admin can log in via Keycloak (Account Console)', async ({p
       page,
       testInfo,
       label: 'NGO-LOGIN',
-      startUrl: `${environment.keycloakBaseUrl}/realms/ngo_frontoffice/account/`,
+      startUrl: `${environment.ngoBaseUrl}/profile`,
       username: environment.ngoAdminUsername,
       password: environment.ngoAdminPassword,
     });
 
     expect(claims.iss, 'Token was not issued by the ngo_frontoffice realm').toContain('/realms/ngo_frontoffice');
     expect(claims.realm_access?.roles ?? [], 'ngo-admin token is missing the ngo_admin role').toContain('ngo_admin');
+
+    // Same race as PA: assert on the rendered page (auto-retries) before
+    // checking the URL, and check only the path — see pa-login.spec.mjs.
+    await expect(page.getByText(/Authenticated:\s*true/)).toBeVisible();
+    await expect(page.getByText(/Roles:.*ngo_admin/)).toBeVisible();
+
+    const landedPath = new URL(page.url()).pathname;
+    expect(landedPath, `Did not land on /profile after login (was: ${page.url()})`).toBe('/profile');
+
+    await saveKeycloakSession(page, 'ngo-admin');
   } finally {
     await diagnostics.attach(testInfo);
   }

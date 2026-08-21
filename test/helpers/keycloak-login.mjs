@@ -24,7 +24,12 @@ import {logAccessTokenEvidence} from './token.mjs';
  * @param {string} params.username
  * @param {string} params.password
  * @param {string} [params.tokenUrlPattern] - substring the token endpoint URL must contain
- * @returns {Promise<{claims: object, finalUrl: string}>}
+ * @returns {Promise<{claims: object, finalUrl: string}>} finalUrl is read right after the
+ *   token exchange and may still carry the OAuth redirect params (state, session_state,
+ *   iss, code) — apps that strip them client-side (history.replaceState) may not have done
+ *   so yet at this exact instant. Prefer asserting on rendered page content first (which
+ *   auto-retries and so naturally waits out that cleanup), and check only the URL's
+ *   pathname afterwards, not the full string.
  */
 export async function loginWithKeycloak({
   page,
