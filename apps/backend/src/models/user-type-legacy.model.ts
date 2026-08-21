@@ -39,4 +39,11 @@ export class UserTypeLegacy extends Model {
         },
     })
     dataExtra?: Record<string, unknown>;
+
+    @property({type: 'string'})
+    revisionId?: string;
+    @property({type: 'number'})
+    revisionNo?: number;
+    @property({type: 'object', jsonSchema: {additionalProperties: {enum: ['MISSING', 'SENT', 'TRANSLATED']}}})
+    translationStates?: Record<string, 'MISSING' | 'SENT' | 'TRANSLATED'>;
 }

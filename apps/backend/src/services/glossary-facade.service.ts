@@ -528,7 +528,7 @@ export class GlossaryFacadeService {
     }
 
     protected async findPreferredRevision(itemId: string): Promise<ContentRevision | null> {
-        for (const status of ['DRAFT', 'PUBLISHED', 'APPROVED'] as const) {
+        for (const status of ['DRAFT', 'APPROVED', 'PUBLISHED'] as const) {
             const rev = await this.contentRevisionRepository.findOne({
                 where: { itemId, status },
                 order: ['revisionNo DESC'],
@@ -570,7 +570,7 @@ export class GlossaryFacadeService {
                     title: row.title,
                     description: row.description,
                     i18nExtra: row.i18nExtra ?? {},
-                    tStatus: row.lang === draft.sourceLang ? 'DRAFT' : row.tStatus,
+                    tStatus: row.lang === draft.sourceLang ? 'DRAFT' : 'STALE',
                 });
             }
         }

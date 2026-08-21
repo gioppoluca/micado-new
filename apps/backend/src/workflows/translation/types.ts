@@ -117,6 +117,8 @@ export type TranslationStatus =
 export const wfId = {
     master: (revisionId: string) => `tr:${revisionId}`,
     child: (revisionId: string, lang: string) => `tr:${revisionId}:${lang}`,
+    dispatch: (revisionId: string, langs: string[]) =>
+        `tr:${revisionId}:dispatch:${[...langs].sort().join('-')}`,
     /** Source-lang TTS runs as a sibling of the master, not inside a child. */
     srcTts: (revisionId: string) => `tr:${revisionId}:src-tts`,
 };

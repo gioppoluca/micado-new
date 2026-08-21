@@ -61,6 +61,7 @@ import {
 } from '../repositories';
 import { buildActorStamp, ActorStamp } from '../auth/actor-stamp';
 import { TranslationWorkflowOrchestratorService } from './translation-workflow-orchestrator.service';
+import {TranslationStateProjectionService, TranslationChipState} from './translation-state-projection.service';
 
 const DOCUMENT_TYPE_CODE = 'DOCUMENT_TYPE';
 const PICTURE_HOTSPOT_CODE = 'PICTURE_HOTSPOT';
@@ -90,6 +91,9 @@ export class DocumentTypeFacadeService {
         @repository(ContentRevisionTranslationRepository)
         protected contentRevisionTranslationRepository: ContentRevisionTranslationRepository,
 
+        @service(TranslationStateProjectionService)
+        protected translationStates: TranslationStateProjectionService,
+
         @repository(ContentItemRelationRepository)
         protected contentItemRelationRepository: ContentItemRelationRepository,
 
@@ -115,10 +119,10 @@ export class DocumentTypeFacadeService {
         for (const item of items) {
             const revision = await this.findPreferredRevision(item.id!);
             if (!revision) continue;
-            const sourceTr = await this.contentRevisionTranslationRepository.findOne({
-                where: { revisionId: revision.id, lang: revision.sourceLang },
-            });
-            result.push(this.toLegacyDto(item, revision, sourceTr ?? undefined));
+            const rows = await this.contentRevisionTranslationRepository.find({where: {revisionId: revision.id}});
+            const sourceTr = rows.find(row => row.lang === revision.sourceLang);
+            const states = await this.translationStates.project(revision, rows);
+            result.push(this.toLegacyDto(item, revision, sourceTr, states));
         }
         return result;
     }
@@ -878,7 +882,7 @@ export class DocumentTypeFacadeService {
     }
 
     protected async findPreferredRevision(itemId: string): Promise<ContentRevision | null> {
-        for (const status of ['DRAFT', 'PUBLISHED', 'APPROVED'] as const) {
+        for (const status of ['DRAFT', 'APPROVED', 'PUBLISHED'] as const) {
             const rev = await this.contentRevisionRepository.findOne({
                 where: { itemId, status },
                 order: ['revisionNo DESC'],
@@ -920,7 +924,7 @@ export class DocumentTypeFacadeService {
                     title: row.title,
                     description: row.description,
                     i18nExtra: row.i18nExtra ?? {},
-                    tStatus: row.lang === draft.sourceLang ? 'DRAFT' : row.tStatus,
+                    tStatus: row.lang === draft.sourceLang ? 'DRAFT' : 'STALE',
                 });
             }
         }
@@ -958,6 +962,7 @@ export class DocumentTypeFacadeService {
         item: ContentItem,
         revision: ContentRevision,
         translation?: Partial<ContentRevisionTranslation>,
+        translationStates: Record<string, TranslationChipState> = {},
     ): DocumentTypeLegacy {
         return Object.assign(new DocumentTypeLegacy(), {
             id: Number(item.externalKey),
@@ -966,6 +971,9 @@ export class DocumentTypeFacadeService {
             status: revision.status,
             sourceLang: revision.sourceLang,
             dataExtra: revision.dataExtra ?? {},
+            revisionId: revision.id,
+            revisionNo: revision.revisionNo,
+            translationStates,
         });
     }
 

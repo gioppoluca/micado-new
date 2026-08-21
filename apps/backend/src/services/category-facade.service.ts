@@ -52,6 +52,7 @@ import {
 } from '../repositories';
 import { buildActorStamp, ActorStamp } from '../auth/actor-stamp';
 import { TranslationWorkflowOrchestratorService } from './translation-workflow-orchestrator.service';
+import {TranslationStateProjectionService, TranslationChipState} from './translation-state-projection.service';
 
 const CATEGORY_CODE = 'CATEGORY';
 
@@ -77,6 +78,9 @@ export class CategoryFacadeService {
 
         @repository(ContentRevisionTranslationRepository)
         protected contentRevisionTranslationRepository: ContentRevisionTranslationRepository,
+
+        @service(TranslationStateProjectionService)
+        protected translationStates: TranslationStateProjectionService,
 
         @repository(ContentItemRelationRepository)
         protected contentItemRelationRepository: ContentItemRelationRepository,
@@ -109,10 +113,10 @@ export class CategoryFacadeService {
                 'event' | 'information' | undefined;
             if (subtype && itemSubtype !== subtype) continue;
 
-            const sourceTr = await this.contentRevisionTranslationRepository.findOne({
-                where: { revisionId: revision.id, lang: revision.sourceLang },
-            });
-            result.push(this.toLegacyDto(item, revision, sourceTr ?? undefined));
+            const rows = await this.contentRevisionTranslationRepository.find({where: {revisionId: revision.id}});
+            const sourceTr = rows.find(row => row.lang === revision.sourceLang);
+            const states = await this.translationStates.project(revision, rows);
+            result.push(this.toLegacyDto(item, revision, sourceTr, states));
         }
         return result;
     }
@@ -471,7 +475,7 @@ export class CategoryFacadeService {
     }
 
     protected async findPreferredRevision(itemId: string): Promise<ContentRevision | null> {
-        for (const status of ['DRAFT', 'PUBLISHED', 'APPROVED'] as const) {
+        for (const status of ['DRAFT', 'APPROVED', 'PUBLISHED'] as const) {
             const rev = await this.contentRevisionRepository.findOne({
                 where: { itemId, status },
                 order: ['revisionNo DESC'],
@@ -514,7 +518,7 @@ export class CategoryFacadeService {
                     title: row.title,
                     description: '',
                     i18nExtra: {},
-                    tStatus: row.lang === draft.sourceLang ? 'DRAFT' : row.tStatus,
+                    tStatus: row.lang === draft.sourceLang ? 'DRAFT' : 'STALE',
                 });
             }
         }
@@ -527,6 +531,7 @@ export class CategoryFacadeService {
         item: ContentItem,
         revision: ContentRevision,
         translation?: Partial<ContentRevisionTranslation>,
+        translationStates: Record<string, TranslationChipState> = {},
     ): CategoryLegacy {
         const subtype = (revision.dataExtra as { subtype?: string } | undefined)?.subtype as
             'event' | 'information' | undefined;
@@ -536,6 +541,9 @@ export class CategoryFacadeService {
             status: revision.status,
             sourceLang: revision.sourceLang,
             subtype: subtype ?? 'event',
+            revisionId: revision.id,
+            revisionNo: revision.revisionNo,
+            translationStates,
         });
     }
 

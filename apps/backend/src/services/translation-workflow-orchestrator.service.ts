@@ -51,6 +51,7 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import { LoggingBindings } from '@loopback/logging';
 import type { Logger } from 'winston';
 import { TranslationMasterWorkflow } from '../workflows/translation/translation.master.workflow';
+import { TranslationDispatchWorkflow } from '../workflows/translation/translation.dispatch.workflow';
 import { TranslationSteps, registerRepositoriesForSteps, registerGiteaExportServiceForSteps } from '../workflows/translation/translation.steps';
 import {
     TranslationJobInput, WeblateWebhookPayload,
@@ -61,6 +62,8 @@ import type { ContentItem } from '../models/content-item.model';
 import { LanguageRepository } from '../repositories/language.repository';
 import { FeatureFlagRepository } from '../repositories/feature-flag.repository';
 import { ContentRevisionTranslationRepository } from '../repositories/content-revision-translation.repository';
+import { ContentRevisionRepository } from '../repositories/content-revision.repository';
+import { ContentItemRepository } from '../repositories/content-item.repository';
 import { GiteaTranslationExportService } from './gitea-translation-export.service';
 
 // ── Status view (for polling/dashboard) ──────────────────────────────────────
@@ -96,6 +99,23 @@ export type SignalResult =
     | { signaled: true; revisionId: string }
     | { signaled: false; reason: string };
 
+export type DispatchMissingResult = {
+    revisionId: string;
+    dispatched: string[];
+    alreadyTranslated: string[];
+    alreadyQueued: string[];
+};
+
+const CATEGORY_BY_TYPE: Record<string, string> = {
+    USER_TYPE: 'user-types', TOPIC: 'topics', CATEGORY: 'category',
+    DOCUMENT_TYPE: 'document-types', EVENT: 'event', INFORMATION: 'information',
+    GLOSSARY: 'glossary', PROCESS: 'process',
+};
+
+const QUEUED_STATUSES: TranslationStatus[] = [
+    'WAITING_TRANSLATION', 'RECEIVED_TRANSLATION', 'GENERATING_MP3', 'SAVING_TO_DB', 'DONE',
+];
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 @injectable({ scope: BindingScope.SINGLETON })
@@ -126,6 +146,12 @@ export class TranslationWorkflowOrchestratorService {
 
         @repository(ContentRevisionTranslationRepository)
         private translationRepository: ContentRevisionTranslationRepository,
+
+        @repository(ContentRevisionRepository)
+        private revisionRepository: ContentRevisionRepository,
+
+        @repository(ContentItemRepository)
+        private itemRepository: ContentItemRepository,
 
         @inject('services.GiteaTranslationExportService')
         private giteaExportService: GiteaTranslationExportService,
@@ -408,8 +434,8 @@ export class TranslationWorkflowOrchestratorService {
             targetLangs.map(async lang => {
                 const childId = wfId.child(revisionId, lang);
                 const [status, mp3Url] = await Promise.all([
-                    DBOS.getEvent<TranslationStatus>(childId, evKey.childStatus(lang)),
-                    DBOS.getEvent<string | null>(childId, evKey.childMp3(lang)),
+                    DBOS.getEvent<TranslationStatus>(childId, evKey.childStatus(lang), 0),
+                    DBOS.getEvent<string | null>(childId, evKey.childMp3(lang), 0),
                 ]);
                 return { lang, status, mp3Url: mp3Url ?? null };
             }),
@@ -418,6 +444,7 @@ export class TranslationWorkflowOrchestratorService {
         const masterDone = await DBOS.getEvent<boolean>(
             wfId.master(revisionId),
             evKey.masterDone(),
+            0,
         );
 
         return {
@@ -427,6 +454,74 @@ export class TranslationWorkflowOrchestratorService {
                 statuses.map(s => [s.lang, { status: s.status, mp3Url: s.mp3Url }]),
             ),
         };
+    }
+
+    async getLanguageWorkflowStatus(revisionId: string, lang: string): Promise<TranslationStatus | null> {
+        return (await DBOS.getEvent<TranslationStatus>(
+            wfId.child(revisionId, lang), evKey.childStatus(lang), 0,
+        )) ?? null;
+    }
+
+    /** Dispatches only active languages missing from an approved/published revision. */
+    async dispatchMissingTranslations(
+        revisionId: string,
+        requestedLangs?: string[],
+    ): Promise<DispatchMissingResult> {
+        const revision = await this.revisionRepository.findById(revisionId);
+        if (revision.status !== 'APPROVED' && revision.status !== 'PUBLISHED') {
+            throw new Error('Missing translations can only be dispatched for APPROVED or PUBLISHED revisions');
+        }
+        const item = await this.itemRepository.findById(revision.itemId);
+        const category = CATEGORY_BY_TYPE[item.typeCode];
+        if (!category) throw new Error(`Unsupported content type: ${item.typeCode}`);
+
+        const [languages, rows, aiFlag, ttsFlag] = await Promise.all([
+            this.languageRepository.find({ where: { active: true } }),
+            this.translationRepository.find({ where: { revisionId } }),
+            this.readFlag(FLAG_AI_TRANSLATION),
+            this.readFlag(FLAG_TTS),
+        ]);
+        const requested = requestedLangs ? new Set(requestedLangs) : undefined;
+        const targets = languages.map(l => l.lang)
+            .filter(lang => lang !== revision.sourceLang && (!requested || requested.has(lang)));
+        const source = rows.find(row => row.lang === revision.sourceLang);
+        if (!source) throw new Error(`Source translation missing for revision ${revisionId}`);
+
+        const alreadyTranslated: string[] = [];
+        const candidates: string[] = [];
+        for (const lang of targets) {
+            const row = rows.find(r => r.lang === lang);
+            if (row && (row.tStatus === 'APPROVED' || row.tStatus === 'PUBLISHED')) {
+                alreadyTranslated.push(lang);
+            } else candidates.push(lang);
+        }
+
+        const statuses = await Promise.all(candidates.map(lang => this.getLanguageWorkflowStatus(revisionId, lang)));
+        const alreadyQueued: string[] = [];
+        const dispatched = candidates.filter((lang, index) => {
+            if (statuses[index] && QUEUED_STATUSES.includes(statuses[index]!)) {
+                alreadyQueued.push(lang);
+                return false;
+            }
+            return statuses[index] == null;
+        });
+
+        if (dispatched.length > 0) {
+            const fields = this.filterNonEmptyFields({
+                title: source.title,
+                description: source.description ?? '',
+            });
+            const job: TranslationJobInput = {
+                revisionId, category, itemId: String(item.externalKey),
+                sourceLang: revision.sourceLang, fields, targetLangs: dispatched,
+                flags: { aiTranslation: aiFlag, tts: ttsFlag },
+            };
+            await DBOS.startWorkflow(TranslationDispatchWorkflow, {
+                workflowID: wfId.dispatch(revisionId, dispatched),
+            }).run(job);
+        }
+
+        return { revisionId, dispatched, alreadyTranslated, alreadyQueued };
     }
 
     // ── Registry inspection (dev/admin) ───────────────────────────────────────

@@ -68,6 +68,7 @@ import {
 } from '../repositories';
 import { buildActorStamp, ActorStamp } from '../auth/actor-stamp';
 import { TranslationWorkflowOrchestratorService } from './translation-workflow-orchestrator.service';
+import {TranslationStateProjectionService, TranslationChipState} from './translation-state-projection.service';
 
 const USER_TYPE_CODE = 'USER_TYPE';
 
@@ -101,6 +102,9 @@ export class UserTypeFacadeService {
         @repository(ContentRevisionTranslationRepository)
         protected contentRevisionTranslationRepository: ContentRevisionTranslationRepository,
 
+        @service(TranslationStateProjectionService)
+        protected translationStates: TranslationStateProjectionService,
+
         // The authenticated user from the current HTTP request.
         // optional: true — the facade still works in background contexts
         // (boot observers, migration scripts) where no JWT is present.
@@ -127,12 +131,10 @@ export class UserTypeFacadeService {
             const revision = await this.findPreferredRevision(item.id!);
             if (!revision) continue;
 
-            const sourceTranslation =
-                await this.contentRevisionTranslationRepository.findOne({
-                    where: { revisionId: revision.id, lang: revision.sourceLang },
-                });
-
-            result.push(this.toLegacyDto(item, revision, sourceTranslation ?? undefined));
+            const rows = await this.contentRevisionTranslationRepository.find({where: {revisionId: revision.id}});
+            const sourceTranslation = rows.find(row => row.lang === revision.sourceLang);
+            const states = await this.translationStates.project(revision, rows);
+            result.push(this.toLegacyDto(item, revision, sourceTranslation, states));
         }
 
         return result;
@@ -615,7 +617,7 @@ export class UserTypeFacadeService {
         itemId: string,
     ): Promise<ContentRevision | null> {
         // Editor always sees the most recent work: DRAFT > PUBLISHED > APPROVED
-        for (const status of ['DRAFT', 'PUBLISHED', 'APPROVED'] as const) {
+        for (const status of ['DRAFT', 'APPROVED', 'PUBLISHED'] as const) {
             const rev = await this.contentRevisionRepository.findOne({
                 where: { itemId, status },
                 order: ['revisionNo DESC'],
@@ -666,7 +668,7 @@ export class UserTypeFacadeService {
                     i18nExtra: row.i18nExtra ?? {},
                     // Source lang stays DRAFT; other langs keep their current tStatus
                     // (they may already be STALE from a previous approval cycle)
-                    tStatus: row.lang === draft.sourceLang ? 'DRAFT' : row.tStatus,
+                    tStatus: row.lang === draft.sourceLang ? 'DRAFT' : 'STALE',
                 });
             }
         }
@@ -680,6 +682,7 @@ export class UserTypeFacadeService {
         item: ContentItem,
         revision: ContentRevision,
         translation?: Partial<ContentRevisionTranslation>,
+        translationStates: Record<string, TranslationChipState> = {},
     ): UserTypeLegacy {
         return Object.assign(new UserTypeLegacy(), {
             id: Number(item.externalKey),
@@ -688,6 +691,9 @@ export class UserTypeFacadeService {
             status: revision.status,
             sourceLang: revision.sourceLang,
             dataExtra: revision.dataExtra ?? {},
+            revisionId: revision.id,
+            revisionNo: revision.revisionNo,
+            translationStates,
         });
     }
 

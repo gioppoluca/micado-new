@@ -68,6 +68,7 @@ import {
 } from '../repositories';
 import { buildActorStamp, ActorStamp } from '../auth/actor-stamp';
 import { TranslationWorkflowOrchestratorService } from './translation-workflow-orchestrator.service';
+import {TranslationStateProjectionService, TranslationChipState} from './translation-state-projection.service';
 
 const TOPIC_CODE = 'TOPIC';
 const RELATION_PARENT = 'parent';
@@ -95,6 +96,9 @@ export class TopicFacadeService {
         @repository(ContentRevisionTranslationRepository)
         protected contentRevisionTranslationRepository: ContentRevisionTranslationRepository,
 
+        @service(TranslationStateProjectionService)
+        protected translationStates: TranslationStateProjectionService,
+
         @repository(ContentItemRelationRepository)
         protected contentItemRelationRepository: ContentItemRelationRepository,
 
@@ -120,12 +124,12 @@ export class TopicFacadeService {
         for (const item of items) {
             const revision = await this.findPreferredRevision(item.id!);
             if (!revision) continue;
-            const sourceTr = await this.contentRevisionTranslationRepository.findOne({
-                where: { revisionId: revision.id, lang: revision.sourceLang },
-            });
+            const rows = await this.contentRevisionTranslationRepository.find({where: {revisionId: revision.id}});
+            const sourceTr = rows.find(row => row.lang === revision.sourceLang);
+            const states = await this.translationStates.project(revision, rows);
             const parentId = await this.getParentExternalKey(item.id!);
             const depth = await this.computeDepth(item.id!);
-            result.push(this.toLegacyDto(item, revision, sourceTr ?? undefined, parentId, depth));
+            result.push(this.toLegacyDto(item, revision, sourceTr, parentId, depth, states));
         }
         return result;
     }
@@ -665,7 +669,7 @@ export class TopicFacadeService {
     }
 
     protected async findPreferredRevision(itemId: string): Promise<ContentRevision | null> {
-        for (const status of ['DRAFT', 'PUBLISHED', 'APPROVED'] as const) {
+        for (const status of ['DRAFT', 'APPROVED', 'PUBLISHED'] as const) {
             const rev = await this.contentRevisionRepository.findOne({
                 where: { itemId, status },
                 order: ['revisionNo DESC'],
@@ -707,7 +711,7 @@ export class TopicFacadeService {
                     title: row.title,
                     description: row.description,
                     i18nExtra: row.i18nExtra ?? {},
-                    tStatus: row.lang === draft.sourceLang ? 'DRAFT' : row.tStatus,
+                    tStatus: row.lang === draft.sourceLang ? 'DRAFT' : 'STALE',
                 });
             }
         }
@@ -722,6 +726,7 @@ export class TopicFacadeService {
         translation?: Partial<ContentRevisionTranslation>,
         parentId?: number | null,
         depth?: number,
+        translationStates: Record<string, TranslationChipState> = {},
     ): TopicLegacy {
         return Object.assign(new TopicLegacy(), {
             id: Number(item.externalKey),
@@ -732,6 +737,9 @@ export class TopicFacadeService {
             dataExtra: revision.dataExtra ?? {},
             parentId: parentId ?? null,
             depth: depth ?? 0,
+            revisionId: revision.id,
+            revisionNo: revision.revisionNo,
+            translationStates,
         });
     }
 

@@ -74,6 +74,13 @@ export class TopicLegacy extends Model {
     @property({ type: 'number' })
     depth?: number;
 
+    @property({type: 'string'})
+    revisionId?: string;
+    @property({type: 'number'})
+    revisionNo?: number;
+    @property({type: 'object', jsonSchema: {additionalProperties: {enum: ['MISSING', 'SENT', 'TRANSLATED']}}})
+    translationStates?: Record<string, 'MISSING' | 'SENT' | 'TRANSLATED'>;
+
     constructor(data?: Partial<TopicLegacy>) {
         super(data);
     }
