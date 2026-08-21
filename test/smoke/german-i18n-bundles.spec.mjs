@@ -15,13 +15,35 @@ async function applicationJavascript(request, app) {
 
   expect(assetReferences.length, `${app} has no JavaScript assets`).toBeGreaterThan(0);
 
-  const responses = await Promise.all(
-    assetReferences.map(asset => request.get(asset, requestOptions)),
-  );
-  for (const [index, response] of responses.entries()) {
-    expect(response.ok(), assetReferences[index]).toBeTruthy();
+  const pending = [...assetReferences];
+  const visited = new Set();
+  const sources = [];
+
+  while (pending.length > 0) {
+    const asset = pending.shift();
+    if (!asset || visited.has(asset)) continue;
+    visited.add(asset);
+
+    const response = await request.get(asset, requestOptions);
+    expect(response.ok(), asset).toBeTruthy();
+    const source = await response.text();
+    sources.push(source);
+
+    // In dev mode the HTML references only Quasar's client-entry module.
+    // Follow its same-host application imports until the actual i18n modules;
+    // production builds are covered by the same traversal through /assets/.
+    const imports = source.matchAll(
+      /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["']([^"']+)["']/g,
+    );
+    for (const match of imports) {
+      const imported = new URL(match[1], asset);
+      if (imported.origin !== new URL(gatewayUrl).origin) continue;
+      if (!/^\/(?:src|assets|\.quasar)\//.test(imported.pathname)) continue;
+      if (!visited.has(imported.href)) pending.push(imported.href);
+    }
   }
-  return (await Promise.all(responses.map(response => response.text()))).join('\n');
+
+  return sources.join('\n');
 }
 
 test.describe('German i18n bundles', () => {

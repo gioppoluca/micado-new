@@ -20,6 +20,14 @@ export class TranslationDispatchWorkflow {
             }
         }
 
+        // Register the durable receivers before touching Gitea. This both avoids
+        // losing a fast webhook and makes the operational state immediately SENT.
+        await Promise.all(targetLangs.map(lang =>
+            DBOS.startWorkflow(TranslationChildWorkflow, {
+                workflowID: wfId.child(revisionId, lang),
+            }).run({ revisionId, category, itemId, sourceLang, lang, fields, flags }),
+        ));
+
         await TranslationSteps.pushSourceFieldsToGitea({
             category,
             itemId,
@@ -29,12 +37,6 @@ export class TranslationDispatchWorkflow {
             aiTranslation: flags.aiTranslation,
             aiResults: flags.aiTranslation ? aiResults : undefined,
         });
-
-        await Promise.all(targetLangs.map(lang =>
-            DBOS.startWorkflow(TranslationChildWorkflow, {
-                workflowID: wfId.child(revisionId, lang),
-            }).run({ revisionId, category, itemId, sourceLang, lang, fields, flags }),
-        ));
 
         return targetLangs;
     }
