@@ -50,7 +50,7 @@ test.describe('Categories API — CRUD lifecycle', () => {
         const postRes = await api.post('/categories', {
             data: {
                 title: 'Integrazione',
-                sourceLang: 'it',
+                sourceLang: 'en',
                 subtype: 'event',
                 translations: {
                     it: { title: 'Integrazione' },
@@ -61,7 +61,7 @@ test.describe('Categories API — CRUD lifecycle', () => {
         expect(postRes.status()).toBe(200);
         const created = await postRes.json() as Record<string, unknown>;
         expect(created.id).toBeTruthy();
-        expect(created.title).toBe('Integrazione');
+        expect(created.title).toBe('Integration');
         expect(created.status).toBe('DRAFT');
         expect(created.subtype).toBe('event');
         const catId = created.id as number;
@@ -91,7 +91,7 @@ test.describe('Categories API — CRUD lifecycle', () => {
         const putRes = await api.put(`/categories/${catId}`, {
             data: {
                 status: 'DRAFT',
-                sourceLang: 'it',
+                sourceLang: 'en',
                 translations: {
                     it: { title: 'Integrazione (aggiornata)' },
                     en: { title: 'Integration (updated)' },
@@ -120,8 +120,8 @@ test.describe('Categories API — CRUD lifecycle', () => {
         const afterPatch = await afterPatchRes.json() as Record<string, unknown>;
         expect(afterPatch.status).toBe('APPROVED');
         const afterPatchTrs = afterPatch.translations as Record<string, Record<string, string>>;
-        expect(afterPatchTrs.it?.tStatus).toBe('APPROVED');
-        expect(afterPatchTrs.en?.tStatus).toBe('STALE'); // non-source → STALE
+        expect(afterPatchTrs.it?.tStatus).toBe('STALE'); // non-source → STALE
+        expect(afterPatchTrs.en?.tStatus).toBe('APPROVED');
         expect(afterPatchTrs.de?.tStatus).toBe('STALE');
 
         // DELETE
@@ -141,10 +141,10 @@ test.describe('Categories API — Subtype filtering', () => {
         const api = await adminApi();
 
         const evtRes = await api.post('/categories', {
-            data: { title: 'Categoria Evento', sourceLang: 'it', subtype: 'event' },
+            data: { title: 'Categoria Evento', sourceLang: 'en', subtype: 'event' },
         });
         const infoRes = await api.post('/categories', {
-            data: { title: 'Categoria Informazione', sourceLang: 'it', subtype: 'information' },
+            data: { title: 'Categoria Informazione', sourceLang: 'en', subtype: 'information' },
         });
         const evtId = (await evtRes.json() as Record<string, unknown>).id as number;
         const infoId = (await infoRes.json() as Record<string, unknown>).id as number;
@@ -184,7 +184,7 @@ test.describe('Categories API — Translation workflow', () => {
         const postRes = await api.post('/categories', {
             data: {
                 title: 'Microcredito',
-                sourceLang: 'it',
+                sourceLang: 'en',
                 subtype: 'event',
                 translations: {
                     it: { title: 'Microcredito' },
@@ -198,7 +198,7 @@ test.describe('Categories API — Translation workflow', () => {
         await api.put(`/categories/${catId}`, {
             data: {
                 status: 'APPROVED',
-                sourceLang: 'it',
+                sourceLang: 'en',
                 translations: {
                     it: { title: 'Microcredito' },
                     en: { title: 'Microcredit' },
@@ -210,8 +210,8 @@ test.describe('Categories API — Translation workflow', () => {
         const afterApprove = await afterApproveRes.json() as Record<string, unknown>;
         expect(afterApprove.status).toBe('APPROVED');
         const trs = afterApprove.translations as Record<string, Record<string, string>>;
-        expect(trs.it?.tStatus).toBe('APPROVED');
-        expect(trs.en?.tStatus).toBe('STALE');
+        expect(trs.it?.tStatus).toBe('STALE');
+        expect(trs.en?.tStatus).toBe('APPROVED');
 
         // Publish
         const publishRes = await api.get(`/categories/to-production?id=${catId}`);
@@ -237,7 +237,7 @@ test.describe('Categories API — Delete guard', () => {
 
         const api = await adminApi();
         const postRes = await api.post('/categories', {
-            data: { title: 'In uso', sourceLang: 'it', subtype: 'event' },
+            data: { title: 'In uso', sourceLang: 'en', subtype: 'event' },
         });
         const catId = (await postRes.json() as Record<string, unknown>).id as number;
 
@@ -265,9 +265,9 @@ test.describe('Categories API — Public endpoint', () => {
         const postRes = await admin.post('/categories', {
             data: {
                 title: 'Corso di lingua',
-                sourceLang: 'it',
+                sourceLang: 'en',
                 subtype: 'event',
-                translations: { it: { title: 'Corso di lingua' } },
+                translations: { en: { title: 'Corso di lingua' } },
             },
         });
         const catId = (await postRes.json() as Record<string, unknown>).id as number;
@@ -275,14 +275,14 @@ test.describe('Categories API — Public endpoint', () => {
         await admin.put(`/categories/${catId}`, {
             data: {
                 status: 'APPROVED',
-                sourceLang: 'it',
-                translations: { it: { title: 'Corso di lingua' } },
+                sourceLang: 'en',
+                translations: { en: { title: 'Corso di lingua' } },
             },
         });
         await admin.get(`/categories/to-production?id=${catId}`);
 
         // Unauthenticated access
-        const migrantRes = await pub.get('/categories-migrant?subtype=event&defaultlang=it&currentlang=it');
+        const migrantRes = await pub.get('/categories-migrant?subtype=event&defaultlang=en&currentlang=it');
         expect(migrantRes.status()).toBe(200);
         const migrantList = await migrantRes.json() as Array<Record<string, unknown>>;
         const found = migrantList.find(c => c.id === catId);

@@ -53,7 +53,7 @@ async function createEvent(api: APIRequestContext, overrides: Record<string, unk
         data: {
             title: 'Test Event',
             description: 'A **test** event description.',
-            sourceLang: 'it',
+            sourceLang: 'en',
             dataExtra: {
                 startDate: '2025-06-01T09:00:00.000Z',
                 endDate: '2025-06-01T12:00:00.000Z',
@@ -71,7 +71,7 @@ async function createEvent(api: APIRequestContext, overrides: Record<string, unk
 
 async function createCategory(api: APIRequestContext, title: string): Promise<number> {
     const res = await api.post('/categories', {
-        data: { title, sourceLang: 'it', subtype: 'event' },
+        data: { title, sourceLang: 'en', subtype: 'event' },
     });
     return (await res.json() as Record<string, unknown>).id as number;
 }
@@ -87,7 +87,7 @@ test.describe('Events API — CRUD lifecycle', () => {
             data: {
                 title: 'Corso di italiano',
                 description: 'Corso gratuito di **italiano** per migranti.',
-                sourceLang: 'it',
+                sourceLang: 'en',
                 dataExtra: {
                     startDate: '2025-06-15T09:00:00.000Z',
                     endDate: '2025-06-15T12:00:00.000Z',
@@ -104,7 +104,7 @@ test.describe('Events API — CRUD lifecycle', () => {
         expect(postRes.status()).toBe(200);
         const created = await postRes.json() as Record<string, unknown>;
         expect(created.id).toBeTruthy();
-        expect(created.title).toBe('Corso di italiano');
+        expect(created.title).toBe('Italian course');
         expect(created.status).toBe('DRAFT');
         expect(created.isFree).toBe(true);
         expect(created.categoryId).toBeNull();
@@ -139,7 +139,7 @@ test.describe('Events API — CRUD lifecycle', () => {
         const putRes = await api.put(`/events/${eventId}`, {
             data: {
                 status: 'DRAFT',
-                sourceLang: 'it',
+                sourceLang: 'en',
                 dataExtra: {
                     startDate: '2025-07-01T14:00:00.000Z',
                     endDate: '2025-07-01T17:00:00.000Z',
@@ -179,8 +179,8 @@ test.describe('Events API — CRUD lifecycle', () => {
         const afterPatch = await afterPatchRes.json() as Record<string, unknown>;
         expect(afterPatch.status).toBe('APPROVED');
         const afterPatchTrs = afterPatch.translations as Record<string, Record<string, string>>;
-        expect(afterPatchTrs.it?.tStatus).toBe('APPROVED');
-        expect(afterPatchTrs.en?.tStatus).toBe('STALE');
+        expect(afterPatchTrs.it?.tStatus).toBe('STALE');
+        expect(afterPatchTrs.en?.tStatus).toBe('APPROVED');
 
         // DELETE
         const delRes = await api.delete(`/events/${eventId}`);
@@ -204,12 +204,12 @@ test.describe('Events API — Relation management', () => {
         // PUT with relations
         await api.put(`/events/${eventId}`, {
             data: {
-                sourceLang: 'it',
+                sourceLang: 'en',
                 dataExtra: { startDate: '2025-06-01T09:00:00.000Z', endDate: '2025-06-01T12:00:00.000Z', isFree: true },
                 categoryId: catId,
                 topicIds: [],
                 userTypeIds: [],
-                translations: { it: { title: 'Test Event', description: '' } },
+                translations: { en: { title: 'Test Event', description: '' } },
             },
         });
 
@@ -220,12 +220,12 @@ test.describe('Events API — Relation management', () => {
         // Clear category via PUT with categoryId: null
         await api.put(`/events/${eventId}`, {
             data: {
-                sourceLang: 'it',
+                sourceLang: 'en',
                 dataExtra: { startDate: '2025-06-01T09:00:00.000Z', endDate: '2025-06-01T12:00:00.000Z', isFree: true },
                 categoryId: null,
                 topicIds: [],
                 userTypeIds: [],
-                translations: { it: { title: 'Test Event', description: '' } },
+                translations: { en: { title: 'Test Event', description: '' } },
             },
         });
 
@@ -253,16 +253,16 @@ test.describe('Events API — Filters', () => {
         // Assign cat1 to evt1, cat2 to evt2
         await api.put(`/events/${evt1}`, {
             data: {
-                sourceLang: 'it', categoryId: cat1, topicIds: [], userTypeIds: [],
+                sourceLang: 'en', categoryId: cat1, topicIds: [], userTypeIds: [],
                 dataExtra: { startDate: '2025-06-01T09:00:00.000Z', endDate: '2025-06-01T12:00:00.000Z', isFree: true },
-                translations: { it: { title: 'Evento Sport', description: '' } },
+                translations: { en: { title: 'Evento Sport', description: '' } },
             },
         });
         await api.put(`/events/${evt2}`, {
             data: {
-                sourceLang: 'it', categoryId: cat2, topicIds: [], userTypeIds: [],
+                sourceLang: 'en', categoryId: cat2, topicIds: [], userTypeIds: [],
                 dataExtra: { startDate: '2025-06-01T09:00:00.000Z', endDate: '2025-06-01T12:00:00.000Z', isFree: true },
-                translations: { it: { title: 'Evento Cultura', description: '' } },
+                translations: { en: { title: 'Evento Cultura', description: '' } },
             },
         });
 
@@ -328,7 +328,7 @@ test.describe('Events API — Translation workflow', () => {
         await api.put(`/events/${eventId}`, {
             data: {
                 status: 'APPROVED',
-                sourceLang: 'it',
+                sourceLang: 'en',
                 dataExtra: { startDate: '2025-06-01T09:00:00.000Z', endDate: '2025-06-01T12:00:00.000Z', isFree: true },
                 categoryId: null, topicIds: [], userTypeIds: [],
                 translations: {
@@ -342,8 +342,8 @@ test.describe('Events API — Translation workflow', () => {
         const afterApprove = await afterApproveRes.json() as Record<string, unknown>;
         expect(afterApprove.status).toBe('APPROVED');
         const trs = afterApprove.translations as Record<string, Record<string, string>>;
-        expect(trs.it?.tStatus).toBe('APPROVED');
-        expect(trs.en?.tStatus).toBe('STALE');
+        expect(trs.it?.tStatus).toBe('STALE');
+        expect(trs.en?.tStatus).toBe('APPROVED');
 
         // Publish
         const publishRes = await api.get(`/events/to-production?id=${eventId}`);
@@ -376,16 +376,16 @@ test.describe('Events API — Migrant endpoint', () => {
         await admin.put(`/events/${eventId}`, {
             data: {
                 status: 'APPROVED',
-                sourceLang: 'it',
+                sourceLang: 'en',
                 dataExtra: { startDate: '2025-06-01T09:00:00.000Z', endDate: '2025-06-01T12:00:00.000Z', isFree: true },
                 categoryId: null, topicIds: [], userTypeIds: [],
-                translations: { it: { title: 'Evento Pubblico', description: 'Descrizione dell\'evento.' } },
+                translations: { en: { title: 'Evento Pubblico', description: 'Descrizione dell\'evento.' } },
             },
         });
         await admin.get(`/events/to-production?id=${eventId}`);
 
         // Unauthenticated access
-        const migrantRes = await pub.get('/events-migrant?defaultlang=it&currentlang=it');
+        const migrantRes = await pub.get('/events-migrant?defaultlang=en&currentlang=it');
         expect(migrantRes.status()).toBe(200);
         const migrantList = await migrantRes.json() as Array<Record<string, unknown>>;
         const found = migrantList.find(e => e.id === eventId);
@@ -395,7 +395,7 @@ test.describe('Events API — Migrant endpoint', () => {
 
         // DRAFT events should NOT appear
         const draftId = await createEvent(admin, { title: 'Evento Bozza' });
-        const migrantRes2 = await pub.get('/events-migrant?defaultlang=it&currentlang=it');
+        const migrantRes2 = await pub.get('/events-migrant?defaultlang=en&currentlang=it');
         const migrantList2 = await migrantRes2.json() as Array<Record<string, unknown>>;
         expect(migrantList2.some(e => e.id === draftId)).toBe(false);
 

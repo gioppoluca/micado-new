@@ -69,7 +69,7 @@ test.describe('DocumentTypes API — CRUD lifecycle', () => {
             data: {
                 document: 'Permesso di soggiorno',
                 description: 'Documento che autorizza il soggiorno sul territorio italiano',
-                sourceLang: 'it',
+                sourceLang: 'en',
                 dataExtra: {
                     icon: 'data:image/png;base64,iVBORw0KGgo=',
                     issuer: 'MOIT',
@@ -94,9 +94,9 @@ test.describe('DocumentTypes API — CRUD lifecycle', () => {
 
         // POST returns the flat legacy DTO
         expect(typeof created.id).toBe('number');
-        expect(created.document).toBe('Permesso di soggiorno');
+        expect(created.document).toBe('Residence permit');
         expect(created.status).toBe('DRAFT');
-        expect(created.sourceLang).toBe('it');
+        expect(created.sourceLang).toBe('en');
         expect(created.dataExtra?.validable).toBe(true);
         expect(created.dataExtra?.issuer).toBe('MOIT');
 
@@ -108,7 +108,7 @@ test.describe('DocumentTypes API — CRUD lifecycle', () => {
         const list = await listRes.json();
         const inList = list.find((d: { id: number }) => d.id === id);
         expect(inList, `id ${id} not found in list`).toBeDefined();
-        expect(inList.document).toBe('Permesso di soggiorno');
+        expect(inList.document).toBe('Residence permit');
 
         // ── GET single (rich): all translations embedded ──────────────────
         const getRes1 = await api.get(`/document-types/${id}`);
@@ -117,7 +117,7 @@ test.describe('DocumentTypes API — CRUD lifecycle', () => {
 
         expect(full1.id).toBe(id);
         expect(full1.status).toBe('DRAFT');
-        expect(full1.sourceLang).toBe('it');
+        expect(full1.sourceLang).toBe('en');
 
         // Both languages present from the POST translations map
         expect(full1.translations?.it?.title).toBe('Permesso di soggiorno');
@@ -139,7 +139,7 @@ test.describe('DocumentTypes API — CRUD lifecycle', () => {
             data: {
                 id,
                 status: 'DRAFT',
-                sourceLang: 'it',
+                sourceLang: 'en',
                 dataExtra: {
                     icon: 'data:image/png;base64,iVBORw0KGgo=',
                     issuer: 'MOIT',
@@ -225,7 +225,7 @@ test.describe('DocumentTypes API — Translation workflow', () => {
         const api = await adminApi();
         const res = await api.post('/document-types', {
             data: {
-                sourceLang: 'it',
+                sourceLang: 'en',
                 dataExtra: { validable: false },
                 translations: {
                     it: { title: 'Carta d\'identità', description: 'Documento di identità' },
@@ -270,8 +270,8 @@ test.describe('DocumentTypes API — Translation workflow', () => {
         expect(approved.status).toBe('APPROVED');
 
         // The approved source becomes APPROVED; older non-source text is STALE.
-        expect(approved.translations?.it?.tStatus).toBe('APPROVED');
-        expect(approved.translations?.en?.tStatus).toBe('STALE');
+        expect(approved.translations?.it?.tStatus).toBe('STALE');
+        expect(approved.translations?.en?.tStatus).toBe('APPROVED');
     });
 
     test('APPROVED → PUBLISHED: /to-production promotes revision', async () => {
@@ -322,7 +322,7 @@ test.describe('DocumentTypes API — Migrant endpoint', () => {
         // Create and publish a document type for the migrant endpoint test
         const createRes = await api.post('/document-types', {
             data: {
-                sourceLang: 'it',
+                sourceLang: 'en',
                 dataExtra: { validable: true, issuer: 'EU', validity_duration: 1825 },
                 translations: {
                     it: { title: 'Passaporto', description: 'Documento di viaggio internazionale' },
@@ -338,7 +338,7 @@ test.describe('DocumentTypes API — Migrant endpoint', () => {
             data: {
                 id: publishedId,
                 status: 'APPROVED',
-                sourceLang: 'it',
+                sourceLang: 'en',
                 dataExtra: created.dataExtra,
                 translations: {
                     it: { title: 'Passaporto', description: 'Documento di viaggio internazionale' },
@@ -361,7 +361,7 @@ test.describe('DocumentTypes API — Migrant endpoint', () => {
     test('GET /document-types-migrant — unauthenticated, returns published items', async () => {
         // Public (no token) context
         const pub = await publicApi();
-        const res = await pub.get('/document-types-migrant?currentlang=it&defaultlang=it');
+        const res = await pub.get('/document-types-migrant?currentlang=it&defaultlang=en');
         expect(res.ok(), `migrant endpoint failed: ${await res.text()}`).toBeTruthy();
 
         const body = await res.json();
@@ -371,26 +371,26 @@ test.describe('DocumentTypes API — Migrant endpoint', () => {
         expect(found, `published id ${publishedId} not in migrant response`).toBeDefined();
 
         // Field projection matches legacy shape
-        expect(found.document).toBe('Passaporto');
-        expect(found.lang).toBe('it');
+        expect(found.document).toBe('Passport');
+        expect(found.lang).toBe('en');
         // data_extra fields are spread into the response
         expect(found.validable).toBe(true);
         expect(found.issuer).toBe('EU');
     });
 
-    test('GET /document-types-migrant — language fallback (currentlang=ar → defaultlang=it)', async () => {
+    test('GET /document-types-migrant — language fallback (currentlang=ar → defaultlang=en)', async () => {
         const pub = await publicApi();
         // Arabic not translated — should fall back to Italian
         const res = await pub.get(
-            `/document-types-migrant?currentlang=ar&defaultlang=it`,
+            `/document-types-migrant?currentlang=ar&defaultlang=en`,
         );
         expect(res.ok()).toBeTruthy();
 
         const body = await res.json();
         const found = body.find((d: { id: number }) => d.id === publishedId);
         // Falls back to Italian
-        expect(found?.document).toBe('Passaporto');
-        expect(found?.lang).toBe('it');
+        expect(found?.document).toBe('Passport');
+        expect(found?.lang).toBe('en');
     });
 });
 
@@ -403,7 +403,7 @@ test.describe('DocumentTypes API — Version history (revisions[])', () => {
         // Create
         const createRes = await api.post('/document-types', {
             data: {
-                sourceLang: 'it',
+                sourceLang: 'en',
                 dataExtra: { validable: false },
                 translations: {
                     it: { title: 'Codice fiscale', description: 'Codice identificativo italiano' },
@@ -425,7 +425,7 @@ test.describe('DocumentTypes API — Version history (revisions[])', () => {
                 data: {
                     id,
                     status: 'APPROVED',
-                    sourceLang: 'it',
+                    sourceLang: 'en',
                     dataExtra: created.dataExtra,
                     translations: {},
                 },

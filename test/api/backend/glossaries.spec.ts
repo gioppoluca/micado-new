@@ -58,7 +58,7 @@ test.describe('Glossaries API — CRUD lifecycle', () => {
             data: {
                 title: 'Permesso di soggiorno',
                 description: 'Documento che **autorizza** il soggiorno sul territorio italiano.',
-                sourceLang: 'it',
+                sourceLang: 'en',
                 translations: {
                     it: {
                         title: 'Permesso di soggiorno',
@@ -74,7 +74,7 @@ test.describe('Glossaries API — CRUD lifecycle', () => {
         expect(postRes.status()).toBe(200);
         const created = await postRes.json() as Record<string, unknown>;
         expect(created.id).toBeTruthy();
-        expect(created.title).toBe('Permesso di soggiorno');
+        expect(created.title).toBe('Residence permit');
         expect(created.status).toBe('DRAFT');
         const termId = created.id as number;
 
@@ -84,7 +84,7 @@ test.describe('Glossaries API — CRUD lifecycle', () => {
         const list = await listRes.json() as Array<Record<string, unknown>>;
         const inList = list.find(g => g.id === termId);
         expect(inList).toBeTruthy();
-        expect(inList!.title).toBe('Permesso di soggiorno');
+        expect(inList!.title).toBe('Residence permit');
         // No dataExtra on glossary items
         expect(inList!.dataExtra).toBeUndefined();
 
@@ -107,7 +107,7 @@ test.describe('Glossaries API — CRUD lifecycle', () => {
         const putRes = await api.put(`/glossaries/${termId}`, {
             data: {
                 status: 'DRAFT',
-                sourceLang: 'it',
+                sourceLang: 'en',
                 translations: {
                     it: {
                         title: 'Permesso di soggiorno (aggiornato)',
@@ -140,8 +140,8 @@ test.describe('Glossaries API — CRUD lifecycle', () => {
         const afterPatch = await afterPatchRes.json() as Record<string, unknown>;
         expect(afterPatch.status).toBe('APPROVED');
         const afterPatchTrs = afterPatch.translations as Record<string, Record<string, string>>;
-        expect(afterPatchTrs.en?.tStatus).toBe('STALE');
-        expect(afterPatchTrs.it?.tStatus).toBe('APPROVED');
+        expect(afterPatchTrs.en?.tStatus).toBe('APPROVED');
+        expect(afterPatchTrs.it?.tStatus).toBe('STALE');
 
         // ── DELETE ────────────────────────────────────────────────────────────
         const delRes = await api.delete(`/glossaries/${termId}`);
@@ -163,7 +163,7 @@ test.describe('Glossaries API — Translation workflow', () => {
             data: {
                 title: 'Contratto di locazione',
                 description: 'Accordo tra proprietario e affittuario.',
-                sourceLang: 'it',
+                sourceLang: 'en',
                 translations: {
                     it: { title: 'Contratto di locazione', description: 'Accordo tra proprietario e affittuario.' },
                     en: { title: 'Rental agreement', description: 'Agreement between landlord and tenant.' },
@@ -177,7 +177,7 @@ test.describe('Glossaries API — Translation workflow', () => {
         await api.put(`/glossaries/${termId}`, {
             data: {
                 status: 'APPROVED',
-                sourceLang: 'it',
+                sourceLang: 'en',
                 translations: {
                     it: { title: 'Contratto di locazione', description: 'Accordo tra proprietario e affittuario.' },
                     en: { title: 'Rental agreement', description: 'Agreement between landlord and tenant.' },
@@ -189,8 +189,8 @@ test.describe('Glossaries API — Translation workflow', () => {
         const afterApprove = await afterApproveRes.json() as Record<string, unknown>;
         expect(afterApprove.status).toBe('APPROVED');
         const trs = afterApprove.translations as Record<string, Record<string, string>>;
-        expect(trs.it?.tStatus).toBe('APPROVED');
-        expect(trs.en?.tStatus).toBe('STALE');    // non-source → STALE
+        expect(trs.it?.tStatus).toBe('STALE');
+        expect(trs.en?.tStatus).toBe('APPROVED');    // non-source → STALE
 
         // Publish
         const publishRes = await api.get(`/glossaries/to-production?id=${termId}`);
@@ -219,7 +219,7 @@ test.describe('Glossaries API — Bulk create', () => {
         const createdIds: number[] = [];
         for (const term of terms) {
             const res = await api.post('/glossaries', {
-                data: { title: term.title, description: term.description, sourceLang: 'it' },
+                data: { title: term.title, description: term.description, sourceLang: 'en' },
             });
             expect(res.status()).toBe(200);
             const body = await res.json() as Record<string, unknown>;
@@ -252,7 +252,7 @@ test.describe('Glossaries API — Public endpoints', () => {
             data: {
                 title: 'Rifugiato',
                 description: 'Persona riconosciuta come rifugiata ai sensi del diritto internazionale.',
-                sourceLang: 'it',
+                sourceLang: 'en',
                 translations: {
                     it: { title: 'Rifugiato', description: 'Persona riconosciuta come rifugiata.' },
                 },
@@ -263,21 +263,21 @@ test.describe('Glossaries API — Public endpoints', () => {
 
         await admin.put(`/glossaries/${termId}`, {
             data: {
-                status: 'APPROVED', sourceLang: 'it',
-                translations: { it: { title: 'Rifugiato', description: 'Persona riconosciuta come rifugiata.' } },
+                status: 'APPROVED', sourceLang: 'en',
+                translations: { en: { title: 'Rifugiato', description: 'Persona riconosciuta come rifugiata.' } },
             },
         });
         await admin.get(`/glossaries/to-production?id=${termId}`);
 
         // Unauthenticated access
-        const migrantRes = await pub.get('/glossaries-migrant?defaultlang=it&currentlang=it');
+        const migrantRes = await pub.get('/glossaries-migrant?defaultlang=en&currentlang=it');
         expect(migrantRes.status()).toBe(200);
         const migrantList = await migrantRes.json() as Array<Record<string, unknown>>;
         const found = migrantList.find(g => g.id === termId);
         expect(found).toBeTruthy();
         expect(found!.title).toBe('Rifugiato');
         expect(found!.description).toBeTruthy();
-        expect(found!.lang).toBe('it');
+        expect(found!.lang).toBe('en');
 
         // Cleanup
         await admin.delete(`/glossaries/${termId}`);
@@ -288,13 +288,13 @@ test.describe('Glossaries API — Public endpoints', () => {
         const pub = await publicApi();
 
         const postRes = await admin.post('/glossaries', {
-            data: { title: 'Termine di test', description: 'Solo per test.', sourceLang: 'it' },
+            data: { title: 'Termine di test', description: 'Solo per test.', sourceLang: 'en' },
         });
         const created = await postRes.json() as Record<string, unknown>;
         const termId = created.id as number;
 
         // Should appear in mention picker even as DRAFT
-        const pickerRes = await pub.get('/glossary-items?defaultlang=it&currentlang=it');
+        const pickerRes = await pub.get('/glossary-items?defaultlang=en&currentlang=it');
         expect(pickerRes.status()).toBe(200);
         const pickerList = await pickerRes.json() as Array<Record<string, unknown>>;
         const found = pickerList.find(g => g.id === termId);
