@@ -34,7 +34,6 @@ SET
 INSERT INTO app_settings (key, value, description) VALUES
   -- Bootstrap / public
   ('app_name',              'Micado',             'Application display name'),
-  ('default_language',      'it',                 'Default UI language code (lang PK)'),
   ('pa_tenant',             'pa_frontoffice',     'Keycloak realm for the PA frontend'),
   ('migrant_tenant',        'migrants',           'Keycloak realm for the Migrant frontend'),
   ('migrant_domain_name',   'migrants.localhost', 'Public hostname of the Migrant frontend'),
