@@ -58,9 +58,13 @@ async function postCommit(
     ctx: APIRequestContext,
     body: Record<string, unknown>,
 ) {
+    const rawBody = JSON.stringify(body);
     return ctx.post('/api/webhooks/weblate/translation-committed', {
-        data: body,
-        headers: standardWebhookHeaders(body),
+        // Send exactly the bytes used to calculate the signature. Passing an
+        // object would delegate serialization to Playwright and make the test
+        // dependent on its JSON encoding details.
+        data: rawBody,
+        headers: standardWebhookHeaders(rawBody),
     });
 }
 
@@ -71,22 +75,26 @@ async function postPush(
     ctx: APIRequestContext,
     body: Record<string, unknown>,
 ) {
+    const rawBody = JSON.stringify(body);
     return ctx.post('/api/webhooks/weblate/translation-pushed', {
-        data: body,
-        headers: standardWebhookHeaders(body),
+        data: rawBody,
+        headers: standardWebhookHeaders(rawBody),
     });
 }
 
-function standardWebhookHeaders(body: Record<string, unknown>): Record<string, string> {
+function standardWebhookHeaders(rawBody: string): Record<string, string> {
     if (!webhookSecret) {
         throw new Error('WEBLATE_WEBHOOK_SECRET must be available in the Playwright container');
     }
 
     const messageId = randomUUID().replaceAll('-', '');
     const timestamp = String(Date.now() / 1000);
+    // Weblate 5.16 puts a fractional timestamp in the header but signs its
+    // whole-second value. Mirror the real sender, not the generic spec helper.
+    const signedTimestamp = String(Math.trunc(Number(timestamp)));
     const key = Buffer.from(webhookSecret.replace(/^whsec_/, ''), 'base64');
     const signature = createHmac('sha256', key)
-        .update(`${messageId}.${timestamp}.${JSON.stringify(body)}`)
+        .update(`${messageId}.${signedTimestamp}.${rawBody}`)
         .digest('base64');
 
     return {

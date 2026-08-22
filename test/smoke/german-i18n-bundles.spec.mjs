@@ -51,7 +51,7 @@ test.describe('German i18n bundles', () => {
     const javascript = await applicationJavascript(request, 'migrants');
     expect(javascript).toContain('Sprache auswählen');
     expect(javascript).toContain('Dokument hinzufügen');
-    expect(javascript).toContain('Ihre Privatsphäre ist uns wichtig');
+    expect(javascript).toContain('Wir legen Wert auf Ihre Privatsphäre');
   });
 
   test('PA build contains the German administration bundle', async ({request}) => {
