@@ -285,13 +285,12 @@
                                         <strong>{{ item.categoryTitle }}</strong>
                                     </span>
 
-                                    <!-- Available translations chip -->
+                                    <!-- Available translations chips -->
                                     <span class="tags_text text-caption">
                                         {{ t('input_labels.available_transl') }}:
                                     </span>
-                                    <q-chip dense size="xs" color="teal-1" text-color="teal-9">
-                                        {{ item.sourceLang }}
-                                    </q-chip>
+                                    <TranslationStatusChips :states="item.translationStates" :revision-id="item.revisionId"
+                                        :revision-status="item.status" @dispatched="store.fetchAll()" />
                                 </div>
 
                                 <!-- Description preview (Markdown, read-more) -->
@@ -355,6 +354,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useQuasar } from 'quasar';
 import { useInformationStore } from 'src/stores/information-store';
+import TranslationStatusChips from 'src/components/settings/TranslationStatusChips.vue';
 import { useCategoryStore } from 'src/stores/category-store';
 import { useTopicStore } from 'src/stores/topic-store';
 import { useUserTypeStore } from 'src/stores/user-type-store';

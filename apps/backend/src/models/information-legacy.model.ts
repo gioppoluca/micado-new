@@ -53,6 +53,13 @@ export class InformationLegacy extends Model {
     @property({ type: 'array', itemType: 'number' })
     userTypeIds?: number[];
 
+    @property({type: 'string'})
+    revisionId?: string;
+    @property({type: 'number'})
+    revisionNo?: number;
+    @property({type: 'object', jsonSchema: {additionalProperties: {enum: ['MISSING', 'SENT', 'TRANSLATED']}}})
+    translationStates?: Record<string, 'MISSING' | 'SENT' | 'TRANSLATED'>;
+
     constructor(data?: Partial<InformationLegacy>) {
         super(data);
     }

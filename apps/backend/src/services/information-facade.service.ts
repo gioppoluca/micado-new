@@ -51,6 +51,7 @@ import {
 } from '../repositories';
 import { buildActorStamp, ActorStamp } from '../auth/actor-stamp';
 import { TranslationWorkflowOrchestratorService } from './translation-workflow-orchestrator.service';
+import { TranslationStateProjectionService, TranslationChipState } from './translation-state-projection.service';
 
 const INFORMATION_CODE = 'INFORMATION';
 const REL_CATEGORY = 'category';
@@ -96,6 +97,9 @@ export class InformationFacadeService {
 
         @inject(TranslationWorkflowOrchestratorService.BINDING, { optional: true })
         protected translationOrchestrator: TranslationWorkflowOrchestratorService | undefined,
+
+        @service(TranslationStateProjectionService)
+        protected translationStates: TranslationStateProjectionService,
     ) { }
 
     // ── List ──────────────────────────────────────────────────────────────────
@@ -152,11 +156,13 @@ export class InformationFacadeService {
                 }
             }
 
-            const sourceTr = await this.contentRevisionTranslationRepository.findOne({
-                where: { revisionId: revision.id!, lang: revision.sourceLang },
+            const rows = await this.contentRevisionTranslationRepository.find({
+                where: { revisionId: revision.id! },
             });
+            const sourceTr = rows.find(row => row.lang === revision.sourceLang);
+            const states = await this.translationStates.project(revision, rows);
 
-            result.push(this.toLegacyDto(item, revision, sourceTr ?? undefined, categoryId, categoryTitle, topicIds, userTypeIds));
+            result.push(this.toLegacyDto(item, revision, sourceTr ?? undefined, categoryId, categoryTitle, topicIds, userTypeIds, states));
         }
 
         const offset = (page - 1) * pageSize;
@@ -688,6 +694,7 @@ export class InformationFacadeService {
         categoryTitle?: string,
         topicIds?: number[],
         userTypeIds?: number[],
+        translationStates: Record<string, TranslationChipState> = {},
     ): InformationLegacy {
         return Object.assign(new InformationLegacy(), {
             id: Number(item.externalKey),
@@ -699,6 +706,9 @@ export class InformationFacadeService {
             categoryTitle,
             topicIds: topicIds ?? [],
             userTypeIds: userTypeIds ?? [],
+            revisionId: revision.id,
+            revisionNo: revision.revisionNo,
+            translationStates,
         });
     }
 

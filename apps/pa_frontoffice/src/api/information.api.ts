@@ -40,6 +40,7 @@
 import { logger } from 'src/services/Logger';
 import { apiGet, apiPost, apiPatch, apiPut, apiDelete } from './client';
 import type { MockRegistry, MockRequestConfig, MockReplyTuple } from './mock';
+import type { TranslationListFields } from './translation-state.api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -47,7 +48,7 @@ export type InformationStatus = 'DRAFT' | 'APPROVED' | 'PUBLISHED' | 'ARCHIVED';
 export type TranslationStatus = 'DRAFT' | 'APPROVED' | 'PUBLISHED' | 'STALE';
 
 /** Flat DTO returned by list and create. */
-export interface Information {
+export interface Information extends TranslationListFields {
     id: number;
     title: string;
     description: string;
