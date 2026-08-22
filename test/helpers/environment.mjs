@@ -3,7 +3,19 @@ function trimTrailingSlash(value) {
 }
 
 export function optionalEnvironment(name, fallback = '') {
-  return process.env[name]?.trim() || fallback;
+  const raw = process.env[name]?.trim();
+  const value = raw || fallback;
+  // `docker run --env-file` can preserve quotes written in the source file,
+  // producing literal values such as `"dbos"` or `"it,fr,de"`. Compose may
+  // remove the same quotes, so normalise both execution paths here.
+  if (value.length >= 2) {
+    const first = value[0];
+    const last = value[value.length - 1];
+    if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+      return value.slice(1, -1).trim();
+    }
+  }
+  return value;
 }
 
 const baseDomain = optionalEnvironment('BASE_DOMAIN', 'localhost');

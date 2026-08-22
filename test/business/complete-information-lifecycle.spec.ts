@@ -35,6 +35,13 @@ interface WorkflowDbRow {
   workflowName: string;
   className: string | null;
   businessStatus: string | null;
+  rawEventValue: string | null;
+  eventSerialization: string | null;
+}
+
+interface ActiveLanguageDbRow {
+  lang: string;
+  isDefault: boolean;
 }
 
 interface ApprovedInformationDbRow {
@@ -157,6 +164,7 @@ test.describe('Complete business logic — Information lifecycle', () => {
     let approvalHttpStatus: number | undefined;
     let approvedDatabaseRow: ApprovedInformationDbRow | undefined;
     let workflowRows: WorkflowDbRow[] = [];
+    let activeTargetLanguages: string[] = [];
     let sourceArb: ArbCatalog | undefined;
     let giteaSourceHash: string | undefined;
     let weblateTranslationsSaved = false;
@@ -530,11 +538,37 @@ test.describe('Complete business logic — Information lifecycle', () => {
         flow('STEP 6 START — verify durable translation workflows');
         expect(environment.dbosDbSchema).toMatch(/^[a-zA-Z_][a-zA-Z0-9_]*$/);
         const revisionId = databaseRow!.revisionId;
-        const targetLangs = [...new Set(environment.targetLanguages)]
+        const activeLanguages = await queryPostgres<ActiveLanguageDbRow>({
+          host: environment.appDbHost,
+          port: environment.appDbPort,
+          database: environment.appDbName,
+          user: environment.appDbUsername,
+          password: environment.appDbPassword,
+          connectionTimeoutMillis: 10_000,
+        }, `
+          SELECT lang, is_default AS "isDefault"
+          FROM languages
+          WHERE active = true
+          ORDER BY sort_order, lang
+        `);
+        expect(activeLanguages, 'The application database has no active languages').not.toHaveLength(0);
+        expect(
+          activeLanguages.some(language => language.lang === databaseRow!.sourceLang),
+          `Revision source language ${databaseRow!.sourceLang} is not active`,
+        ).toBe(true);
+        activeTargetLanguages = activeLanguages
+          .map(language => language.lang)
           .filter(lang => lang !== databaseRow!.sourceLang);
-        expect(targetLangs, 'MICADO_TARGET_LANGS contains no target languages').not.toHaveLength(0);
+        expect(activeTargetLanguages, 'The instance has no active target languages').not.toHaveLength(0);
+        flow('Active application languages used by the backend orchestrator', {
+          sourceLang: databaseRow!.sourceLang,
+          activeLanguages,
+          activeTargetLanguages,
+          weblateConfiguredTargets: environment.targetLanguages,
+        });
+
         const masterId = `tr:${revisionId}`;
-        const childIds = targetLangs.map(lang => `tr:${revisionId}:${lang}`);
+        const childIds = activeTargetLanguages.map(lang => `tr:${revisionId}:${lang}`);
         const expectedIds = [masterId, ...childIds];
         flow('Expected DBOS workflow IDs', expectedIds);
 
@@ -551,7 +585,14 @@ test.describe('Complete business logic — Information lifecycle', () => {
             ws.status        AS "dbosStatus",
             ws.name          AS "workflowName",
             ws.class_name    AS "className",
-            TRIM(BOTH '"' FROM ev.value) AS "businessStatus"
+            CASE
+              WHEN ev.value IS NULL THEN NULL
+              WHEN ev.value LIKE '%"__dbos_serializer":"superjson"%'
+                THEN ev.value::jsonb->>'json'
+              ELSE TRIM(BOTH '"' FROM ev.value)
+            END              AS "businessStatus",
+            ev.value         AS "rawEventValue",
+            ev.serialization AS "eventSerialization"
           FROM "${environment.dbosDbSchema}".workflow_status ws
           LEFT JOIN "${environment.dbosDbSchema}".workflow_events ev
             ON ev.workflow_uuid = ws.workflow_uuid
@@ -562,12 +603,14 @@ test.describe('Complete business logic — Information lifecycle', () => {
 
         await expect.poll(async () => {
           const rows = await loadWorkflows();
-          return {
+          const snapshot = {
             count: rows.length,
             waitingChildren: rows.filter(row => row.workflowId !== masterId
               && row.dbosStatus === 'PENDING'
               && row.businessStatus === 'WAITING_TRANSLATION').length,
           };
+          flow('DBOS polling snapshot', {summary: snapshot, rows});
+          return snapshot;
         }, {
           message: 'DBOS master/children were not all started and waiting for translation',
           timeout: 60_000,
@@ -664,7 +707,8 @@ test.describe('Complete business logic — Information lifecycle', () => {
       await test.step('8 — translate title and description through the Weblate UI', async () => {
         flow('STEP 8 START — log in to Weblate and translate Information');
         const targetLang = environment.businessTranslationLanguage;
-        expect(environment.targetLanguages).toContain(targetLang);
+        expect(environment.targetLanguages, `${targetLang} is not configured in Weblate target languages`).toContain(targetLang);
+        expect(activeTargetLanguages, `${targetLang} is not active in the Micado languages table`).toContain(targetLang);
 
         const webHome = await page.goto(`${environment.weblateBaseUrl}/`, {waitUntil: 'domcontentloaded'});
         expect(webHome?.ok(), `Weblate home returned HTTP ${webHome?.status()}`).toBeTruthy();
@@ -673,12 +717,83 @@ test.describe('Complete business logic — Information lifecycle', () => {
         const signInLink = page.getByRole('link', {name: /sign in|log in/i}).first();
         await expect(signInLink, 'Weblate Sign in link is not visible').toBeVisible();
         await signInLink.click();
-        await expect(page.locator('input[name="login"], #id_login')).toBeVisible();
-        check('Weblate login form opened through Sign in');
-        await page.locator('input[name="login"], #id_login').fill(environment.weblateAdminUsername);
-        await page.locator('input[name="password"], #id_password').fill(environment.weblateAdminPassword);
-        await page.locator('button[type="submit"]').filter({hasText: /sign in|log in/i}).click();
+        await page.waitForLoadState('domcontentloaded');
+
+        const describeLoginControls = async () => page.locator('input:visible, button:visible, a:visible').evaluateAll(elements =>
+          elements.slice(0, 80).map(element => ({
+            tag: element.tagName.toLowerCase(),
+            type: element.getAttribute('type'),
+            name: element.getAttribute('name'),
+            id: element.id || null,
+            href: element.getAttribute('href'),
+            text: (element.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 120),
+          })),
+        );
+        flow('Weblate authentication page opened', {
+          url: page.url(),
+          title: await page.title(),
+          controls: await describeLoginControls(),
+        });
+        await page.screenshot({path: testInfo.outputPath('08a-weblate-authentication.png'), fullPage: true});
+
+        const usernameSelectors = [
+          'input[name="username"]:visible',
+          '#id_username:visible',
+          'input[autocomplete="username"]:visible',
+          'input[name="login"]:visible',
+          '#id_login:visible',
+          'input[name="email"]:visible',
+          '#id_email:visible',
+        ].join(', ');
+        let usernameField = page.locator(usernameSelectors).first();
+
+        // Some Weblate installations first display the available authentication
+        // methods. Keep the real UI flow and select the password/e-mail method
+        // before looking for the Django login form.
+        if (!await usernameField.isVisible()) {
+          const passwordLoginAction = page.locator('a:visible, button:visible').filter({
+            hasText: /sign in with (e-?mail|username|password)|password login|e-?mail login/i,
+          }).first();
+          if (await passwordLoginAction.isVisible()) {
+            flow('Weblate requires authentication-method selection', {
+              action: (await passwordLoginAction.innerText()).trim(),
+            });
+            await passwordLoginAction.click();
+            await page.waitForLoadState('domcontentloaded');
+            usernameField = page.locator(usernameSelectors).first();
+          }
+        }
+
+        // Last-resort compatibility for customised Weblate login templates:
+        // accept the single visible textual field in the password form.
+        if (!await usernameField.isVisible()) {
+          const textualFields = page.locator(
+            'form input:visible:not([type="password"]):not([type="hidden"]):not([type="search"]):not([type="checkbox"]):not([type="submit"])',
+          );
+          if (await textualFields.count() === 1) usernameField = textualFields.first();
+        }
+
+        const passwordField = page.locator(
+          'input[name="password"]:visible, #id_password:visible, input[type="password"]:visible',
+        ).first();
+        await expect(usernameField, 'Weblate username field is not visible').toBeVisible();
+        await expect(passwordField, 'Weblate password field is not visible').toBeVisible();
+        check('Weblate login form opened through Sign in', {
+          url: page.url(),
+          usernameField: await usernameField.getAttribute('name'),
+          usernameFieldId: await usernameField.getAttribute('id'),
+        });
+
+        await usernameField.fill(environment.weblateAdminUsername);
+        await passwordField.fill(environment.weblateAdminPassword);
+        const loginForm = passwordField.locator('xpath=ancestor::form[1]');
+        const loginSubmit = loginForm.locator('button[type="submit"], input[type="submit"]').first();
+        await expect(loginSubmit, 'Weblate login submit control is not visible').toBeVisible();
+        await loginSubmit.click();
         await page.waitForLoadState('networkidle');
+        await expect(passwordField, 'Weblate login form remained visible after submit').toBeHidden();
+        expect(page.url(), 'Weblate remained on the login page after submit').not.toMatch(/\/accounts\/login\/?(?:\?|$)/);
+        await page.screenshot({path: testInfo.outputPath('08b-weblate-authenticated.png'), fullPage: true});
         check('Weblate admin login completed', {username: environment.weblateAdminUsername, url: page.url()});
 
         const projectLink = page.locator('a[href="/projects/micado/"]').first();
@@ -772,6 +887,7 @@ test.describe('Complete business logic — Information lifecycle', () => {
           approvalHttpStatus: approvalHttpStatus ?? null,
           approvedDatabase: approvedDatabaseRow ?? null,
           workflows: workflowRows,
+          activeTargetLanguages,
           giteaSourceHash: giteaSourceHash ?? null,
           translatedTitle,
           translatedDescription,
