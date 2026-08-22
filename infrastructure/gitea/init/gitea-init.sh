@@ -71,6 +71,7 @@ log_var() {
 : "${GITEA_TRANSLATIONS_REPO_PRIVATE:=true}"
 : "${GITEA_WEBLATE_TOKEN_NAME:=weblate-bootstrap}"
 : "${GITEA_WEBLATE_TOKEN_SCOPES:=read:repository,write:repository,read:user}"
+: "${GITEA_WEBLATE_UPDATE_HOOK_URL:=http://weblate:8080/hooks/gitea/}"
 : "${GITEA_RUN_UID:=1000}"
 : "${GITEA_RUN_GID:=1000}"
 
@@ -111,6 +112,7 @@ log_environment() {
   log_var GITEA_TRANSLATIONS_REPO_PRIVATE "$GITEA_TRANSLATIONS_REPO_PRIVATE"
   log_var GITEA_WEBLATE_TOKEN_NAME        "$GITEA_WEBLATE_TOKEN_NAME"
   log_var GITEA_WEBLATE_TOKEN_SCOPES      "$GITEA_WEBLATE_TOKEN_SCOPES"
+  log_var GITEA_WEBLATE_UPDATE_HOOK_URL   "$GITEA_WEBLATE_UPDATE_HOOK_URL"
   log_var GITEA_RUN_UID          "$GITEA_RUN_UID"
   log_var GITEA_RUN_GID          "$GITEA_RUN_GID"
   log_var GITEA_CONFIG_FILE      "$GITEA_CONFIG_FILE"
@@ -257,6 +259,62 @@ ensure_repo_api() {
     return 1
   fi
   info "Repository created. Response: ${resp_body}"
+}
+
+# ---------------------------------------------------------------------------
+# Repository push webhook — Gitea notifies Weblate about every repository push
+#
+# Weblate's native Gitea endpoint is /hooks/gitea/.  It causes Weblate to fetch
+# and import changes without waiting for its scheduled repository update.
+# ---------------------------------------------------------------------------
+
+translation_update_hook_exists_api() {
+  local hooks_json
+
+  hooks_json=$(curl -fsS \
+    -u "$GITEA_WEBLATE_USER:$GITEA_WEBLATE_PASSWORD" \
+    "${API_BASE}/repos/${GITEA_WEBLATE_USER}/${GITEA_TRANSLATIONS_REPO}/hooks?limit=100" \
+    2>/dev/null || true)
+
+  if [[ -z "$hooks_json" ]]; then
+    warn "Could not read repository hooks; the hook creation request will still be attempted"
+    return 1
+  fi
+
+  # Gitea serializes the target as config.url.  A fixed-string match avoids
+  # interpreting URL characters as a regular expression.
+  grep -Fq "\"url\":\"${GITEA_WEBLATE_UPDATE_HOOK_URL}\"" <<<"$hooks_json"
+}
+
+ensure_translation_update_hook_api() {
+  info "Ensuring Gitea push webhook for Weblate"
+  info "  target: ${GITEA_WEBLATE_UPDATE_HOOK_URL}"
+
+  if translation_update_hook_exists_api; then
+    info "Weblate repository hook already exists — skipping"
+    return 0
+  fi
+
+  local body response http_code resp_body
+  body=$(printf '{"type":"gitea","active":true,"branch_filter":"%s","events":["push"],"config":{"url":"%s","content_type":"json","http_method":"post"}}' \
+    "$GITEA_TRANSLATIONS_BRANCH" "$GITEA_WEBLATE_UPDATE_HOOK_URL")
+
+  info "Creating Gitea push webhook. Payload: $body"
+  response=$(curl -sS -w '\n%{http_code}' \
+    -u "$GITEA_WEBLATE_USER:$GITEA_WEBLATE_PASSWORD" \
+    -H 'Content-Type: application/json' \
+    -X POST \
+    "${API_BASE}/repos/${GITEA_WEBLATE_USER}/${GITEA_TRANSLATIONS_REPO}/hooks" \
+    -d "$body")
+  http_code=$(printf '%s' "$response" | tail -n1)
+  resp_body=$(printf '%s' "$response" | sed '$d')
+
+  if [[ "$http_code" -lt 200 || "$http_code" -gt 299 ]]; then
+    error "Gitea hook creation failed HTTP ${http_code}: ${resp_body}"
+    return 1
+  fi
+
+  info "Gitea push webhook created. HTTP ${http_code}"
 }
 
 # ---------------------------------------------------------------------------
@@ -452,6 +510,9 @@ main() {
 
   info "Creating repository..."
   ensure_repo_api
+
+  info "Configuring repository webhook..."
+  ensure_translation_update_hook_api
 
   info "Generating PAT..."
   ensure_token_file

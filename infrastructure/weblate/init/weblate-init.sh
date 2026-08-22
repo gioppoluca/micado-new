@@ -748,6 +748,7 @@ ensure_component() {
     "filemask": "%s",
     "template": "%s",
     "file_format": "%s",
+    "enable_hooks": true,
     "push_on_commit": false,
     "manage_units": false,
     "new_lang": "add"
