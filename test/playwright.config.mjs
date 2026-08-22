@@ -1,7 +1,10 @@
 import {defineConfig} from '@playwright/test';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 
 // Paths are resolved from /opt/micado-playwright/tests, where test/ is mounted.
-const resultsDirectory = './results';
+const testsDirectory = path.dirname(fileURLToPath(import.meta.url));
+const resultsDirectory = path.join(testsDirectory, 'results');
 const baseDomain = process.env.BASE_DOMAIN?.trim() || 'localhost';
 
 export default defineConfig({
@@ -10,8 +13,9 @@ export default defineConfig({
     'smoke/**/*.spec.mjs',
     'api/**/*.spec.{mjs,ts}',
     'e2e/**/*.spec.{mjs,ts}',
+    'business/**/*.spec.{mjs,ts}',
   ],
-  outputDir: `${resultsDirectory}/artifacts`,
+  outputDir: path.join(resultsDirectory, 'artifacts'),
   fullyParallel: false,
   workers: 1,
   timeout: 30_000,
@@ -20,8 +24,8 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: [
     ['line'],
-    ['html', {outputFolder: `${resultsDirectory}/html`, open: 'never'}],
-    ['junit', {outputFile: `${resultsDirectory}/junit/results.xml`}],
+    ['html', {outputFolder: path.join(resultsDirectory, 'html'), open: 'never'}],
+    ['junit', {outputFile: path.join(resultsDirectory, 'junit/results.xml')}],
   ],
   use: {
     ignoreHTTPSErrors: true,

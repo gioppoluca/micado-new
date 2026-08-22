@@ -65,6 +65,10 @@ docker run --rm --init --ipc=host `
   --env-file ./.env `
   -v "${PWD}/test:/opt/micado-playwright/tests" `
   micado-playwright:1.62.1
+
+
+docker run --rm --init --ipc=host --add-host host.docker.internal:host-gateway --add-host pa.localhost:host-gateway --add-host auth.localhost:host-gateway --add-host api.localhost:host-gateway --env-file ./.env -e RUN_COMPLETE_BUSINESS_LOGIC=true  -v "${PWD}/test:/opt/micado-playwright/tests" micado-playwright:1.62.1 npx playwright test --config=tests/playwright.config.mjs business/complete-information-lifecycle.spec.ts
+
 ```
 
 This executes infrastructure smoke tests and all standard backend API specifications sequentially. The single worker is intentional because the API tests mutate shared database state.
