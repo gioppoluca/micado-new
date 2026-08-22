@@ -323,14 +323,14 @@ export class TranslationPushedController {
             where: { revisionId: input.revisionId, lang: input.lang },
         });
 
-        if (!target) {
-            return {
-                allowed: false, reason: 'translation-row-not-found', anomaly: true,
-                dbStatus: null, workflowStatus: null, expectedSourceHash: null,
-            };
-        }
-
-        if (target.tStatus === 'APPROVED' || target.tStatus === 'PUBLISHED') {
+        // No row is the NORMAL case for a language's first translation: the
+        // target-language row in content_revision_translation is only ever
+        // created by saveTranslationToDB() at the end of the child workflow,
+        // so nothing exists yet at signal time. discoverLangsNeedingTranslation
+        // already treats "no row" the same as STALE (work is needed) — this
+        // must not reject it as a "not found" anomaly, or the very first
+        // translation of every language could never be signalled.
+        if (target?.tStatus === 'APPROVED' || target?.tStatus === 'PUBLISHED') {
             return {
                 allowed: false, reason: 'translation-already-acquired', anomaly: false,
                 dbStatus: target.tStatus, workflowStatus: null,
@@ -338,7 +338,7 @@ export class TranslationPushedController {
             };
         }
 
-        if (target.tStatus === 'STALE') {
+        if (target?.tStatus === 'STALE') {
             return {
                 allowed: false, reason: 'translation-stale', anomaly: false,
                 dbStatus: target.tStatus, workflowStatus: null,
@@ -346,9 +346,10 @@ export class TranslationPushedController {
             };
         }
 
-        // DRAFT rows do not necessarily have source_hash yet. Recompute the
-        // authoritative hash from the source translation of the same revision,
-        // using the exact field filtering applied when the workflow was started.
+        // No row yet, or an existing DRAFT row: neither necessarily has
+        // source_hash yet. Recompute the authoritative hash from the source
+        // translation of the same revision, using the exact field filtering
+        // applied when the workflow was started.
         const revision = await this.revisionRepo.findById(input.revisionId);
         const source = await this.translationRepo.findOne({
             where: { revisionId: input.revisionId, lang: revision.sourceLang },
@@ -356,7 +357,7 @@ export class TranslationPushedController {
         if (!source) {
             return {
                 allowed: false, reason: 'source-translation-not-found', anomaly: true,
-                dbStatus: target.tStatus, workflowStatus: null, expectedSourceHash: null,
+                dbStatus: target?.tStatus ?? null, workflowStatus: null, expectedSourceHash: null,
             };
         }
 
@@ -368,7 +369,7 @@ export class TranslationPushedController {
         if (input.catalogSourceHash !== expectedSourceHash) {
             return {
                 allowed: false, reason: 'source-hash-mismatch', anomaly: true,
-                dbStatus: target.tStatus, workflowStatus: null, expectedSourceHash,
+                dbStatus: target?.tStatus ?? null, workflowStatus: null, expectedSourceHash,
             };
         }
 
@@ -388,13 +389,13 @@ export class TranslationPushedController {
             return {
                 allowed: false, reason,
                 anomaly: workflowStatus === null || workflowStatus === 'ERROR',
-                dbStatus: target.tStatus, workflowStatus, expectedSourceHash,
+                dbStatus: target?.tStatus ?? null, workflowStatus, expectedSourceHash,
             };
         }
 
         return {
             allowed: true, reason: 'draft-workflow-waiting', anomaly: false,
-            dbStatus: target.tStatus, workflowStatus, expectedSourceHash,
+            dbStatus: target?.tStatus ?? null, workflowStatus, expectedSourceHash,
         };
     }
 }
