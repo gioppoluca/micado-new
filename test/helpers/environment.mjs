@@ -41,6 +41,25 @@ export const environment = Object.freeze({
   appDbName: optionalEnvironment('APP_DB', optionalEnvironment('POSTGRES_DB', 'micado')),
   appDbUsername: optionalEnvironment('APP_DB_USER', 'micado'),
   appDbPassword: optionalEnvironment('MICADO_APP_PASSWORD'),
+  backendDummyAuth: optionalEnvironment('AUTH_DISABLE_KEYCLOAK', 'false').toLowerCase() === 'true',
+  backendDummyUsername: optionalEnvironment('AUTH_DUMMY_USERNAME', 'playwright.admin'),
+  dbosDbSchema: optionalEnvironment('DBOS_DB_SCHEMA', 'dbos'),
+  dbosDbUsername: optionalEnvironment('DBOS_DB_USER', 'dbos'),
+  giteaBaseUrl: publicUrl('git'),
+  giteaUsername: optionalEnvironment('GITEA_WEBLATE_USER', 'weblate-bot'),
+  giteaPassword: optionalEnvironment('GITEA_WEBLATE_PASSWORD'),
+  // The Compose backend is deliberately pinned to the `translations` repo.
+  // Use test-specific overrides so a stale generic .env value cannot point
+  // Playwright at a different repository than the running backend.
+  giteaTranslationsRepo: optionalEnvironment('PLAYWRIGHT_GITEA_TRANSLATIONS_REPO', 'translations'),
+  giteaTranslationsBranch: optionalEnvironment('PLAYWRIGHT_GITEA_TRANSLATIONS_BRANCH', 'main'),
+  weblateBaseUrl: publicUrl('weblate'),
+  weblateAdminUsername: optionalEnvironment('WEBLATE_ADMIN_USERNAME', 'admin'),
+  weblateAdminPassword: optionalEnvironment('WEBLATE_ADMIN_PASSWORD'),
+  sourceLanguage: optionalEnvironment('MICADO_SOURCE_LANG', 'en'),
+  targetLanguages: optionalEnvironment('MICADO_TARGET_LANGS', 'it,fr,ar,de,sq,mk')
+    .split(',').map(value => value.trim()).filter(Boolean),
+  businessTranslationLanguage: optionalEnvironment('CBL_TRANSLATION_LANG', 'it'),
   ngoBaseUrl: publicUrl('ngo'),
   ngoAdminUsername: optionalEnvironment('NGO_ADMIN_USERNAME', 'ngo-admin'),
   ngoAdminPassword: optionalEnvironment('NGO_ADMIN_PASSWORD'),
