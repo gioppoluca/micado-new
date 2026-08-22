@@ -256,88 +256,81 @@ export class TranslationSteps {
             })}`,
         );
 
-        let pushedSource = 0;
-        let pushedAi = 0;
-        let skippedEmpty = 0;
+        const sourceFields = Object.fromEntries(
+            Object.entries(input.fields).filter(([, value]) => value.trim()),
+        );
+        const skippedEmpty = Object.keys(input.fields).length - Object.keys(sourceFields).length;
+        const sourceHash = TranslationSteps.computeSourceHash(input.fields);
+        const commonMeta = {revisionId: input.revisionId, sourceHash};
 
-        for (const [fieldKey, value] of Object.entries(input.fields)) {
-            if (!value.trim()) {
-                DBOS.logger.debug(
-                    `[TranslationSteps] skipping empty field ${JSON.stringify({
-                        category: input.category,
-                        itemId: input.itemId,
-                        fieldKey,
-                    })}`,
-                );
-                skippedEmpty++;
-                continue;
-            }
-
-            // Push source language — include revisionId and sourceHash in meta so the push
-            // controller can signal the DBOS child workflow directly from
-            // the Gitea catalog, without needing the in-memory registry.
-            const result = await svc.exportTranslationEntry({
-                category: input.category,
-                isoCode: input.sourceLang,
-                itemId: input.itemId,
-                fieldKey,
-                value,
-                meta: {
-                    revisionId: input.revisionId,
-                    // sourceHash stored here so push controller can build the
-                    // DBOS idempotency key without re-computing from source fields
-                    sourceHash: TranslationSteps.computeSourceHash(input.fields),
-                },
-            });
-
-            DBOS.logger.debug(
-                `[TranslationSteps] pushed source field ${JSON.stringify({
+        if (Object.keys(sourceFields).length === 0) {
+            DBOS.logger.warn(
+                `[TranslationSteps] no non-empty source fields to push ${JSON.stringify({
                     category: input.category,
                     itemId: input.itemId,
-                    fieldKey,
-                    sourceLang: input.sourceLang,
-                    giteaPath: result.path,
-                    giteaKey: result.key,
-                    action: result.createdOrUpdated,
+                    revisionId: input.revisionId,
                 })}`,
             );
-            pushedSource++;
+            return;
+        }
 
-            // Push AI pre-translations if available
-            if (input.aiTranslation && input.aiResults) {
-                for (const [lang, translated] of Object.entries(input.aiResults)) {
-                    const translatedValue = translated[fieldKey];
-                    if (!translatedValue) continue;
+        // One revision is written with one catalog update and one Gitea commit.
+        const result = await svc.exportTranslationRevision({
+            category: input.category,
+            isoCode: input.sourceLang,
+            itemId: input.itemId,
+            fields: sourceFields,
+            meta: commonMeta,
+        });
 
-                    const aiResult = await svc.exportTranslationEntry({
+        DBOS.logger.debug(
+            `[TranslationSteps] pushed source revision ${JSON.stringify({
+                category: input.category,
+                itemId: input.itemId,
+                revisionId: input.revisionId,
+                sourceLang: input.sourceLang,
+                fieldKeys: Object.keys(sourceFields),
+                giteaPath: result.path,
+                giteaKeys: result.keys,
+                action: result.createdOrUpdated,
+            })}`,
+        );
+
+        let pushedAi = 0;
+        if (input.aiTranslation && input.aiResults) {
+            for (const [lang, translated] of Object.entries(input.aiResults)) {
+                const translatedFields = Object.fromEntries(
+                    Object.entries(translated).filter(
+                        ([fieldKey, value]) => fieldKey in sourceFields && Boolean(value?.trim()),
+                    ),
+                );
+                if (Object.keys(translatedFields).length === 0) continue;
+
+                const aiResult = await svc.exportTranslationRevision({
+                    category: input.category,
+                    isoCode: lang,
+                    itemId: input.itemId,
+                    fields: translatedFields,
+                    meta: commonMeta,
+                });
+
+                DBOS.logger.debug(
+                    `[TranslationSteps] pushed AI revision ${JSON.stringify({
                         category: input.category,
-                        isoCode: lang,
                         itemId: input.itemId,
-                        fieldKey,
-                        value: translatedValue,
-                        // Keep the same correlation metadata in AI-prefilled
-                        // target catalogs. Weblate also copies source metadata,
-                        // but the backend must not depend on sync ordering.
-                        meta: {
-                            revisionId: input.revisionId,
-                            sourceHash: TranslationSteps.computeSourceHash(input.fields),
-                        },
-                    });
-
-                    DBOS.logger.debug(
-                        `[TranslationSteps] pushed AI pre-translation ${JSON.stringify({
-                            category: input.category,
-                            itemId: input.itemId,
-                            fieldKey,
-                            lang,
-                            giteaPath: aiResult.path,
-                            action: aiResult.createdOrUpdated,
-                        })}`,
-                    );
-                    pushedAi++;
-                }
+                        revisionId: input.revisionId,
+                        lang,
+                        fieldKeys: Object.keys(translatedFields),
+                        giteaPath: aiResult.path,
+                        giteaKeys: aiResult.keys,
+                        action: aiResult.createdOrUpdated,
+                    })}`,
+                );
+                pushedAi += Object.keys(translatedFields).length;
             }
         }
+
+        const pushedSource = Object.keys(sourceFields).length;
 
         DBOS.logger.info(
             `[TranslationSteps] pushSourceFieldsToGitea done ${JSON.stringify({

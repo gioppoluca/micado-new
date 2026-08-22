@@ -26,8 +26,9 @@
  *
  * ── Idempotency ───────────────────────────────────────────────────────────────
  *
- *   Every PUT uses the current file SHA from Gitea.
- *   If two requests race, one will get a 409 Conflict which is retried by DBOS.
+ *   Every PUT uses the current file SHA from Gitea. Writes are serialized per
+ *   repository/branch inside this process. External conflicts are handled by
+ *   reloading the latest catalog, reapplying the revision fields and retrying.
  *
  * ── Logging strategy ─────────────────────────────────────────────────────────
  *
@@ -68,8 +69,37 @@ type LoadedCatalog = {
     catalog: TranslationCatalog;
 };
 
+class GiteaWriteError extends Error {
+    constructor(
+        readonly status: number,
+        readonly responseBody: string,
+        message: string,
+    ) {
+        super(message);
+        this.name = 'GiteaWriteError';
+    }
+}
+
+export type TranslationRevisionExportRequest = {
+    category: string;
+    isoCode: string;
+    itemId: string;
+    fields: Record<string, string>;
+    meta?: Record<string, unknown>;
+    fieldOptions?: Record<string, {comment?: string; flags?: string}>;
+};
+
+export type TranslationRevisionExportResult = {
+    path: string;
+    keys: string[];
+    branch: string;
+    createdOrUpdated: 'created' | 'updated';
+};
+
 @injectable({ scope: BindingScope.SINGLETON })
 export class GiteaTranslationExportService {
+    private readonly repositoryWriteQueues = new Map<string, Promise<void>>();
+
     constructor(
         @inject(LoggingBindings.WINSTON_LOGGER)
         private logger: Logger,
@@ -83,18 +113,49 @@ export class GiteaTranslationExportService {
         branch: string;
         createdOrUpdated: 'created' | 'updated';
     }> {
-        this.validateRequest(request);
-
-        const config = this.readRequiredConfig();
-        const path = this.computeRepoPath(request.category, request.isoCode);
-        const key = this.buildTranslationKey(request.itemId, request.fieldKey);
-
-        this.logger.info('[GiteaExport] exportTranslationEntry start', {
+        const result = await this.exportTranslationRevision({
             category: request.category,
             isoCode: request.isoCode,
             itemId: request.itemId,
-            fieldKey: request.fieldKey,
-            key,
+            fields: {[request.fieldKey]: request.value},
+            meta: request.meta,
+            fieldOptions: {
+                [request.fieldKey]: {
+                    comment: request.comment,
+                    flags: request.flags,
+                },
+            },
+        });
+
+        return {
+            path: result.path,
+            key: result.keys[0],
+            branch: result.branch,
+            createdOrUpdated: result.createdOrUpdated,
+        };
+    }
+
+    /**
+     * Writes all non-empty fields belonging to one revision with one
+     * read/modify/write cycle and therefore one Gitea commit.
+     */
+    async exportTranslationRevision(
+        request: TranslationRevisionExportRequest,
+    ): Promise<TranslationRevisionExportResult> {
+        this.validateRevisionRequest(request);
+
+        const config = this.readRequiredConfig();
+        const path = this.computeRepoPath(request.category, request.isoCode);
+        const fieldKeys = Object.keys(request.fields);
+        const keys = fieldKeys.map(fieldKey => this.buildTranslationKey(request.itemId, fieldKey));
+        const lockKey = `${config.baseUrl}/${config.owner}/${config.repo}#${config.branch}`;
+
+        this.logger.info('[GiteaExport] exportTranslationRevision start', {
+            category: request.category,
+            isoCode: request.isoCode,
+            itemId: request.itemId,
+            fieldKeys,
+            keys,
             path,
             branch: config.branch,
             baseUrl: config.baseUrl,
@@ -102,46 +163,113 @@ export class GiteaTranslationExportService {
             repo: config.repo,
         });
 
-        const loadedCatalog = await this.loadCatalog(config, path);
+        return this.withRepositoryWriteLock(lockKey, async () => {
+            const maxAttempts = 5;
 
-        this.logger.debug('[GiteaExport] Current catalog state', {
-            path,
-            exists: loadedCatalog.exists,
-            sha: loadedCatalog.sha ?? '(none)',
-            entryCount: Object.keys(loadedCatalog.catalog).length,
-            existingKeys: Object.keys(loadedCatalog.catalog),
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                // Always reload inside the attempt. On a retry this is what
+                // preserves commits made by another backend workflow or Weblate.
+                const loadedCatalog = await this.loadCatalog(config, path);
+
+                this.logger.debug('[GiteaExport] Current catalog state', {
+                    path,
+                    attempt,
+                    exists: loadedCatalog.exists,
+                    sha: loadedCatalog.sha ?? '(none)',
+                    entryCount: Object.keys(loadedCatalog.catalog).length,
+                    existingKeys: Object.keys(loadedCatalog.catalog),
+                });
+
+                const updatedCatalog = this.addOrUpdateRevisionEntries(
+                    loadedCatalog.catalog,
+                    request,
+                );
+
+                const commitMessage = loadedCatalog.exists
+                    ? `Update ${request.itemId} translation revision`
+                    : `Create translation catalog ${path} with ${request.itemId} revision`;
+
+                try {
+                    await this.saveCatalog(config, {
+                        path,
+                        catalog: updatedCatalog,
+                        sha: loadedCatalog.sha,
+                        exists: loadedCatalog.exists,
+                        commitMessage,
+                    });
+
+                    const result = {
+                        path,
+                        keys,
+                        branch: config.branch,
+                        createdOrUpdated: (loadedCatalog.exists ? 'updated' : 'created') as
+                            | 'created'
+                            | 'updated',
+                    };
+
+                    this.logger.info('[GiteaExport] exportTranslationRevision done', {
+                        ...result,
+                        attempt,
+                    });
+                    return result;
+                } catch (error) {
+                    if (!this.isRetryableWriteError(error) || attempt === maxAttempts) {
+                        throw error;
+                    }
+
+                    const delayMs = 50 * 2 ** (attempt - 1);
+                    this.logger.warn('[GiteaExport] Concurrent repository update — reloading', {
+                        path,
+                        attempt,
+                        maxAttempts,
+                        delayMs,
+                        status: error.status,
+                        responseBody: error.responseBody,
+                    });
+                    await this.delay(delayMs);
+                }
+            }
+
+            throw new Error(`Failed updating ${path} after ${maxAttempts} attempts.`);
         });
+    }
 
-        const updatedCatalog = this.addOrUpdateEntry(loadedCatalog.catalog, request);
-
-        this.logger.debug('[GiteaExport] Updated catalog', {
-            path,
-            totalEntries: Object.keys(updatedCatalog).length,
-            updatedKey: key,
-            newValue: request.value.slice(0, 100),  // truncate for log readability
+    /**
+     * The Gitea contents API creates a commit and advances the shared branch.
+     * Serializing all writes to the same repository/branch prevents local
+     * workflows from racing even when they update different catalog files.
+     */
+    private async withRepositoryWriteLock<T>(
+        lockKey: string,
+        operation: () => Promise<T>,
+    ): Promise<T> {
+        const previous = this.repositoryWriteQueues.get(lockKey) ?? Promise.resolve();
+        let releaseCurrent!: () => void;
+        const current = new Promise<void>(resolve => {
+            releaseCurrent = resolve;
         });
+        const queueTail = previous.catch(() => undefined).then(() => current);
+        this.repositoryWriteQueues.set(lockKey, queueTail);
 
-        const commitMessage = loadedCatalog.exists
-            ? `Update translation key ${key}`
-            : `Create translation catalog ${path} with key ${key}`;
+        await previous.catch(() => undefined);
+        try {
+            return await operation();
+        } finally {
+            releaseCurrent();
+            if (this.repositoryWriteQueues.get(lockKey) === queueTail) {
+                this.repositoryWriteQueues.delete(lockKey);
+            }
+        }
+    }
 
-        await this.saveCatalog(config, {
-            path,
-            catalog: updatedCatalog,
-            sha: loadedCatalog.sha,
-            exists: loadedCatalog.exists,
-            commitMessage,
-        });
+    private isRetryableWriteError(error: unknown): error is GiteaWriteError {
+        if (!(error instanceof GiteaWriteError)) return false;
+        if (error.status === 409 || error.status >= 500) return true;
+        return error.status === 422 && /already exists|conflict|sha/i.test(error.responseBody);
+    }
 
-        const result = {
-            path,
-            key,
-            branch: config.branch,
-            createdOrUpdated: (loadedCatalog.exists ? 'updated' : 'created') as 'created' | 'updated',
-        };
-
-        this.logger.info('[GiteaExport] exportTranslationEntry done', result);
-        return result;
+    private async delay(milliseconds: number): Promise<void> {
+        await new Promise<void>(resolve => setTimeout(resolve, milliseconds));
     }
 
     // ── Step 1: load existing catalog (or empty if file does not exist) ───────
@@ -172,33 +300,33 @@ export class GiteaTranslationExportService {
 
     // ── Step 2: mutate in-memory catalog ──────────────────────────────────────
 
-    private addOrUpdateEntry(
+    private addOrUpdateRevisionEntries(
         catalog: TranslationCatalog,
-        request: TranslationExportRequest,
+        request: TranslationRevisionExportRequest,
     ): TranslationCatalog {
-        const key = this.buildTranslationKey(request.itemId, request.fieldKey);
-        const isUpdate = key in catalog;
-
-        const metadataKey = `@${key}`;
         const nextCatalog: TranslationCatalog = {
             ...catalog,
             '@@locale': request.isoCode.toLowerCase(),
-            [key]: request.value,
-            [metadataKey]: {
-                ...(request.comment ? {description: request.comment} : {}),
-                ...(request.flags ? {flags: request.flags} : {}),
+        };
+
+        for (const [fieldKey, value] of Object.entries(request.fields)) {
+            const key = this.buildTranslationKey(request.itemId, fieldKey);
+            const options = request.fieldOptions?.[fieldKey];
+            nextCatalog[key] = value;
+            nextCatalog[`@${key}`] = {
+                ...(options?.comment ? {description: options.comment} : {}),
+                ...(options?.flags ? {flags: options.flags} : {}),
                 category: request.category,
                 isoCode: request.isoCode.toLowerCase(),
                 itemId: request.itemId,
-                fieldKey: request.fieldKey,
+                fieldKey,
                 ...(request.meta ?? {}),
-            },
-        };
+            };
+        }
 
-        this.logger.debug('[GiteaExport] addOrUpdateEntry', {
-            key,
-            isUpdate,
-            value: request.value.slice(0, 80),
+        this.logger.debug('[GiteaExport] addOrUpdateRevisionEntries', {
+            itemId: request.itemId,
+            fieldKeys: Object.keys(request.fields),
         });
 
         return nextCatalog;
@@ -265,6 +393,24 @@ export class GiteaTranslationExportService {
         }
         if (request.value == null || request.value === '') {
             throw new HttpErrors.BadRequest('value is required.');
+        }
+    }
+
+    private validateRevisionRequest(request: TranslationRevisionExportRequest): void {
+        const entries = Object.entries(request.fields);
+        if (entries.length === 0) {
+            throw new HttpErrors.BadRequest('At least one translation field is required.');
+        }
+
+        for (const [fieldKey, value] of entries) {
+            this.validateRequest(Object.assign(new TranslationExportRequest(), {
+                category: request.category,
+                isoCode: request.isoCode,
+                itemId: request.itemId,
+                fieldKey,
+                value,
+                meta: request.meta,
+            }));
         }
     }
 
@@ -460,7 +606,11 @@ export class GiteaTranslationExportService {
             this.logger.error('[GiteaExport] POST (create) failed', {
                 url, path: input.path, status: response.status, body,
             });
-            throw new HttpErrors.BadGateway(`Failed creating file in Gitea: ${response.status}`);
+            throw new GiteaWriteError(
+                response.status,
+                body,
+                `Failed creating file in Gitea: ${response.status}`,
+            );
         }
 
         this.logger.info('[GiteaExport] File created in Gitea', { path: input.path });
@@ -511,7 +661,11 @@ export class GiteaTranslationExportService {
             this.logger.error('[GiteaExport] PUT (update) failed', {
                 url, path: input.path, sha: input.sha, status: response.status, body,
             });
-            throw new HttpErrors.BadGateway(`Failed updating file in Gitea: ${response.status}`);
+            throw new GiteaWriteError(
+                response.status,
+                body,
+                `Failed updating file in Gitea: ${response.status}`,
+            );
         }
 
         this.logger.info('[GiteaExport] File updated in Gitea', { path: input.path, sha: input.sha });
