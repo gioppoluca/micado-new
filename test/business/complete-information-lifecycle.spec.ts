@@ -41,7 +41,27 @@ interface WorkflowDbRow {
 
 interface ActiveLanguageDbRow {
   lang: string;
+  name: string;
   isDefault: boolean;
+}
+
+interface ImportedTranslationDbRow {
+  revisionId: string;
+  lang: string;
+  title: string;
+  description: string | null;
+  translationStatus: string;
+  sourceHash: string | null;
+  lastImportAt: string | null;
+}
+
+interface StagedCommitDbRow {
+  id: string;
+  component: string;
+  lang: string;
+  status: string;
+  action: string;
+  receivedAt: string;
 }
 
 interface ApprovedInformationDbRow {
@@ -81,7 +101,7 @@ function check(message: string, details?: unknown): void {
 /**
  * Complete business logic — Information lifecycle.
  *
- * This first increment deliberately implements only:
+ * Implemented business path:
  *   1. real PA login through Keycloak;
  *   2. real Information creation through the PA browser form;
  *   3. direct read-only verification in the application PostgreSQL database;
@@ -89,11 +109,15 @@ function check(message: string, details?: unknown): void {
  *   5. approval verification in PostgreSQL;
  *   6. DBOS master/children verification;
  *   7. source ARB verification through the Gitea API;
- *   8. Italian translation through the Weblate UI.
+ *   8. Italian translation through the Weblate UI;
+ *   9. real Weblate commit and push through repository maintenance;
+ *  10. imported translation verification in PostgreSQL;
+ *  11. translated child advancement verification in DBOS;
+ *  12. readonly translated content verification through the PA UI.
  *
  * The test writes real development data and does not clean it up. Every run
  * uses a unique marker so its UI/API/DB/Git/Weblate evidence can be correlated
- * when the remaining lifecycle steps are added.
+ * through the later publication and Migrant verification increments.
  */
 test.describe('Complete business logic — Information lifecycle', () => {
   test('creates, approves and translates a real Information', async ({page, playwright}, testInfo) => {
@@ -127,7 +151,7 @@ test.describe('Complete business logic — Information lifecycle', () => {
     test.skip(!environment.giteaPassword, 'GITEA_WEBLATE_PASSWORD is missing from the project .env.');
     test.skip(!environment.weblateAdminPassword, 'WEBLATE_ADMIN_PASSWORD is missing from the project .env.');
 
-    test.setTimeout(5 * 60_000);
+    test.setTimeout(10 * 60_000);
 
     const marker = `cbl-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}-${randomBytes(3).toString('hex')}`;
     const sourceTitle = `CBL source ${marker}`;
@@ -168,9 +192,15 @@ test.describe('Complete business logic — Information lifecycle', () => {
     let sourceArb: ArbCatalog | undefined;
     let giteaSourceHash: string | undefined;
     let weblateTranslationsSaved = false;
+    let weblateCommitPushed = false;
+    let importedTranslation: ImportedTranslationDbRow | undefined;
+    let translatedWorkflowRows: WorkflowDbRow[] = [];
+    let paTranslationVisible = false;
+    let currentBusinessStep = 0;
 
     try {
       await test.step('1 — log in to the PA as pa_admin', async () => {
+        currentBusinessStep = 1;
         flow('STEP 1 START — open PA home and use its Login control');
 
         const homeResponse = await page.goto(`${environment.paBaseUrl}/`, {waitUntil: 'domcontentloaded'});
@@ -258,6 +288,7 @@ test.describe('Complete business logic — Information lifecycle', () => {
       });
 
       await test.step('2 — create a draft Information through the PA form', async () => {
+        currentBusinessStep = 2;
         flow('STEP 2 START — create Information from PA form');
         await page.getByRole('button', {name: /add information/i}).click();
         flow('Add Information button clicked');
@@ -315,6 +346,7 @@ test.describe('Complete business logic — Information lifecycle', () => {
       });
 
       await test.step('3 — verify the created Information directly in PostgreSQL', async () => {
+        currentBusinessStep = 3;
         flow('STEP 3 START — read-only PostgreSQL verification');
         expect(created?.id, 'Cannot query PostgreSQL without the created numeric Information id')
           .toEqual(expect.any(Number));
@@ -404,6 +436,7 @@ test.describe('Complete business logic — Information lifecycle', () => {
       });
 
       await test.step('4 — approve the Information through the PA edit form', async () => {
+        currentBusinessStep = 4;
         flow('STEP 4 START — open the created Information and approve it');
         const informationId = Number(created!.id);
         const editButton = page.locator(`[data-cy="edit_information_${informationId}"]`);
@@ -478,6 +511,7 @@ test.describe('Complete business logic — Information lifecycle', () => {
       });
 
       await test.step('5 — verify APPROVED state directly in PostgreSQL', async () => {
+        currentBusinessStep = 5;
         flow('STEP 5 START — verify approval in application database');
         const expectedActor = environment.backendDummyAuth
           ? environment.backendDummyUsername
@@ -535,6 +569,7 @@ test.describe('Complete business logic — Information lifecycle', () => {
       });
 
       await test.step('6 — verify DBOS master and all translation children', async () => {
+        currentBusinessStep = 6;
         flow('STEP 6 START — verify durable translation workflows');
         expect(environment.dbosDbSchema).toMatch(/^[a-zA-Z_][a-zA-Z0-9_]*$/);
         const revisionId = databaseRow!.revisionId;
@@ -546,7 +581,7 @@ test.describe('Complete business logic — Information lifecycle', () => {
           password: environment.appDbPassword,
           connectionTimeoutMillis: 10_000,
         }, `
-          SELECT lang, is_default AS "isDefault"
+          SELECT lang, name, is_default AS "isDefault"
           FROM languages
           WHERE active = true
           ORDER BY sort_order, lang
@@ -640,6 +675,7 @@ test.describe('Complete business logic — Information lifecycle', () => {
       });
 
       await test.step('7 — verify the source ARB file through Gitea', async () => {
+        currentBusinessStep = 7;
         flow('STEP 7 START — read information source catalog from Gitea');
         const gitea = await playwright.request.newContext({
           baseURL: environment.giteaBaseUrl,
@@ -705,6 +741,7 @@ test.describe('Complete business logic — Information lifecycle', () => {
       });
 
       await test.step('8 — translate title and description through the Weblate UI', async () => {
+        currentBusinessStep = 8;
         flow('STEP 8 START — log in to Weblate and translate Information');
         const targetLang = environment.businessTranslationLanguage;
         expect(environment.targetLanguages, `${targetLang} is not configured in Weblate target languages`).toContain(targetLang);
@@ -796,45 +833,203 @@ test.describe('Complete business logic — Information lifecycle', () => {
         await page.screenshot({path: testInfo.outputPath('08b-weblate-authenticated.png'), fullPage: true});
         check('Weblate admin login completed', {username: environment.weblateAdminUsername, url: page.url()});
 
-        const projectLink = page.locator('a[href="/projects/micado/"]').first();
+        const describeVisibleLinks = async () => page.locator('a:visible').evaluateAll(links =>
+          links.slice(0, 120).map(link => ({
+            text: (link.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 120),
+            href: link.getAttribute('href'),
+          })),
+        );
+
+        let projectLink = page.locator('a[href$="/projects/micado/"]:visible').first();
+        if (!await projectLink.isVisible()) {
+          // Weblate 5.16 exposes Projects as a dropdown trigger (`href="#"`),
+          // not as a direct /projects/ link.
+          const projectsMenu = page.locator('a:visible').filter({hasText: /^\s*Projects\s*$/}).first();
+          flow('Micado is not listed on the Weblate home; opening the Projects menu', {
+            url: page.url(),
+            visibleLinks: await describeVisibleLinks(),
+          });
+          await expect(projectsMenu, 'Weblate Projects menu is not visible').toBeVisible();
+          await projectsMenu.click();
+          check('Weblate Projects dropdown opened');
+
+          projectLink = page.locator('a[href$="/projects/micado/"]:visible').first();
+          if (!await projectLink.isVisible()) {
+            const allProjectsLink = page.getByRole('link', {name: /^Browse all projects$/i}).first();
+            flow('Micado is not present in the Projects dropdown', {
+              visibleLinks: await describeVisibleLinks(),
+            });
+            await expect(allProjectsLink, 'Browse all projects link is not visible in the Projects dropdown').toBeVisible();
+            await allProjectsLink.click();
+            await page.waitForLoadState('networkidle');
+            check('Weblate Projects page opened through the dropdown', {url: page.url()});
+            projectLink = page.locator('a[href$="/projects/micado/"]:visible').first();
+            if (!await projectLink.isVisible()) {
+              projectLink = page.locator('a:visible').filter({hasText: /^\s*micado\s*$/i}).first();
+            }
+          }
+          await page.screenshot({path: testInfo.outputPath('08c-weblate-projects.png'), fullPage: true});
+        }
         await expect(projectLink, 'Micado project link is not visible in Weblate').toBeVisible();
         await projectLink.click();
+        await page.waitForLoadState('networkidle');
         check('Micado project opened from Weblate UI');
 
-        const componentLink = page.locator('a[href="/projects/micado/content-information/"]').first();
+        const componentsNavigation = page.locator('a:visible, button:visible')
+          .filter({hasText: /^\s*Components\b/i}).first();
+        await expect(componentsNavigation, 'Components navigation is not visible in the Micado project').toBeVisible();
+        await componentsNavigation.click();
+        await page.waitForLoadState('networkidle');
+        check('Micado Components list opened through the Weblate UI', {
+          url: page.url(),
+          visibleLinks: await describeVisibleLinks(),
+        });
+        await page.screenshot({path: testInfo.outputPath('08d-weblate-components.png'), fullPage: true});
+
+        let componentLink = page.locator('a[href$="/projects/micado/content-information/"]:visible').first();
+        if (!await componentLink.isVisible()) {
+          componentLink = page.getByRole('link', {name: /^Information$/i}).first();
+        }
         await expect(componentLink, 'content-information component is not visible').toBeVisible();
         await componentLink.click();
+        await page.waitForLoadState('networkidle');
         check('content-information component opened from Weblate UI');
 
-        const languageLink = page.locator(`a[href*="/content-information/${targetLang}/"]`).first();
-        await expect(languageLink, `Target language ${targetLang} is not visible in content-information`).toBeVisible({timeout: 30_000});
+        let languageLink = page.getByRole('link', {name: /^Italian\b/i}).first();
+        if (!await languageLink.isVisible()) {
+          languageLink = page.locator(
+            `a[href$="/projects/micado/content-information/${targetLang}/"]:visible`,
+          ).first();
+        }
+        await expect(languageLink, 'Italian language row is not visible in content-information').toBeVisible({timeout: 30_000});
         await languageLink.click();
-        check('Target language opened from component UI', {targetLang});
+        await page.waitForLoadState('networkidle');
+        await expect(page).toHaveURL(new RegExp(`/projects/micado/content-information/${targetLang}/`));
+        check('Italian language opened from component UI', {
+          targetLang,
+          url: page.url(),
+          visibleLinks: await describeVisibleLinks(),
+        });
+        await page.screenshot({path: testInfo.outputPath('08e-weblate-italian.png'), fullPage: true});
 
-        const translateLink = page.locator(`a[href^="/translate/micado/content-information/${targetLang}/"]`).first();
-        if (await translateLink.isVisible()) await translateLink.click();
+        let translateLink = page.getByRole('link', {name: /^Translate$/i}).first();
+        if (!await translateLink.isVisible()) {
+          translateLink = page.getByRole('button', {name: /^Translate$/i}).first();
+        }
+        if (!await translateLink.isVisible()) {
+          translateLink = page.locator(
+            `a[href^="/translate/micado/content-information/${targetLang}/"]:visible`,
+          ).first();
+        }
+        await expect(translateLink, 'Translate action is not visible on the Italian language page').toBeVisible();
+        await translateLink.click();
+        await page.waitForLoadState('networkidle');
+        await expect(page).toHaveURL(new RegExp(`/translate/micado/content-information/${targetLang}/`));
+        check('Italian translation editor opened through Translate', {url: page.url()});
+        await page.screenshot({path: testInfo.outputPath('08f-weblate-italian-translate.png'), fullPage: true});
+
+        const locateUnitSearchInput = async () => {
+          const selectors = [
+            `form[action*="/translate/micado/content-information/${targetLang}/"] textarea#id_q:visible`,
+            `form[action*="/translate/micado/content-information/${targetLang}/"] textarea[name="q"]:visible`,
+            `form[action*="/translate/micado/content-information/${targetLang}/"] input[name="q"]:visible`,
+            `form[action*="/search/micado/content-information"] textarea#id_q:visible`,
+            `form[action*="/search/micado/content-information"] textarea[name="q"]:visible`,
+            `form[action*="/search/micado/content-information"] input[name="q"]:visible`,
+            'textarea#id_q:visible',
+            'textarea[name="q"]:visible',
+            'input#id_q:visible',
+            'input[name="q"]:visible',
+            'input[name="query"]:visible',
+            'input[type="search"]:visible',
+          ].join(', ');
+          let input = page.locator(selectors).first();
+          if (await input.isVisible()) return input;
+
+          const searchMenu = page.locator('a:visible, button:visible')
+            .filter({hasText: /^\s*Search\s*$/i}).first();
+          if (await searchMenu.isVisible()) {
+            await searchMenu.click();
+            flow('Weblate Search menu opened from translation editor', {
+              url: page.url(),
+              visibleLinks: await describeVisibleLinks(),
+            });
+          }
+
+          input = page.locator(selectors).first();
+          if (await input.isVisible()) return input;
+
+          const componentSearchLink = page.locator(
+            `a[href*="/search/micado/content-information/"]:visible, a[href*="/search/micado/content-information/?"]:visible`,
+          ).first();
+          if (await componentSearchLink.isVisible()) {
+            await componentSearchLink.click();
+            await page.waitForLoadState('networkidle');
+            flow('Weblate component search page opened through Search menu', {url: page.url()});
+          }
+          return page.locator(selectors).first();
+        };
 
         const translateUnit = async (fieldKey: 'title' | 'description', translatedValue: string) => {
           const context = `${created!.id}:${fieldKey}`;
+          const itemFilter = String(created!.id);
           await expect.poll(async () => {
-            const searchInput = page.locator('input[name="q"]:visible').first();
-            if (!await searchInput.isVisible()) return false;
-            await searchInput.fill(`context:"${context}"`);
+            const searchInput = await locateUnitSearchInput();
+            if (!await searchInput.isVisible()) {
+              const visibleFields = await page.locator('input:visible, textarea:visible').evaluateAll(fields => fields.map(field => ({
+                tag: field.tagName.toLowerCase(),
+                id: field.id || null,
+                name: field.getAttribute('name'),
+                type: field.getAttribute('type'),
+                placeholder: field.getAttribute('placeholder'),
+              })));
+              flow('Weblate unit search input is not visible', {
+                context,
+                url: page.url(),
+                visibleFields,
+                visibleLinks: await describeVisibleLinks(),
+              });
+              return false;
+            }
+            // Filter by the numeric Information ID. Both ARB keys
+            // `<id>:title` and `<id>:description` are returned regardless of
+            // how many historical strings or result pages the component has.
+            await searchInput.fill(itemFilter);
             await searchInput.press('Enter');
             await page.waitForLoadState('networkidle');
-            return await page.getByText(context, {exact: true}).count() > 0;
+
+            const contextLink = page.getByRole('link', {name: context, exact: true}).first();
+            const contextAlreadyOpen = await page.locator('input:visible').evaluateAll(
+              (inputs, expected) => inputs.some(input => (input as HTMLInputElement).value === expected),
+              context,
+            );
+            if (!contextAlreadyOpen && await contextLink.isVisible()) {
+              await contextLink.click();
+              await page.waitForLoadState('networkidle');
+            }
+
+            const keyAsText = await page.getByText(context, {exact: true}).count() > 0;
+            const keyAsInputValue = await page.locator('input:visible').evaluateAll(
+              (inputs, expected) => inputs.some(input => (input as HTMLInputElement).value === expected),
+              context,
+            );
+            const targetEditorVisible = await page.locator(
+              'textarea[name^="target"]:visible, textarea[id^="id_target"]:visible',
+            ).first().isVisible();
+            flow('Weblate unit search snapshot', {
+              context,
+              itemFilter,
+              url: page.url(),
+              keyAsText,
+              keyAsInputValue,
+              targetEditorVisible,
+            });
+            return (keyAsText || keyAsInputValue) && targetEditorVisible;
           }, {
-            message: `Weblate unit ${context} was not imported after the Gitea update`,
+            message: `Weblate filter ${itemFilter} did not expose unit ${context}`,
             timeout: 90_000,
             intervals: [1_000, 2_000, 5_000],
           }).toBe(true);
-
-          const contextLink = page.getByRole('link', {name: context, exact: true}).first();
-          const existingEditor = page.locator('textarea[name^="target"]:visible, textarea[id^="id_target"]:visible').first();
-          if (!await existingEditor.isVisible() && await contextLink.isVisible()) {
-            await contextLink.click();
-            await page.waitForLoadState('networkidle');
-          }
 
           const targetEditor = page.locator('textarea[name^="target"]:visible, textarea[id^="id_target"]:visible').first();
           await expect(targetEditor, `Target editor for ${context} is not visible`).toBeVisible();
@@ -860,15 +1055,294 @@ test.describe('Complete business logic — Information lifecycle', () => {
         });
       });
 
-      flow('TEST DONE — steps 1 through 8 passed', {
+      await test.step('9 — commit and push the translation through the Weblate UI', async () => {
+        currentBusinessStep = 9;
+        flow('STEP 9 START — commit and push from Weblate repository maintenance');
+        const targetLang = environment.businessTranslationLanguage;
+        const commitStartedAt = new Date(Date.now() - 5_000).toISOString();
+
+        let componentBreadcrumb = page.locator('a[href$="/projects/micado/content-information/"]:visible').first();
+        if (!await componentBreadcrumb.isVisible()) {
+          componentBreadcrumb = page.getByRole('link', {name: /^Information$/i}).first();
+        }
+        await expect(componentBreadcrumb, 'Information component breadcrumb is not visible after translation').toBeVisible();
+        await componentBreadcrumb.click();
+        await page.waitForLoadState('networkidle');
+
+        const manageMenu = page.locator('a:visible, button:visible').filter({hasText: /^\s*Manage\s*$/i}).first();
+        await expect(manageMenu, 'Weblate Manage menu is not visible on the component page').toBeVisible();
+        await manageMenu.click();
+
+        let repositoryLink = page.locator('a[href$="/projects/micado/content-information/repository/"]:visible').first();
+        if (!await repositoryLink.isVisible()) {
+          repositoryLink = page.getByRole('link', {name: /repository maintenance/i}).first();
+        }
+        await expect(repositoryLink, 'Repository maintenance is not visible in the Manage menu').toBeVisible();
+        await repositoryLink.click();
+        await page.waitForLoadState('networkidle');
+        check('Weblate repository maintenance opened through Manage', {url: page.url()});
+        await page.screenshot({path: testInfo.outputPath('09a-weblate-repository-maintenance.png'), fullPage: true});
+
+        const clickRepositoryAction = async (action: 'Commit' | 'Push') => {
+          const pattern = action === 'Commit' ? /^Commit(?: pending changes)?$/i : /^Push(?: changes)?$/i;
+          let control = page.getByRole('button', {name: pattern}).first();
+          if (!await control.isVisible()) control = page.getByRole('link', {name: pattern}).first();
+          await expect(control, `Weblate ${action} action is not visible`).toBeVisible();
+          await control.click();
+
+          const confirmationDialog = page.getByRole('dialog').filter({hasText: new RegExp(action, 'i')}).first();
+          if (await confirmationDialog.isVisible()) {
+            const confirmation = confirmationDialog.getByRole('button', {
+              name: new RegExp(`^(Confirm|${action}|Confirm ${action})$`, 'i'),
+            }).first();
+            await expect(confirmation, `Weblate ${action} confirmation is not visible`).toBeVisible();
+            await confirmation.click();
+          }
+          await page.waitForLoadState('networkidle');
+          check(`Weblate ${action} submitted through repository maintenance`, {url: page.url()});
+        };
+
+        await clickRepositoryAction('Commit');
+
+        const loadStagedCommits = () => queryPostgres<StagedCommitDbRow>({
+          host: environment.appDbHost,
+          port: environment.appDbPort,
+          database: environment.appDbName,
+          user: environment.appDbUsername,
+          password: environment.appDbPassword,
+          connectionTimeoutMillis: 10_000,
+        }, `
+          SELECT
+            id::text             AS "id",
+            component,
+            lang,
+            status,
+            action,
+            received_at::text    AS "receivedAt"
+          FROM micado.weblate_commit_event
+          WHERE component = 'content-information'
+            AND lang = $1
+            AND received_at >= $2::timestamptz
+          ORDER BY received_at DESC
+        `, [targetLang, commitStartedAt]);
+
+        await expect.poll(async () => (await loadStagedCommits()).filter(row => row.status === 'NEW').length, {
+          message: 'The real Weblate COMMIT webhook did not stage a content-information event',
+          timeout: 60_000,
+          intervals: [500, 1_000, 2_000, 5_000],
+        }).toBeGreaterThan(0);
+        const stagedRows = await loadStagedCommits();
+        check('Weblate COMMIT webhook staged for backend processing', stagedRows);
+        await testInfo.attach('09-weblate-staged-commit.json', {
+          body: Buffer.from(JSON.stringify(stagedRows, null, 2)),
+          contentType: 'application/json',
+        });
+
+        await clickRepositoryAction('Push');
+        await expect.poll(async () => (await loadStagedCommits()).length, {
+          message: 'The real Weblate PUSH webhook did not consume the staged commit',
+          timeout: 90_000,
+          intervals: [500, 1_000, 2_000, 5_000],
+        }).toBe(0);
+        weblateCommitPushed = true;
+        await page.screenshot({path: testInfo.outputPath('09b-weblate-after-push.png'), fullPage: true});
+        flow('STEP 9 DONE — real Weblate commit and push completed', {targetLang});
+      });
+
+      await test.step('10 — verify the imported translation in PostgreSQL', async () => {
+        currentBusinessStep = 10;
+        flow('STEP 10 START — verify translated revision state in application database');
+        const targetLang = environment.businessTranslationLanguage;
+        const loadImportedTranslation = () => queryPostgres<ImportedTranslationDbRow>({
+          host: environment.appDbHost,
+          port: environment.appDbPort,
+          database: environment.appDbName,
+          user: environment.appDbUsername,
+          password: environment.appDbPassword,
+          connectionTimeoutMillis: 10_000,
+        }, `
+          SELECT
+            revision_id::text     AS "revisionId",
+            lang,
+            title,
+            description,
+            t_status::text        AS "translationStatus",
+            source_hash           AS "sourceHash",
+            last_import_at::text  AS "lastImportAt"
+          FROM content_revision_translation
+          WHERE revision_id = $1::uuid AND lang = $2
+        `, [databaseRow!.revisionId, targetLang]);
+
+        await expect.poll(loadImportedTranslation, {
+          message: 'The Weblate translation was not imported into content_revision_translation',
+          timeout: 90_000,
+          intervals: [500, 1_000, 2_000, 5_000],
+        }).toEqual([expect.objectContaining({
+          translationStatus: 'APPROVED',
+          title: translatedTitle,
+          description: translatedDescription,
+          sourceHash: giteaSourceHash,
+        })]);
+        [importedTranslation] = await loadImportedTranslation();
+        expect(importedTranslation.lastImportAt).not.toBeNull();
+        check('Target translation is APPROVED and correlated to the source revision', importedTranslation);
+        await testInfo.attach('10-imported-translation.json', {
+          body: Buffer.from(JSON.stringify(importedTranslation, null, 2)),
+          contentType: 'application/json',
+        });
+        flow('STEP 10 DONE — imported database state verified');
+      });
+
+      await test.step('11 — verify the translated DBOS child advanced to DONE', async () => {
+        currentBusinessStep = 11;
+        flow('STEP 11 START — verify DBOS advancement after Weblate push');
+        const targetLang = environment.businessTranslationLanguage;
+        const masterId = `tr:${databaseRow!.revisionId}`;
+        const childId = `tr:${databaseRow!.revisionId}:${targetLang}`;
+        const loadTranslatedWorkflows = () => queryPostgres<WorkflowDbRow>({
+          host: environment.appDbHost,
+          port: environment.appDbPort,
+          database: environment.appDbName,
+          user: environment.dbosDbUsername,
+          password: environment.appDbPassword,
+          connectionTimeoutMillis: 10_000,
+        }, `
+          SELECT
+            ws.workflow_uuid AS "workflowId",
+            ws.status        AS "dbosStatus",
+            ws.name          AS "workflowName",
+            ws.class_name    AS "className",
+            CASE
+              WHEN ev.value IS NULL THEN NULL
+              WHEN ev.value LIKE '%"__dbos_serializer":"superjson"%'
+                THEN ev.value::jsonb->>'json'
+              ELSE TRIM(BOTH '"' FROM ev.value)
+            END              AS "businessStatus",
+            ev.value         AS "rawEventValue",
+            ev.serialization AS "eventSerialization"
+          FROM "${environment.dbosDbSchema}".workflow_status ws
+          LEFT JOIN "${environment.dbosDbSchema}".workflow_events ev
+            ON ev.workflow_uuid = ws.workflow_uuid
+           AND ev.key = 'lang:' || split_part(ws.workflow_uuid, ':', 3) || ':status'
+          WHERE ws.workflow_uuid = ANY($1::text[])
+          ORDER BY ws.workflow_uuid
+        `, [[masterId, childId]]);
+
+        await expect.poll(async () => {
+          const rows = await loadTranslatedWorkflows();
+          const child = rows.find(row => row.workflowId === childId);
+          flow('Translated DBOS child polling snapshot', {child, rows});
+          return child ? {dbosStatus: child.dbosStatus, businessStatus: child.businessStatus} : null;
+        }, {
+          message: 'The translated DBOS child did not complete after the push',
+          timeout: 90_000,
+          intervals: [500, 1_000, 2_000, 5_000],
+        }).toEqual({dbosStatus: 'SUCCESS', businessStatus: 'DONE'});
+
+        translatedWorkflowRows = await loadTranslatedWorkflows();
+        const master = translatedWorkflowRows.find(row => row.workflowId === masterId);
+        const child = translatedWorkflowRows.find(row => row.workflowId === childId);
+        expect(child?.className).toContain('TranslationChildWorkflow');
+        expect(master, 'Translation master disappeared from DBOS').toBeTruthy();
+        check('Translated DBOS child is DONE while master remains durable for other languages', {master, child});
+        await testInfo.attach('11-dbos-after-translation.json', {
+          body: Buffer.from(JSON.stringify({master, child}, null, 2)),
+          contentType: 'application/json',
+        });
+        flow('STEP 11 DONE — DBOS translated child advancement verified');
+      });
+
+      await test.step('12 — verify the translated Information readonly in the PA UI', async () => {
+        currentBusinessStep = 12;
+        flow('STEP 12 START — return to PA and inspect the full translated Information');
+        const paHome = await page.goto(`${environment.paBaseUrl}/`, {waitUntil: 'networkidle'});
+        expect(paHome?.ok(), `PA home returned HTTP ${paHome?.status()}`).toBeTruthy();
+        const informationMenuItem = page.locator('a[href="/information"]:visible').first();
+        await expect(informationMenuItem, 'Information navigation is not visible after returning to the PA').toBeVisible();
+        await informationMenuItem.click();
+        await expect(page).toHaveURL(/\/information(?:[?#].*)?$/);
+
+        const searchInput = page.locator('.q-page input:visible').first();
+        await expect(searchInput, 'PA Information search input is not visible').toBeVisible();
+        await searchInput.fill(marker);
+        const sourceRowTitle = page.getByText(sourceTitle, {exact: true}).first();
+        await expect(sourceRowTitle, 'Created Information is not present in the PA list').toBeVisible();
+
+        const informationId = Number(created!.id);
+        const viewControl = page.locator([
+          `button[data-cy="view_information_${informationId}"]`,
+          `button[data-cy="edit_information_${informationId}"]`,
+        ].join(', ')).first();
+        await expect(viewControl, 'Readonly/view control for the approved Information is not visible').toBeVisible();
+        await viewControl.click();
+
+        const editor = page.locator('[data-cy="information_multilang_tabs"]');
+        await expect(editor).toBeVisible();
+        const targetLanguage = activeTargetLanguages.includes(environment.businessTranslationLanguage)
+          ? environment.businessTranslationLanguage
+          : null;
+        expect(targetLanguage).not.toBeNull();
+        const targetLanguageName = (await queryPostgres<ActiveLanguageDbRow>({
+          host: environment.appDbHost,
+          port: environment.appDbPort,
+          database: environment.appDbName,
+          user: environment.appDbUsername,
+          password: environment.appDbPassword,
+          connectionTimeoutMillis: 10_000,
+        }, 'SELECT lang, name, is_default AS "isDefault" FROM languages WHERE lang = $1', [targetLanguage]))[0]?.name;
+        expect(targetLanguageName, 'Target language has no display name in the database').toBeTruthy();
+
+        const languageTab = editor.getByRole('tab', {name: new RegExp(`^${targetLanguageName}$`, 'i')}).first();
+        await expect(languageTab, `PA language tab ${targetLanguageName} is not visible`).toBeVisible();
+        await languageTab.click();
+        const visibleTitle = editor.locator('input:visible').first();
+        await expect(visibleTitle).toHaveValue(translatedTitle);
+        const visibleDescription = editor.locator('.ProseMirror:visible').first();
+        await expect(visibleDescription).toContainText(translatedDescription);
+        paTranslationVisible = true;
+        await testInfo.attach('12-pa-readonly-translation.png', {
+          body: await page.screenshot({fullPage: true}),
+          contentType: 'image/png',
+        });
+        check('Imported translation is visible in the PA full readonly view', {
+          informationId,
+          targetLang: targetLanguage,
+          translatedTitle,
+          translatedDescription,
+        });
+        flow('STEP 12 DONE — PA readonly translation verified');
+      });
+
+      flow('TEST DONE — steps 1 through 12 passed', {
         informationId: created.id,
         itemUuid: databaseRow?.itemId,
         revisionId: databaseRow?.revisionId,
         approvalHttpStatus,
         giteaSourceHash,
         weblateTranslationsSaved,
+        weblateCommitPushed,
+        importedTranslation,
+        paTranslationVisible,
       });
+    } catch (error) {
+      flow(`TEST STOPPED — step ${currentBusinessStep} failed; steps ${currentBusinessStep + 1}–12 were not executed`, {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
     } finally {
+      let completedSteps: number[] = [];
+      if (created) completedSteps = [1, 2];
+      if (databaseRow) completedSteps = [1, 2, 3];
+      if (approvalHttpStatus) completedSteps = [1, 2, 3, 4];
+      if (approvedDatabaseRow) completedSteps = [1, 2, 3, 4, 5];
+      if (workflowRows.length) completedSteps = [1, 2, 3, 4, 5, 6];
+      if (giteaSourceHash) completedSteps = [1, 2, 3, 4, 5, 6, 7];
+      if (weblateTranslationsSaved) completedSteps = [1, 2, 3, 4, 5, 6, 7, 8];
+      if (weblateCommitPushed) completedSteps = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+      if (importedTranslation) completedSteps = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+      if (translatedWorkflowRows.length) completedSteps = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+      if (paTranslationVisible) completedSteps = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+
       await testInfo.attach('business-context.json', {
         body: Buffer.from(JSON.stringify({
           marker,
@@ -892,21 +1366,11 @@ test.describe('Complete business logic — Information lifecycle', () => {
           translatedTitle,
           translatedDescription,
           weblateTranslationsSaved,
-          completedSteps: weblateTranslationsSaved
-            ? [1, 2, 3, 4, 5, 6, 7, 8]
-            : giteaSourceHash
-              ? [1, 2, 3, 4, 5, 6, 7]
-              : workflowRows.length
-                ? [1, 2, 3, 4, 5, 6]
-                : approvedDatabaseRow
-                  ? [1, 2, 3, 4, 5]
-                  : approvalHttpStatus
-                    ? [1, 2, 3, 4]
-            : databaseRow
-              ? [1, 2, 3]
-              : created
-                ? [1, 2]
-                : [],
+          weblateCommitPushed,
+          importedTranslation: importedTranslation ?? null,
+          translatedWorkflows: translatedWorkflowRows,
+          paTranslationVisible,
+          completedSteps,
         }, null, 2)),
         contentType: 'application/json',
       });
