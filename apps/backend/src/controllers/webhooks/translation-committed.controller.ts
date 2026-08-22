@@ -59,7 +59,7 @@ import { WeblateWebhookSignatureService } from '../../services/weblate-webhook-s
  *
  *   Weblate component: content-glossary
  *   Gitea category:    glossary
- *   Gitea path:        glossary/it.json
+ *   Gitea path:        glossary/it.arb
  */
 const WEBLATE_COMPONENT_PREFIX = 'content-';
 

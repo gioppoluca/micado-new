@@ -349,7 +349,7 @@ export class TranslationWorkflowTestController {
     // ── Gitea catalog inspector ───────────────────────────────────────────────
 
     /**
-     * Read the raw Gitea JSON catalog for a (category, lang) pair.
+     * Read the raw Gitea ARB catalog for a (category, lang) pair.
      * Returns both the raw key→entry map and the grouped itemId→fields map.
      *
      * Query params:
@@ -371,7 +371,7 @@ export class TranslationWorkflowTestController {
             return { path: '', raw: null, grouped: {}, itemCount: 0, keyCount: 0 };
         }
 
-        const path = `${category}/${lang.toLowerCase()}.json`;
+        const path = `${category}/${lang.toLowerCase()}.arb`;
 
         this.logger.info('[DevController] Reading Gitea catalog', { category, lang, path });
 

@@ -27,8 +27,9 @@ test.describe('Weblate content components', () => {
       expect(response.status(), body.slice(0, 500)).toBe(200);
       const component = JSON.parse(body);
       expect(component.slug).toBe(`content-${category}`);
-      expect(component.filemask).toBe(`${category}/*.json`);
-      expect(component.template).toBe(`${category}/${sourceLang}.json`);
+      expect(component.filemask).toBe(`${category}/*.arb`);
+      expect(component.template).toBe(`${category}/${sourceLang}.arb`);
+      expect(component.file_format).toBe('arb');
     });
   }
 });

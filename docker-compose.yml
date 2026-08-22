@@ -453,9 +453,9 @@ services:
       WEBLATE_IMPORT_COMPONENTS: "true"
       #      WEBLATE_GIT_REPO: http://gitea:3000/weblate-bot/translations.git
       WEBLATE_GIT_BRANCH: main
-      WEBLATE_FILEMASK: backend/*.json
-      WEBLATE_BASE_FILE_TEMPLATE: backend/en.json
-      WEBLATE_FILE_FORMAT: json
+      WEBLATE_FILEMASK: backend/*.arb
+      WEBLATE_BASE_FILE_TEMPLATE: backend/en.arb
+      WEBLATE_FILE_FORMAT: arb
       WEBLATE_NAME_TEMPLATE: Backend
       WEBLATE_WEBHOOK_URL: ${WEBLATE_WEBHOOK_URL:-http://backend:3000/api/webhooks/weblate/translation-complete}
       MICADO_TARGET_LANGS: ${MICADO_TARGET_LANGS:-it,fr,ar,de,sq,mk}   # your actual languages

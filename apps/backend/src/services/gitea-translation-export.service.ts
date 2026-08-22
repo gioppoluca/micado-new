@@ -1,25 +1,26 @@
 /**
  * src/services/gitea-translation-export.service.ts
  *
- * Writes translation entries to the Gitea JSON catalog.
+ * Writes translation entries to the Gitea ARB catalog.
  *
  * ── File path convention ──────────────────────────────────────────────────────
  *
- *   <category>/<isoCode>.json         (e.g.  user-types/it.json)
+ *   <category>/<isoCode>.arb          (e.g.  user-types/it.arb)
  *
  *   NO "backend/" prefix.  This must match:
  *     - gitea-init.sh   ensure_category_source_files_api()
  *     - weblate-init.sh filemask / template fields
  *     - GiteaTranslationImportService.computeRepoPath()
  *
- * ── JSON catalog format ───────────────────────────────────────────────────────
+ * ── ARB catalog format ────────────────────────────────────────────────────────
  *
  *   {
- *     "<itemId>:<fieldKey>": {
- *       "value":   "source or translated text",
- *       "comment": "",
- *       "flags":   "",
- *       "meta":    { "category": "...", "isoCode": "...", "itemId": "...", "fieldKey": "..." }
+ *     "@@locale": "en",
+ *     "<itemId>:<fieldKey>": "source or translated text",
+ *     "@<itemId>:<fieldKey>": {
+ *       "description": "translator-facing field description",
+ *       "category": "...", "isoCode": "...", "itemId": "...",
+ *       "fieldKey": "...", "revisionId": "...", "sourceHash": "..."
  *     }
  *   }
  *
@@ -59,15 +60,7 @@ type GiteaContentResponse = {
     size?: number;
 };
 
-type TranslationCatalog = Record<
-    string,
-    {
-        value: string;
-        comment: string;
-        flags: string;
-        meta: Record<string, unknown>;
-    }
->;
+type TranslationCatalog = Record<string, unknown>;
 
 type LoadedCatalog = {
     exists: boolean;
@@ -186,19 +179,19 @@ export class GiteaTranslationExportService {
         const key = this.buildTranslationKey(request.itemId, request.fieldKey);
         const isUpdate = key in catalog;
 
+        const metadataKey = `@${key}`;
         const nextCatalog: TranslationCatalog = {
             ...catalog,
-            [key]: {
-                value: request.value,
-                comment: request.comment ?? '',
-                flags: request.flags ?? '',
-                meta: {
-                    category: request.category,
-                    isoCode: request.isoCode.toLowerCase(),
-                    itemId: request.itemId,
-                    fieldKey: request.fieldKey,
-                    ...(request.meta ?? {}),
-                },
+            '@@locale': request.isoCode.toLowerCase(),
+            [key]: request.value,
+            [metadataKey]: {
+                ...(request.comment ? {description: request.comment} : {}),
+                ...(request.flags ? {flags: request.flags} : {}),
+                category: request.category,
+                isoCode: request.isoCode.toLowerCase(),
+                itemId: request.itemId,
+                fieldKey: request.fieldKey,
+                ...(request.meta ?? {}),
             },
         };
 
@@ -333,16 +326,16 @@ export class GiteaTranslationExportService {
     /**
      * Computes the Gitea file path for a (category, language) pair.
      *
-     * Convention: <category>/<isoCode>.json
-     *   e.g.  user-types/it.json
+     * Convention: <category>/<isoCode>.arb
+     *   e.g.  user-types/it.arb
      *
      * This must match:
-     *   - gitea-init.sh    path="${normalized}/${MICADO_SOURCE_LANG}.json"
-     *   - weblate-init.sh  filemask="${cat_slug}/*.json"
+     *   - gitea-init.sh    path="${normalized}/${MICADO_SOURCE_LANG}.arb"
+     *   - weblate-init.sh  filemask="${cat_slug}/*.arb"
      *   - GiteaTranslationImportService.computeRepoPath()
      */
     private computeRepoPath(category: string, isoCode: string): string {
-        return `${category}/${isoCode.toLowerCase()}.json`;
+        return `${category}/${isoCode.toLowerCase()}.arb`;
     }
 
     private buildTranslationKey(itemId: string, fieldKey: string): string {

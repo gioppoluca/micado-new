@@ -1,25 +1,22 @@
 /**
  * src/services/gitea-translation-import.service.ts
  *
- * Reads translated JSON catalogs from Gitea and assembles per-item
+ * Reads translated ARB catalogs from Gitea and assembles per-item
  * field maps for delivery to DBOS child workflows.
  *
  * ── Gitea file path convention ────────────────────────────────────────────────
  *
- *   <category>/<lang>.json
+ *   <category>/<lang>.arb
  *
- *   e.g.  user-types/it.json
- *         news/fr.json
+ *   e.g.  user-types/it.arb
+ *         news/fr.arb
  *
- * ── JSON catalog format ───────────────────────────────────────────────────────
+ * ── ARB catalog format ────────────────────────────────────────────────────────
  *
  *   {
- *     "<itemId>:<fieldKey>": {
- *       "value":   "translated string",
- *       "comment": "",
- *       "flags":   "",
- *       "meta":    { "category": "...", "isoCode": "...", "itemId": "...", "fieldKey": "..." }
- *     }
+ *     "@@locale": "it",
+ *     "<itemId>:<fieldKey>": "translated string",
+ *     "@<itemId>:<fieldKey>": { "category": "...", "revisionId": "...", ... }
  *   }
  *
  * ── Output ────────────────────────────────────────────────────────────────────
@@ -45,24 +42,17 @@ type GiteaConfig = {
     token: string;
 };
 
-type CatalogEntry = {
-    value: string;
-    comment?: string;
-    flags?: string;
-    meta?: {
-        category?: string;
-        isoCode?: string;
-        itemId?: string;
-        fieldKey?: string;
-        /** Written by pushSourceFieldsToGitea — used for direct DBOS signaling */
-        revisionId?: string;
-        /** SHA-256 of source fields — used as DBOS.send() idempotency key */
-        sourceHash?: string;
-        [key: string]: unknown;
-    };
+type ArbMetadata = {
+    category?: string;
+    isoCode?: string;
+    itemId?: string;
+    fieldKey?: string;
+    revisionId?: string;
+    sourceHash?: string;
+    [key: string]: unknown;
 };
 
-type RawCatalog = Record<string, CatalogEntry>;
+type RawCatalog = Record<string, unknown>;
 
 /** Per-item result including translated fields AND the revisionId from meta */
 export type CatalogItemResult = {
@@ -193,10 +183,10 @@ export class GiteaTranslationImportService {
 
     /**
      * Must match GiteaTranslationExportService.computeRepoPath() exactly.
-     * Path: <category>/<isoCode>.json  (no backend/ prefix)
+     * Path: <category>/<isoCode>.arb  (no backend/ prefix)
      */
     private computeRepoPath(category: string, isoCode: string): string {
-        return `${category}/${isoCode.toLowerCase()}.json`;
+        return `${category}/${isoCode.toLowerCase()}.arb`;
     }
 
     // ── Internal ───────────────────────────────────────────────────────────────
@@ -207,7 +197,8 @@ export class GiteaTranslationImportService {
     private groupByItem(raw: RawCatalog): Record<string, Record<string, string>> {
         const result: Record<string, Record<string, string>> = {};
 
-        for (const [compositeKey, entry] of Object.entries(raw)) {
+        for (const [compositeKey, value] of Object.entries(raw)) {
+            if (compositeKey.startsWith('@') || typeof value !== 'string') continue;
             const colonIdx = compositeKey.indexOf(':');
             if (colonIdx === -1) {
                 this.logger.warn('[GiteaImport] Skipping entry with unexpected key format', {
@@ -220,7 +211,7 @@ export class GiteaTranslationImportService {
             const fieldKey = compositeKey.slice(colonIdx + 1);
 
             if (!result[itemId]) result[itemId] = {};
-            result[itemId][fieldKey] = entry.value ?? '';
+            result[itemId][fieldKey] = value;
         }
 
         return result;
@@ -235,7 +226,8 @@ export class GiteaTranslationImportService {
     private groupByItemWithMeta(raw: RawCatalog): Record<string, CatalogItemResult> {
         const result: Record<string, CatalogItemResult> = {};
 
-        for (const [compositeKey, entry] of Object.entries(raw)) {
+        for (const [compositeKey, value] of Object.entries(raw)) {
+            if (compositeKey.startsWith('@') || typeof value !== 'string') continue;
             const colonIdx = compositeKey.indexOf(':');
             if (colonIdx === -1) {
                 this.logger.warn('[GiteaImport] Skipping entry with unexpected key format', {
@@ -246,13 +238,14 @@ export class GiteaTranslationImportService {
 
             const itemId = compositeKey.slice(0, colonIdx);
             const fieldKey = compositeKey.slice(colonIdx + 1);
-            const revisionId = (entry.meta?.revisionId as string | undefined) ?? null;
-            const sourceHash = (entry.meta?.sourceHash as string | undefined) ?? null;
+            const metadata = this.arbMetadata(raw, compositeKey);
+            const revisionId = metadata?.revisionId ?? null;
+            const sourceHash = metadata?.sourceHash ?? null;
 
             if (!result[itemId]) {
                 result[itemId] = { fields: {}, revisionId, sourceHash };
             }
-            result[itemId].fields[fieldKey] = entry.value ?? '';
+            result[itemId].fields[fieldKey] = value;
             // Take first non-null values found for this item
             if (!result[itemId].revisionId && revisionId) {
                 result[itemId].revisionId = revisionId;
@@ -263,6 +256,12 @@ export class GiteaTranslationImportService {
         }
 
         return result;
+    }
+
+    private arbMetadata(raw: RawCatalog, key: string): ArbMetadata | null {
+        const candidate = raw[`@${key}`];
+        if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return null;
+        return candidate as ArbMetadata;
     }
 
     private async fetchCatalog(config: GiteaConfig, path: string): Promise<RawCatalog | null> {

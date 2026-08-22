@@ -19,12 +19,12 @@
  *
  *  3. For each item in the catalog, extracts revisionId and sourceHash from
  *     the Gitea catalog meta (written by pushSourceFieldsToGitea in
- *     translation.steps.ts). Uses these to signal the DBOS child workflow
- *     DIRECTLY — without using the in-memory active workflow registry.
- *     This survives server restarts correctly.
+ *     translation.steps.ts).
  *
- *  4. Falls back to the registry-based path (signalTranslationReceivedByItemId)
- *     for items whose Gitea catalog was written before the meta fields were added.
+ *  4. Reconciles every candidate against content_revision_translation, the
+ *     authoritative source hash and the durable DBOS child status. It signals
+ *     only DRAFT + WAITING_TRANSLATION entries. Historical, stale, completed,
+ *     timed-out and inconsistent entries are skipped.
  *
  *  5. Deletes all rows claimed by this worker (by workerHash) after processing.
  *     Concurrent push handlers use SKIP LOCKED — they get disjoint row sets.
@@ -56,12 +56,15 @@ import { LoggingBindings } from '@loopback/logging';
 import { randomUUID } from 'node:crypto';
 import type { Logger } from 'winston';
 import { WeblateCommitEventRepository } from '../../repositories/weblate-commit-event.repository';
+import { ContentRevisionRepository } from '../../repositories/content-revision.repository';
+import { ContentRevisionTranslationRepository } from '../../repositories/content-revision-translation.repository';
 import { GiteaTranslationImportService } from '../../services/gitea-translation-import.service';
 import { TranslationWorkflowOrchestratorService } from '../../services/translation-workflow-orchestrator.service';
 import { WeblateWebhookSignatureService } from '../../services/weblate-webhook-signature.service';
+import { TranslationSteps } from '../../workflows/translation/translation.steps';
+import type { TranslationStatus } from '../../workflows/translation/types';
 
 interface WeblatePushBody {
-    change_id?: number;
     action?: string;
     timestamp?: string;
     project?: string;
@@ -80,6 +83,12 @@ export class TranslationPushedController {
 
         @repository(WeblateCommitEventRepository)
         private readonly commitEventRepo: WeblateCommitEventRepository,
+
+        @repository(ContentRevisionTranslationRepository)
+        private readonly translationRepo: ContentRevisionTranslationRepository,
+
+        @repository(ContentRevisionRepository)
+        private readonly revisionRepo: ContentRevisionRepository,
 
         @inject('services.GiteaTranslationImportService')
         private readonly giteaImport: GiteaTranslationImportService,
@@ -208,37 +217,48 @@ export class TranslationPushedController {
                 );
 
                 if (!item.revisionId || !item.sourceHash) {
-                    // Catalog was pushed before meta was added — fall back to
-                    // registry-based lookup (works if server hasn't restarted).
-                    this.logger.warn(
-                        `${itemTag} no revisionId/sourceHash in Gitea meta — ` +
-                        `falling back to registry lookup (may fail after restart)`,
+                    // Fresh ARB catalogs must always carry correlation metadata.
+                    // Never guess a revision through the in-memory registry.
+                    this.logger.error(
+                        `${itemTag} SKIPPED reason=missing-correlation-metadata` +
+                        `  revisionId=${item.revisionId ?? '(null)'}` +
+                        `  sourceHash=${item.sourceHash ?? '(null)'}`,
                     );
+                    skipped++;
+                    continue;
+                }
 
-                    try {
-                        const result = await this.orchestrator.signalTranslationReceivedByItemId({
-                            category: row.component,
-                            itemId,
-                            lang: row.lang,
-                            fields: item.fields,
-                        });
+                // ── 3c. Reconcile DB + DBOS state before sending ────────────────
+                // The ARB file is an append-only work catalog and can contain
+                // historical entries. Only a DRAFT row whose exact child is
+                // WAITING_TRANSLATION is eligible for delivery.
+                let decision: Awaited<ReturnType<TranslationPushedController['canSignal']>>;
+                try {
+                    decision = await this.canSignal({
+                        revisionId: item.revisionId,
+                        lang: row.lang,
+                        catalogSourceHash: item.sourceHash,
+                    });
+                } catch (err) {
+                    this.logger.error(
+                        `${itemTag} reconciliation FAILED  revisionId=${item.revisionId}` +
+                        `  error=${String(err)}`,
+                    );
+                    errors++;
+                    continue;
+                }
 
-                        if (result.signaled) {
-                            this.logger.info(
-                                `${itemTag} signaled via registry  revisionId=${result.revisionId}`,
-                            );
-                            signaled++;
-                        } else {
-                            this.logger.warn(
-                                `${itemTag} registry lookup failed  reason=${result.reason}` +
-                                ` — re-push source to Gitea to write meta fields`,
-                            );
-                            skipped++;
-                        }
-                    } catch (err) {
-                        this.logger.error(`${itemTag} registry signal FAILED  error=${String(err)}`);
-                        errors++;
-                    }
+                if (!decision.allowed) {
+                    const log = decision.anomaly ? this.logger.warn.bind(this.logger) : this.logger.info.bind(this.logger);
+                    log(
+                        `${itemTag} SKIPPED reason=${decision.reason}` +
+                        `  revisionId=${item.revisionId}` +
+                        `  dbStatus=${decision.dbStatus ?? '(none)'}` +
+                        `  workflowStatus=${decision.workflowStatus ?? '(none)'}` +
+                        `  catalogSourceHash=${item.sourceHash}` +
+                        `  expectedSourceHash=${decision.expectedSourceHash ?? '(none)'}`,
+                    );
+                    skipped++;
                     continue;
                 }
 
@@ -285,5 +305,96 @@ export class TranslationPushedController {
         );
 
         return { ok: true, claimed: claimedRows.length, signaled };
+    }
+
+    private async canSignal(input: {
+        revisionId: string;
+        lang: string;
+        catalogSourceHash: string;
+    }): Promise<{
+        allowed: boolean;
+        reason: string;
+        anomaly: boolean;
+        dbStatus: string | null;
+        workflowStatus: TranslationStatus | null;
+        expectedSourceHash: string | null;
+    }> {
+        const target = await this.translationRepo.findOne({
+            where: { revisionId: input.revisionId, lang: input.lang },
+        });
+
+        if (!target) {
+            return {
+                allowed: false, reason: 'translation-row-not-found', anomaly: true,
+                dbStatus: null, workflowStatus: null, expectedSourceHash: null,
+            };
+        }
+
+        if (target.tStatus === 'APPROVED' || target.tStatus === 'PUBLISHED') {
+            return {
+                allowed: false, reason: 'translation-already-acquired', anomaly: false,
+                dbStatus: target.tStatus, workflowStatus: null,
+                expectedSourceHash: target.sourceHash ?? null,
+            };
+        }
+
+        if (target.tStatus === 'STALE') {
+            return {
+                allowed: false, reason: 'translation-stale', anomaly: false,
+                dbStatus: target.tStatus, workflowStatus: null,
+                expectedSourceHash: target.sourceHash ?? null,
+            };
+        }
+
+        // DRAFT rows do not necessarily have source_hash yet. Recompute the
+        // authoritative hash from the source translation of the same revision,
+        // using the exact field filtering applied when the workflow was started.
+        const revision = await this.revisionRepo.findById(input.revisionId);
+        const source = await this.translationRepo.findOne({
+            where: { revisionId: input.revisionId, lang: revision.sourceLang },
+        });
+        if (!source) {
+            return {
+                allowed: false, reason: 'source-translation-not-found', anomaly: true,
+                dbStatus: target.tStatus, workflowStatus: null, expectedSourceHash: null,
+            };
+        }
+
+        const sourceFields: Record<string, string> = {};
+        if (source.title?.trim()) sourceFields['title'] = source.title;
+        if (source.description?.trim()) sourceFields['description'] = source.description;
+        const expectedSourceHash = TranslationSteps.computeSourceHash(sourceFields);
+
+        if (input.catalogSourceHash !== expectedSourceHash) {
+            return {
+                allowed: false, reason: 'source-hash-mismatch', anomaly: true,
+                dbStatus: target.tStatus, workflowStatus: null, expectedSourceHash,
+            };
+        }
+
+        const workflowStatus = await this.orchestrator.getLanguageWorkflowStatus(
+            input.revisionId,
+            input.lang,
+        );
+
+        if (workflowStatus !== 'WAITING_TRANSLATION') {
+            const reason = workflowStatus === 'DONE'
+                ? 'workflow-done'
+                : workflowStatus === 'TIMEOUT'
+                    ? 'workflow-timeout-requires-redispatch'
+                    : workflowStatus === null
+                        ? 'workflow-not-found'
+                        : `workflow-not-waiting-${workflowStatus.toLowerCase()}`;
+            return {
+                allowed: false, reason,
+                anomaly: workflowStatus === null || workflowStatus === 'ERROR',
+                dbStatus: target.tStatus, workflowStatus, expectedSourceHash,
+            };
+        }
+
+        return {
+            allowed: true, reason: 'draft-workflow-waiting', anomaly: false,
+            dbStatus: target.tStatus, workflowStatus, expectedSourceHash,
+        };
     }
 }

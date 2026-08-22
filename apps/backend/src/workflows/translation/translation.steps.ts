@@ -218,13 +218,13 @@ export class TranslationSteps {
     // ── Step: push all source fields to Gitea ─────────────────────────────────
 
     /**
-     * Pushes each field of the source revision to the Gitea JSON catalog.
+     * Pushes each field of the source revision to the Gitea ARB catalog.
      * This makes the strings visible to Weblate for translation.
      *
      * ── File path convention ──────────────────────────────────────────────────
      *
-     *   <category>/<isoCode>.json   (NO "backend/" prefix)
-     *   e.g.  user-types/en.json
+     *   <category>/<isoCode>.arb   (NO "backend/" prefix)
+     *   e.g.  user-types/en.arb
      *
      * ── Key format ────────────────────────────────────────────────────────────
      *
@@ -315,6 +315,13 @@ export class TranslationSteps {
                         itemId: input.itemId,
                         fieldKey,
                         value: translatedValue,
+                        // Keep the same correlation metadata in AI-prefilled
+                        // target catalogs. Weblate also copies source metadata,
+                        // but the backend must not depend on sync ordering.
+                        meta: {
+                            revisionId: input.revisionId,
+                            sourceHash: TranslationSteps.computeSourceHash(input.fields),
+                        },
                     });
 
                     DBOS.logger.debug(

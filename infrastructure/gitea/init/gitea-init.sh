@@ -3,19 +3,19 @@
 #
 # ── Repository file structure ─────────────────────────────────────────────────
 #
-#   <category-slug>/<lang>.json
+#   <category-slug>/<lang>.arb
 #
 #   Examples:
-#     user-types/en.json      (source language seed for the user-types component)
-#     user-types/it.json      (Italian translations — written by Weblate)
-#     news/en.json
-#     processes/fr.json
+#     user-types/en.arb      (source language seed for the user-types component)
+#     user-types/it.arb      (Italian translations — written by Weblate)
+#     news/en.arb
+#     processes/fr.arb
 #
 # ── Removal of the "backend/" prefix ─────────────────────────────────────────
 #
-#   Previous versions created files under backend/<category>/<lang>.json.
+#   Previous versions created JSON files under backend/<category>/<lang>.json.
 #   That prefix was removed: the backend application's GiteaTranslationExportService
-#   uses path = "<category>/<lang>.json" and the Weblate filemask must match.
+#   uses path = "<category>/<lang>.arb" and the Weblate filemask must match.
 #
 # ── Auth ──────────────────────────────────────────────────────────────────────
 #
@@ -84,11 +84,8 @@ BOOTSTRAP_DIR=/bootstrap
 TOKEN_FILE="${BOOTSTRAP_DIR}/gitea-weblate.token"
 API_BASE="http://gitea:3000/api/v1"
 
-# Minimal seed JSON:  { "_schema": "micado", "ping": "Ping" }
-# Empty JSON object — Weblate only needs valid JSON to accept the template file.
-# The backend pushes real translation keys later via GiteaTranslationExportService.
-# Using {} means zero strings appear in Weblate until real content arrives.
-SEED_CONTENT_B64='e30K'
+# The ARB template contains only its locale, therefore it exposes zero source
+# strings until the backend pushes real content.
 
 on_error() {
   local line="$1" rc="$2" cmd="${3:-unknown}"
@@ -263,11 +260,11 @@ ensure_repo_api() {
 }
 
 # ---------------------------------------------------------------------------
-# File management — path: <category-slug>/<lang>.json
+# File management — path: <category-slug>/<lang>.arb
 #
 # NOTE: NO "backend/" prefix.  This matches the backend application's
 #       GiteaTranslationExportService.computeRepoPath():
-#         return `${category}/${isoCode.toLowerCase()}.json`;
+#         return `${category}/${isoCode.toLowerCase()}.arb`;
 # ---------------------------------------------------------------------------
 
 repo_file_exists_api() {
@@ -341,19 +338,17 @@ slugify_category() {
   printf '%s' "$output"
 }
 
-# Build base64-encoded seed JSON for a category source file.
-# {} is the correct content: Weblate needs valid JSON to accept the template file,
-# but zero keys means nothing appears in the translator UI until the backend
-# pushes real translation strings via GiteaTranslationExportService.
-json_b64_for_category() {
-  printf '{}\n' | base64 | tr -d '\n'
+# Build a base64-encoded empty ARB template for the source locale.
+arb_b64_for_locale() {
+  local locale="$1"
+  printf '{\n  "@@locale": "%s"\n}\n' "$locale" | base64 | tr -d '\n'
 }
 
 # ---------------------------------------------------------------------------
 # Bootstrap per-category source files
 #
 # For each category in MICADO_CATEGORIES we create:
-#   <category-slug>/<MICADO_SOURCE_LANG>.json
+#   <category-slug>/<MICADO_SOURCE_LANG>.arb
 #
 # This is the Weblate "template" file (source strings) for that component.
 # The backend will later overwrite it with real translation keys via the API.
@@ -374,10 +369,10 @@ ensure_category_source_files_api() {
     local normalized path content_b64
     normalized="$(slugify_category "$category")"
 
-    # Path convention:  <category-slug>/<source-lang>.json
+    # Path convention:  <category-slug>/<source-lang>.arb
     # NO "backend/" prefix — matches GiteaTranslationExportService.computeRepoPath()
-    path="${normalized}/${MICADO_SOURCE_LANG}.json"
-    content_b64="$(json_b64_for_category)"
+    path="${normalized}/${MICADO_SOURCE_LANG}.arb"
+    content_b64="$(arb_b64_for_locale "$MICADO_SOURCE_LANG")"
 
     info "  Category '${category}' → slug='${normalized}' → path='${path}'"
 

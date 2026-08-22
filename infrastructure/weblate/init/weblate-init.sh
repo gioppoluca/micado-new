@@ -3,16 +3,16 @@
 #
 # ── Repository structure (must match gitea-init.sh exactly) ──────────────────
 #
-#   <category-slug>/<lang>.json
+#   <category-slug>/<lang>.arb
 #
 #   Weblate component per category:
-#     filemask:  <category-slug>/*.json
-#     template:  <category-slug>/<source_lang>.json
+#     filemask:  <category-slug>/*.arb
+#     template:  <category-slug>/<source_lang>.arb
 #
-#   e.g.  user-types/*.json   (matches user-types/en.json, user-types/it.json …)
-#         news/*.json
+#   e.g.  user-types/*.arb   (matches user-types/en.arb, user-types/it.arb …)
+#         news/*.arb
 #
-#   NOTE: NO "backend/" prefix.  Previous versions used backend/<category>/*.json
+#   NOTE: NO "backend/" prefix. Previous versions used JSON under backend/<category>/.
 #   which did NOT match the backend application's file paths.  Fixed here.
 #
 # ── Weblate webhook add-on (weblate.webhook.webhook) ────────────────────────
@@ -106,7 +106,7 @@ mask_secret() {
 
 : "${WEBLATE_GIT_REPO:=http://gitea:3000/weblate-bot/translations.git}"
 : "${WEBLATE_GIT_BRANCH:=main}"
-: "${WEBLATE_FILE_FORMAT:=json}"
+: "${WEBLATE_FILE_FORMAT:=arb}"
 : "${WEBLATE_VCS:=git}"
 # Push URL — Weblate writes translated files back to Gitea via this URL.
 # Must include credentials since the Weblate container authenticates to Gitea.
@@ -647,17 +647,17 @@ read_gitea_token() {
 # ---------------------------------------------------------------------------
 # ensure_gitea_template_file
 #
-# Weblate validates that the template file (source language JSON) exists in
+# Weblate validates that the template file (source language ARB) exists in
 # the Gitea repository BEFORE it accepts the component creation POST.
 # gitea-init.sh creates these files for all categories in MICADO_CATEGORIES,
 # but the weblate-init container must guard against the case where the file
 # is missing (e.g. gitea-init ran before this category was added to the list,
 # or the bootstrap order was wrong).
 #
-# This function creates the minimal seed JSON via the Gitea contents API if
+# This function creates the minimal ARB template via the Gitea contents API if
 # the file does not already exist.  It is idempotent — safe to call every run.
 #
-# $1  file_path   e.g. locations/en.json
+# $1  file_path   e.g. locations/en.arb
 # ---------------------------------------------------------------------------
 ensure_gitea_template_file() {
   file_path="$1"
@@ -683,14 +683,11 @@ ensure_gitea_template_file() {
     warn "  Unexpected HTTP ${http_code} checking '${file_path}' — will attempt to create anyway"
   fi
 
-  # Empty JSON object — Weblate only checks for valid JSON existence at component
-  # creation time. {} means zero strings appear in Weblate until the backend
-  # pushes real translation keys via GiteaTranslationExportService.
-  seed_json='{}'
-  content_b64=$(printf '%s\n' "$seed_json" | base64 | tr -d '\n')
+  seed_arb=$(printf '{\n  "@@locale": "%s"\n}' "$MICADO_SOURCE_LANG")
+  content_b64=$(printf '%s\n' "$seed_arb" | base64 | tr -d '\n')
   commit_msg="init $(dirname "$file_path") source translations (weblate-init)"
 
-  info "  Creating template file '${file_path}' in Gitea (content: {})"
+  info "  Creating ARB template file '${file_path}' in Gitea (locale: ${MICADO_SOURCE_LANG})"
 
   response=$(curl -sS -w '\n%{http_code}' \
     -H "Authorization: token ${gitea_token}" \
@@ -717,13 +714,13 @@ ensure_gitea_template_file() {
 #
 #   $1  comp_name   human label
 #   $2  comp_slug   unique slug within project
-#   $3  filemask    e.g. user-types/*.json
-#   $4  template    e.g. user-types/en.json
+#   $3  filemask    e.g. user-types/*.arb
+#   $4  template    e.g. user-types/en.arb
 #
 # IMPORTANT: filemask and template paths match GiteaTranslationExportService:
-#   computeRepoPath() = `${category}/${isoCode.toLowerCase()}.json`
-#   → filemask = `${category}/*.json`
-#   → template = `${category}/${sourceLang}.json`
+#   computeRepoPath() = `${category}/${isoCode.toLowerCase()}.arb`
+#   → filemask = `${category}/*.arb`
+#   → template = `${category}/${sourceLang}.arb`
 # ---------------------------------------------------------------------------
 ensure_component() {
   comp_name="$1"; comp_slug="$2"; filemask="$3"; template="$4"
@@ -974,8 +971,8 @@ main() {
   # ── Create one Weblate component per content-type category ───────────────
   #
   # Path convention (NO backend/ prefix):
-  #   filemask = <category-slug>/*.json
-  #   template = <category-slug>/<source-lang>.json
+  #   filemask = <category-slug>/*.arb
+  #   template = <category-slug>/<source-lang>.arb
   #
   if [ -n "${MICADO_CATEGORIES:-}" ]; then
     info "=== Processing per-category components ==="
@@ -995,7 +992,7 @@ main() {
       #   content-glossary
       #
       # It does NOT affect the Gitea folder:
-      #   glossary/*.json
+      #   glossary/*.arb
       comp_slug="content-${cat_slug}"
 
       # Human-readable name: capitalize first letter.
@@ -1012,10 +1009,10 @@ main() {
       #
       # Example:
       #   Weblate component: content-glossary
-      #   filemask:          glossary/*.json
-      #   template:          glossary/en.json
-      filemask="${cat_slug}/*.json"
-      template="${cat_slug}/${MICADO_SOURCE_LANG}.json"
+      #   filemask:          glossary/*.arb
+      #   template:          glossary/en.arb
+      filemask="${cat_slug}/*.arb"
+      template="${cat_slug}/${MICADO_SOURCE_LANG}.arb"
 
       info "--- Component: ${comp_slug} ---"
       info "  name:     ${comp_name}"
