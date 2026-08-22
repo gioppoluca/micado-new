@@ -1123,14 +1123,14 @@ test.describe('Complete business logic — Information lifecycle', () => {
             action,
             received_at::text    AS "receivedAt"
           FROM micado.weblate_commit_event
-          WHERE component = 'content-information'
+          WHERE component = 'information'
             AND lang = $1
             AND received_at >= $2::timestamptz
           ORDER BY received_at DESC
         `, [targetLang, commitStartedAt]);
 
         await expect.poll(async () => (await loadStagedCommits()).filter(row => row.status === 'NEW').length, {
-          message: 'The real Weblate COMMIT webhook did not stage a content-information event',
+          message: 'The real Weblate COMMIT webhook did not stage an information event',
           timeout: 60_000,
           intervals: [500, 1_000, 2_000, 5_000],
         }).toBeGreaterThan(0);
