@@ -1069,18 +1069,18 @@ test.describe('Complete business logic — Information lifecycle', () => {
         await componentBreadcrumb.click();
         await page.waitForLoadState('networkidle');
 
-        const manageMenu = page.locator('a:visible, button:visible').filter({hasText: /^\s*Manage\s*$/i}).first();
-        await expect(manageMenu, 'Weblate Manage menu is not visible on the component page').toBeVisible();
-        await manageMenu.click();
+        const operationsMenu = page.locator('a:visible, button:visible').filter({hasText: /^\s*Operations\s*$/i}).first();
+        await expect(operationsMenu, 'Weblate Operations menu is not visible on the component page').toBeVisible();
+        await operationsMenu.click();
 
-        let repositoryLink = page.locator('a[href$="/projects/micado/content-information/repository/"]:visible').first();
-        if (!await repositoryLink.isVisible()) {
-          repositoryLink = page.getByRole('link', {name: /repository maintenance/i}).first();
-        }
-        await expect(repositoryLink, 'Repository maintenance is not visible in the Manage menu').toBeVisible();
+        // "Repository maintenance" is a Bootstrap tab toggle
+        // (<a role="tab" data-bs-toggle="tab" data-bs-target="#repository" href="#">),
+        // not a plain navigation link, so it must be located by its "tab" role.
+        const repositoryLink = page.getByRole('tab', {name: /repository maintenance/i}).first();
+        await expect(repositoryLink, 'Repository maintenance is not visible in the Operations menu').toBeVisible();
         await repositoryLink.click();
         await page.waitForLoadState('networkidle');
-        check('Weblate repository maintenance opened through Manage', {url: page.url()});
+        check('Weblate repository maintenance opened through Operations', {url: page.url()});
         await page.screenshot({path: testInfo.outputPath('09a-weblate-repository-maintenance.png'), fullPage: true});
 
         const clickRepositoryAction = async (action: 'Commit' | 'Push') => {
@@ -1088,7 +1088,10 @@ test.describe('Complete business logic — Information lifecycle', () => {
           let control = page.getByRole('button', {name: pattern}).first();
           if (!await control.isVisible()) control = page.getByRole('link', {name: pattern}).first();
           await expect(control, `Weblate ${action} action is not visible`).toBeVisible();
-          await control.click();
+          // These Weblate ".link-post" actions can carry aria-disabled="true"
+          // even though the click still works (Weblate's own JS handles it),
+          // so force the click past Playwright's enabled-state check.
+          await control.click({force: true});
 
           const confirmationDialog = page.getByRole('dialog').filter({hasText: new RegExp(action, 'i')}).first();
           if (await confirmationDialog.isVisible()) {
