@@ -25,27 +25,36 @@
  * We use a module-level registry populated once at boot by
  * TranslationWorkflowOrchestratorService (which IS inside the DI container).
  *
- * Two registrations:
+ * Three registrations:
  *   1. RepositoryBundle             — content_revision_translation repository
  *   2. GiteaTranslationExportService singleton
+ *   3. PiperTtsService singleton
  *
- * Call registerRepositoriesForSteps() and registerGiteaExportServiceForSteps()
- * in the orchestrator constructor to wire them up.
+ * Call registerRepositoriesForSteps(), registerGiteaExportServiceForSteps()
+ * and registerPiperTtsServiceForSteps() in the orchestrator constructor to
+ * wire them up.
  *
  * ── AI translation mock ───────────────────────────────────────────────────────
  *
  * callAiTranslation() is intentionally a mock (returns empty strings).
  * Replace the body when a real AI service is available.
  *
- * ── TTS stub ─────────────────────────────────────────────────────────────────
+ * ── TTS ──────────────────────────────────────────────────────────────────────
  *
- * generateMp3() returns a placeholder URL.
- * Replace with ElevenLabs / Azure TTS when credentials are available.
+ * generateMp3() calls PiperTtsService.requestSynthesis() — fire-and-forget,
+ * see that service's docstring. It does NOT wait for the MP3 to actually
+ * exist: Piper writes it asynchronously, and the real completion signal
+ * (POST /api/webhooks/piper/tts-completed) is currently LOG-ONLY — see
+ * PiperTtsCompletedController for what's still missing to close the loop
+ * (a DBOS.recv()/DBOS.send() pair, mirroring the Weblate return path).
+ * The URL this step returns is therefore OPTIMISTIC — see
+ * PiperSynthesisAccepted.predictedPublicUrl in piper-tts.service.ts.
  */
 
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { createHash } from 'node:crypto';
 import { GiteaTranslationExportService } from '../../services/gitea-translation-export.service';
+import { PiperTtsService } from '../../services/piper-tts.service';
 import type { Logger } from 'winston';
 
 // ── Repository access inside DBOS steps ──────────────────────────────────────
@@ -97,6 +106,30 @@ function getGiteaExportService(): GiteaTranslationExportService {
         );
     }
     return _giteaExportService;
+}
+
+// ── PiperTtsService access inside DBOS steps ─────────────────────────────────
+
+let _piperTtsService: PiperTtsService | null = null;
+
+export function registerPiperTtsServiceForSteps(svc: PiperTtsService): void {
+    _piperTtsService = svc;
+    DBOS.logger.info('[TranslationSteps] PiperTtsService registered');
+}
+
+function getPiperTtsService(): PiperTtsService {
+    if (!_piperTtsService) {
+        // Fallback for DBOS crash-recovery — same reasoning as getGiteaExportService().
+        DBOS.logger.warn(
+            '[TranslationSteps] PiperTtsService not registered — ' +
+            'creating fallback instance. ' +
+            'Call registerPiperTtsServiceForSteps() in the orchestrator constructor.',
+        );
+        _piperTtsService = new PiperTtsService(
+            DBOS.logger as unknown as Logger,
+        );
+    }
+    return _piperTtsService;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -423,18 +456,33 @@ export class TranslationSteps {
     // ── Step: TTS generation ──────────────────────────────────────────────────
 
     /**
-     * Generates an MP3 audio file for the given text and language.
+     * Requests MP3 synthesis for the given text/language via PiperTtsService.
      *
-     * STUB — returns a placeholder URL.
-     * Replace with: ElevenLabs, Azure Cognitive Services TTS, or similar.
+     * Fire-and-forget: this step returns as soon as Piper ACCEPTS the job
+     * (HTTP 202), not once the audio actually exists — see the class-level
+     * "── TTS ──" note above and PiperTtsService's own docstring. The
+     * `retriesAllowed`/`maxAttempts` below retry the ACCEPT call itself
+     * (network errors, Piper's queue briefly full, etc.) — they do not wait
+     * for synthesis to finish.
      *
-     * The `title` field is used as the primary TTS input.
+     * The `title` field is used as the sole TTS input today — see
+     * PiperTtsService's "Known limitation — single audio field per revision"
+     * note if a second TTS-able field is ever needed.
+     *
+     * `processId` is the DBOS correlation id Piper will echo back in its
+     * completion callback. Callers pass `wfId.srcTts(revisionId)` for the
+     * source language (called from the master workflow) or
+     * `wfId.child(revisionId, lang)` for a target language (called from the
+     * child workflow, after DBOS.recv() from Weblate returns) — both already
+     * defined in ./types.ts. This step stays agnostic of which case it's in.
      */
     @DBOS.step({ retriesAllowed: true, intervalSeconds: 30, maxAttempts: 5 })
     static async generateMp3(input: {
         lang: string;
+        category: string;
         fields: Record<string, string>;
         revisionId: string;
+        processId: string;
     }): Promise<string | null> {
         const text = input.fields['title'] ?? '';
 
@@ -449,25 +497,40 @@ export class TranslationSteps {
         }
 
         DBOS.logger.info(
-            `[TranslationSteps] generateMp3 STUB ${JSON.stringify({
+            `[TranslationSteps] generateMp3 requesting synthesis ${JSON.stringify({
                 revisionId: input.revisionId,
+                category: input.category,
                 lang: input.lang,
+                processId: input.processId,
                 textLength: text.length,
                 textPreview: text.slice(0, 60),
             })}`,
         );
 
-        // ── TODO: replace with real TTS call ───────────────────────────────────
-        // Example (ElevenLabs):
-        //   const response = await fetch('https://api.elevenlabs.io/v1/text-to-speech/{voice_id}', {
-        //       method: 'POST',
-        //       headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY! },
-        //       body: JSON.stringify({ text, model_id: 'eleven_multilingual_v2' }),
-        //   });
-        //   const mp3Buffer = await response.arrayBuffer();
-        //   return storageService.uploadMp3(mp3Buffer, input.revisionId, input.lang);
-        // ─────────────────────────────────────────────────────────────────────
+        // Errors are intentionally NOT caught here — they propagate so the
+        // @DBOS.step retry above can retry transient failures (network,
+        // Piper's queue full). If all retries are exhausted, the exception
+        // propagates further to the calling workflow, which already treats
+        // TTS failure as non-fatal (see TranslationMasterWorkflow /
+        // TranslationChildWorkflow — both wrap this call in try/catch).
+        const result = await getPiperTtsService().requestSynthesis({
+            text,
+            category: input.category,
+            revisionId: input.revisionId,
+            processId: input.processId,
+            lang: input.lang,
+        });
 
-        return `https://storage.placeholder/tts/${input.revisionId}/${input.lang}.mp3`;
+        DBOS.logger.info(
+            `[TranslationSteps] generateMp3 job accepted — audio NOT yet confirmed ${JSON.stringify({
+                revisionId: input.revisionId,
+                lang: input.lang,
+                outputRelativePath: result.outputRelativePath,
+                predictedPublicUrl: result.predictedPublicUrl,
+                queuedPosition: result.queuedPosition,
+            })}`,
+        );
+
+        return result.predictedPublicUrl;
     }
 }

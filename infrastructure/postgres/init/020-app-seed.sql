@@ -74,7 +74,8 @@ INSERT INTO features_flags (id, flag_key, enabled) VALUES
   (7,  'FEAT_GEOPORTAL',     true),
   (8,  'FEAT_DEFAULT',       true),
   (9,  'FEAT_INFO',          true),
-  (10, 'FEAT_MIGRANT_LOGIN', true)
+  (10, 'FEAT_MIGRANT_LOGIN', true),
+  (11, 'FEAT_TTS', true)
 ON CONFLICT (flag_key) DO NOTHING;
 
 
@@ -108,7 +109,10 @@ INSERT INTO features_flags_i18n (flag_id, lang, label) VALUES
   (9,  'de', 'Informationsportal'),
   (10, 'it', 'Il migrante può fare login'),
   (10, 'en', 'Migrant can login'),
-  (10, 'de', 'Migranten können sich anmelden')
+  (10, 'de', 'Migranten können sich anmelden'),
+  (11, 'it', 'Text-to-Speech'),
+  (11, 'en', 'Text-to-Speech'),
+  (11, 'de', 'Text-in-Sprache')
 ON CONFLICT (flag_id, lang) DO UPDATE
 SET label = EXCLUDED.label;
 

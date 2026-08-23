@@ -52,7 +52,7 @@ import { LoggingBindings } from '@loopback/logging';
 import type { Logger } from 'winston';
 import { TranslationMasterWorkflow } from '../workflows/translation/translation.master.workflow';
 import { TranslationDispatchWorkflow } from '../workflows/translation/translation.dispatch.workflow';
-import { TranslationSteps, registerRepositoriesForSteps, registerGiteaExportServiceForSteps } from '../workflows/translation/translation.steps';
+import { TranslationSteps, registerRepositoriesForSteps, registerGiteaExportServiceForSteps, registerPiperTtsServiceForSteps } from '../workflows/translation/translation.steps';
 import {
     TranslationJobInput, WeblateWebhookPayload,
     TranslationStatus, wfId, evKey, recvTopic, sendKey,
@@ -65,6 +65,7 @@ import { ContentRevisionTranslationRepository } from '../repositories/content-re
 import { ContentRevisionRepository } from '../repositories/content-revision.repository';
 import { ContentItemRepository } from '../repositories/content-item.repository';
 import { GiteaTranslationExportService } from './gitea-translation-export.service';
+import { PiperTtsService } from './piper-tts.service';
 
 // ── Status view (for polling/dashboard) ──────────────────────────────────────
 
@@ -80,7 +81,7 @@ export type RevisionStatusView = {
 // ── Feature flag keys ─────────────────────────────────────────────────────────
 
 export const FLAG_AI_TRANSLATION = 'ai_translation';
-export const FLAG_TTS = 'tts';
+export const FLAG_TTS = 'FEAT_TTS';
 
 // ── Active workflow registry entry ────────────────────────────────────────────
 
@@ -155,6 +156,9 @@ export class TranslationWorkflowOrchestratorService {
 
         @inject('services.GiteaTranslationExportService')
         private giteaExportService: GiteaTranslationExportService,
+
+        @inject(PiperTtsService.BINDING)
+        private piperTtsService: PiperTtsService,
     ) {
         // Wire repositories into TranslationSteps so DBOS steps can use them.
         // Steps run outside LoopBack DI — this is the bridge.
@@ -165,6 +169,10 @@ export class TranslationWorkflowOrchestratorService {
         // Wire the DI-managed GiteaTranslationExportService singleton into steps
         // so steps never call `new` directly (which would bypass the logger config).
         registerGiteaExportServiceForSteps(this.giteaExportService);
+
+        // Same bridge for PiperTtsService — generateMp3() (translation.steps.ts)
+        // now calls it for real instead of returning a stub URL.
+        registerPiperTtsServiceForSteps(this.piperTtsService);
 
         this.logger.info('[TranslationOrchestrator] Service initialized');
     }

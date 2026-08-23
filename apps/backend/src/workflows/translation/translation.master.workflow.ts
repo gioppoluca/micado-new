@@ -114,8 +114,12 @@ export class TranslationMasterWorkflow {
             try {
                 const srcMp3 = await TranslationSteps.generateMp3({
                     lang: sourceLang,
+                    category,
                     fields,
                     revisionId,
+                    // Source-lang TTS runs as a sibling of the master, not
+                    // inside a child — see wfId.srcTts's own doc comment.
+                    processId: wfId.srcTts(revisionId),
                 });
                 if (srcMp3) {
                     // Persist the source MP3 URL into the source translation row

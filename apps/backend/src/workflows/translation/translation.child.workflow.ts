@@ -12,7 +12,7 @@
  */
 
 import { DBOS } from '@dbos-inc/dbos-sdk';
-import { ChildWorkflowInput, WeblateWebhookPayload, TranslationStatus, evKey, recvTopic } from './types';
+import { ChildWorkflowInput, WeblateWebhookPayload, TranslationStatus, evKey, recvTopic, wfId } from './types';
 import { TranslationSteps } from './translation.steps';
 
 // Human translation can take days — set generously; DBOS checkpoints the wait.
@@ -22,7 +22,7 @@ export class TranslationChildWorkflow {
 
     @DBOS.workflow()
     static async run(input: ChildWorkflowInput): Promise<void> {
-        const { revisionId, lang, fields, flags } = input;
+        const { revisionId, category, lang, fields, flags } = input;
 
         await setStatus(lang, 'WAITING_TRANSLATION');
 
@@ -55,8 +55,13 @@ export class TranslationChildWorkflow {
             try {
                 mp3Url = await TranslationSteps.generateMp3({
                     lang,
+                    category,
                     fields: msg.fields,
                     revisionId,
+                    // This IS the "return from Weblate" moment: we're past
+                    // DBOS.recv() above, translation just arrived — kick off
+                    // TTS for the freshly-translated text now.
+                    processId: wfId.child(revisionId, lang),
                 });
                 await DBOS.setEvent(evKey.childMp3(lang), mp3Url);
                 DBOS.logger.info(`[TranslationChildWorkflow] MP3 generated ${JSON.stringify({

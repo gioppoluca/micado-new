@@ -49,6 +49,13 @@ export * from './document-email.controller';
 export * from './webhooks/translation-committed.controller';
 export * from './webhooks/translation-pushed.controller';
 
+// PiperTtsCompletedController
+//   POST /api/webhooks/piper/tts-completed
+//   Completion callback from the Piper TTS microservice (apps/piper).
+//   Currently LOGS ONLY (no signature check, no DBOS signal) — see the
+//   controller's own docstring for the TODO covering the real business logic.
+export * from './webhooks/piper-tts-completed.controller';
+
 // ── Monitoring ────────────────────────────────────────────────────────────────
 //
 // TranslationMonitorController

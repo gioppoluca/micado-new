@@ -10,9 +10,12 @@
  * ── What this replaces ────────────────────────────────────────────────────────
  *
  * `TranslationSteps.generateMp3()` (src/workflows/translation/translation.steps.ts)
- * is currently a STUB that returns a placeholder URL and never calls anything.
- * This service is the real HTTP client that stub will eventually call — see the
- * "NOT wired yet" note below for exactly what is still missing.
+ * calls `requestSynthesis()` below — it is no longer a stub. What is still
+ * NOT wired: the completion callback (PiperTtsCompletedController) only logs
+ * today, it does not yet DBOS.send() to unblock a waiting workflow — see that
+ * controller's docstring for the TODO. Until that lands, "done" here means
+ * "Piper accepted the job", not "the audio exists" — see the fire-and-forget
+ * note right below.
  *
  * ── Fire-and-forget contract (matches apps/piper) ─────────────────────────────
  *
@@ -64,14 +67,15 @@
  * ngo-process-comment.service.ts) — it is whatever correlation id the CALLER
  * needs back to resume work, typically a DBOS workflow id.
  *
- * ASSUMPTION (flagging explicitly — confirm before wiring the real callback
- * logic in PiperTtsCompletedController): the natural value to pass here is
- * the id of the DBOS workflow instance that should be unblocked when the
- * callback arrives — i.e. `wfId.child(revisionId, lang)` for a target
- * language, or `wfId.srcTts(revisionId)` (already reserved in
- * src/workflows/translation/types.ts but currently unused) for the source
- * language. That wiring is intentionally NOT done in this delivery — only
- * this service + the webhook receiver, per the current request.
+ * ASSUMPTION (flagged when this service was first written — now actually
+ * used by the call sites, still worth confirming before wiring the real
+ * callback logic in PiperTtsCompletedController): the value passed here is
+ * the id of the DBOS workflow instance that should eventually be unblocked
+ * — `wfId.child(revisionId, lang)` for a target language (passed by
+ * TranslationChildWorkflow), or `wfId.srcTts(revisionId)` (passed by
+ * TranslationMasterWorkflow — this was the "reserved but unused" constant in
+ * src/workflows/translation/types.ts; it is used now). The callback
+ * receiver does not act on it yet — see PiperTtsCompletedController.
  *
  * ── HTTP client ────────────────────────────────────────────────────────────────
  *
@@ -106,6 +110,12 @@ const DEFAULT_CALLBACK_TOPIC = 'piper-tts';
 
 const JOBS_PATH = '/jobs';
 
+/** Matches the `location /media/audio/` block documented in the Piper
+ *  redesign commentary (§8) — nginx on PA/migrant serves `piper_audio`
+ *  (mounted read-only) from this path. Overridable via env for environments
+ *  that mount it elsewhere. */
+const DEFAULT_PUBLIC_AUDIO_BASE_PATH = '/media/audio';
+
 // Defense in depth: these values normally come from server-controlled data
 // (CATEGORY_BY_TYPE, the language repository, a content_revision UUID) and
 // not directly from end-user input, but we validate anyway before building a
@@ -131,6 +141,20 @@ export type PiperSynthesisRequest = {
 export type PiperSynthesisAccepted = {
     /** Path relative to the shared audio volume Piper will write to. */
     outputRelativePath: string;
+    /**
+     * The URL the audio WILL have once nginx on PA/migrant serves it
+     * (`${PIPER_PUBLIC_AUDIO_BASE_PATH}/${outputRelativePath}`) — see the
+     * `/media/audio/` location block documented in the Piper redesign
+     * commentary, §8.
+     *
+     * ⚠ OPTIMISTIC: this is computed from the deterministic path convention,
+     * NOT confirmed by Piper. At the moment this value is returned, Piper has
+     * only ACCEPTED the job (202) — the file may not exist yet (synthesis is
+     * asynchronous). A caller that stores/serves this URL before real
+     * completion is confirmed (via the callback — see
+     * PiperTtsCompletedController) risks a 404 for a short window.
+     */
+    predictedPublicUrl: string;
     /** Position in Piper's internal queue at accept time (diagnostic only). */
     queuedPosition: number;
     /** Echoed back verbatim by Piper's callback. */
@@ -207,12 +231,13 @@ export class PiperTtsService {
             if (response.status === 202) {
                 const json = await this.safeJson(response) as { queued_position?: number } | null;
                 const queuedPosition = json?.queued_position ?? -1;
+                const predictedPublicUrl = this.buildPredictedPublicUrl(outputRelativePath);
 
                 this.logger.info(`${tag} requestSynthesis accepted ${JSON.stringify({
-                    revisionId: input.revisionId, lang: input.lang, outputRelativePath, queuedPosition, attempt,
+                    revisionId: input.revisionId, lang: input.lang, outputRelativePath, predictedPublicUrl, queuedPosition, attempt,
                 })}`);
 
-                return { outputRelativePath, queuedPosition, callbackWorkflowId, callbackTopic };
+                return { outputRelativePath, predictedPublicUrl, queuedPosition, callbackWorkflowId, callbackTopic };
             }
 
             if (response.status === 422) {
@@ -263,6 +288,12 @@ export class PiperTtsService {
 
     private buildOutputRelativePath(input: PiperSynthesisRequest): string {
         return `${input.category}/${input.lang.toLowerCase()}/${input.revisionId}.mp3`;
+    }
+
+    private buildPredictedPublicUrl(outputRelativePath: string): string {
+        const base = (process.env.PIPER_PUBLIC_AUDIO_BASE_PATH?.trim() || DEFAULT_PUBLIC_AUDIO_BASE_PATH)
+            .replace(/\/$/, '');
+        return `${base}/${outputRelativePath}`;
     }
 
     // ── Validation ─────────────────────────────────────────────────────────────
