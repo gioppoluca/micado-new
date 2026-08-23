@@ -487,8 +487,9 @@ services:
     environment:
       MODELS_DIR: /models
       OUTPUT_DIR: /audio
+      PIPER_CALLBACK_BASE_URL: http://backend:3000
     volumes:
-      - piper_models:/models
+      - ./apps/piper/models:/models:ro
       - piper_audio:/audio
     labels:
       - traefik.enable=false

@@ -154,6 +154,18 @@ services:
     labels:
       - traefik.http.routers.weblate.tls=false
 
+  piper:
+    build:
+      context: ./apps/piper
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./apps/piper:/app
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.piper.rule=Host(`piper.${BASE_DOMAIN}`)
+      - traefik.http.routers.piper.entrypoints=web
+      - traefik.http.services.piper.loadbalancer.server.port=8080
+
   umami:
     labels:
       - traefik.http.routers.umami.tls=false

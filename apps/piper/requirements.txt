@@ -1,0 +1,18 @@
+# Pinned dalle versioni verificate in fase di riprogettazione (2026-08).
+# Aggiornare con cautela: piper-tts e av hanno superfici d'API che sono
+# cambiate tra major version in passato — ri-verificare app/tts.py dopo
+# qualunque bump di major/minor version di questi due pacchetti.
+
+fastapi==0.141.1
+uvicorn[standard]==0.46.0
+pydantic==2.13.3
+pydantic-settings==2.14.0
+httpx==0.28.1
+
+# Sintesi vocale — libreria, non CLI. GPL-3.0-or-later: verificare
+# compatibilità con la policy licenze OSS del progetto prima del rilascio.
+piper-tts==1.7.0
+
+# Transcodifica MP3 — libreria, non subprocess/ffmpeg via shell.
+av==18.1.0
+numpy>=2.0,<3

@@ -1,0 +1,8 @@
+# I modelli veri (grossi, binari) NON vanno in git: li si copia sul volume
+# host bind-mountato in docker-compose.yml. Qui restano solo l'esempio e un
+# placeholder per tenere la cartella tracciata.
+*.onnx
+*.onnx.json
+voices.json
+!voices.example.json
+!.gitkeep
