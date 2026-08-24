@@ -1,6 +1,11 @@
+x-timezone: &timezone
+  TZ: ${TZ:-Europe/Rome}
+
 services:
   traefik:
     image: traefik:v3.6.8
+    environment:
+      <<: *timezone
     command:
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
@@ -22,6 +27,7 @@ services:
   db:
     image: groonga/pgroonga:4.0.5-debian-16
     environment:
+      <<: *timezone
       POSTGRES_USER: ${POSTGRES_SUPERUSER}
       POSTGRES_PASSWORD: ${POSTGRES_SUPERPASS}
       KEYCLOAK_DB: ${KEYCLOAK_DB}
@@ -54,6 +60,8 @@ services:
 
   cache:
     image: redis:7.4-alpine
+    environment:
+      <<: *timezone
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - cache_data:/data
@@ -81,6 +89,7 @@ services:
         "true",
       ]
     environment:
+      <<: *timezone
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD}
       KC_DB: postgres
@@ -147,6 +156,7 @@ services:
       umami-init:
         condition: service_completed_successfully
     environment:
+      <<: *timezone
       PORT: ${BACKEND_PORT}
       CORS_ORIGIN: ${CORS_ORIGIN}
       DB_HOST: db
@@ -219,6 +229,8 @@ services:
         VITE_KEYCLOAK_URL: https://auth.${BASE_DOMAIN}
         VITE_KEYCLOAK_REALM: migrants
         VITE_KEYCLOAK_CLIENT_ID: migrants
+    environment:
+      <<: *timezone
     labels:
       - traefik.enable=true
       - traefik.http.routers.migrants.rule=Host(`migrants.${BASE_DOMAIN}`)
@@ -241,6 +253,8 @@ services:
         VITE_KEYCLOAK_URL: https://auth.${BASE_DOMAIN}
         VITE_KEYCLOAK_REALM: pa_frontoffice
         VITE_KEYCLOAK_CLIENT_ID: pa_frontoffice
+    environment:
+      <<: *timezone
     labels:
       - traefik.enable=true
       - traefik.http.routers.pa.rule=Host(`pa.${BASE_DOMAIN}`)
@@ -263,6 +277,8 @@ services:
         VITE_KEYCLOAK_URL: https://auth.${BASE_DOMAIN}
         VITE_KEYCLOAK_REALM: ngo_frontoffice
         VITE_KEYCLOAK_CLIENT_ID: ngo_frontoffice
+    environment:
+      <<: *timezone
     labels:
       - traefik.enable=true
       - traefik.http.routers.ngo.rule=Host(`ngo.${BASE_DOMAIN}`)
@@ -282,6 +298,7 @@ services:
       db:
         condition: service_healthy
     environment:
+      <<: *timezone
       GITEA__database__DB_TYPE: postgres
       GITEA__database__HOST: db:5432
       GITEA__database__NAME: ${POSTGRES_DB}
@@ -293,6 +310,7 @@ services:
       GITEA__server__HTTP_PORT: 3000
       GITEA__security__INSTALL_LOCK: "true"
       GITEA__service__DISABLE_REGISTRATION: "true"
+      GITEA__time__DEFAULT_UI_LOCATION: ${TZ:-Europe/Rome}
       # Gitea defaults webhook delivery to public hosts only. Weblate is reached
       # through Docker's private network, so internal webhook targets must be
       # explicitly allowed. Keep "external" to preserve the default behaviour
@@ -341,6 +359,7 @@ services:
       bootstrap-perms:
         condition: service_completed_successfully
     environment:
+      <<: *timezone
       USER_UID: "1000"
       USER_GID: "1000"
       GITEA_RUN_UID: "1000"
@@ -355,6 +374,7 @@ services:
       GITEA__server__ROOT_URL: http://git.${BASE_DOMAIN}/
       GITEA__server__HTTP_PORT: 3000
       GITEA__security__INSTALL_LOCK: "true"
+      GITEA__time__DEFAULT_UI_LOCATION: ${TZ:-Europe/Rome}
       MICADO_SOURCE_LANG: ${MICADO_SOURCE_LANG:-it}
       MICADO_CATEGORIES: ${MICADO_CATEGORIES:-category,event,information,glossary,user-types,topics,process,document-types}
       GITEA_TRANSLATIONS_REPO_PRIVATE: "false"
@@ -385,6 +405,8 @@ services:
       retries: 20
       start_period: 30s
     environment:
+      <<: *timezone
+      WEBLATE_TIME_ZONE: ${TZ:-Europe/Rome}
       WEBLATE_SITE_DOMAIN: weblate.${BASE_DOMAIN}
       WEBLATE_ADMIN_NAME: ${WEBLATE_ADMIN_NAME:-Micado Weblate Admin}
       WEBLATE_ADMIN_PASSWORD: ${WEBLATE_ADMIN_PASSWORD:-weblate-admin}
@@ -432,6 +454,8 @@ services:
       weblate:
         condition: service_healthy
     environment:
+      <<: *timezone
+      WEBLATE_TIME_ZONE: ${TZ:-Europe/Rome}
       WEBLATE_SITE_DOMAIN: weblate.${BASE_DOMAIN}
       WEBLATE_ADMIN_NAME: ${WEBLATE_ADMIN_NAME:-Micado Weblate Admin}
       WEBLATE_ADMIN_PASSWORD: ${WEBLATE_ADMIN_PASSWORD:-weblate-admin}
@@ -485,6 +509,7 @@ services:
       context: ./apps/piper
       dockerfile: Dockerfile
     environment:
+      <<: *timezone
       MODELS_DIR: /models
       OUTPUT_DIR: /audio
       PIPER_CALLBACK_BASE_URL: http://backend:3000
@@ -506,6 +531,7 @@ services:
       db:
         condition: service_healthy
     environment:
+      <<: *timezone
       DATABASE_URL: postgresql://${UMAMI_DB_USER:-umami}:${UMAMI_DB_PASSWORD}@db:5432/${POSTGRES_DB}?schema=umami
       APP_SECRET: ${UMAMI_APP_SECRET}
       DISABLE_TELEMETRY: "1"
@@ -532,6 +558,7 @@ services:
       umami:
         condition: service_healthy
     environment:
+      <<: *timezone
       UMAMI_URL: http://umami:3000
       UMAMI_ADMIN_USERNAME: ${UMAMI_ADMIN_USERNAME:-admin}
       UMAMI_ADMIN_PASSWORD: ${UMAMI_ADMIN_PASSWORD:-umami}
@@ -572,6 +599,7 @@ services:
       piper:
         condition: service_healthy
     environment:
+      <<: *timezone
       BASE_DOMAIN: ${BASE_DOMAIN}
       PUBLIC_SCHEME: http
       TRAEFIK_DASHBOARD_URL: ""
