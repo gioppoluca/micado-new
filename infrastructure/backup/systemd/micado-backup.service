@@ -1,0 +1,17 @@
+[Unit]
+Description=MICADO cold Restic backup
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Environment=MICADO_PROJECT_DIR=/opt/micado
+ExecStart=/usr/local/sbin/micado-backup
+TimeoutStartSec=6h
+TimeoutStopSec=5min
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+

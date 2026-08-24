@@ -1,0 +1,10 @@
+# Source-control and dependency caches are reproducible and can be very large.
+**/.git/**
+**/node_modules/**
+**/.quasar/**
+**/dist/**
+**/coverage/**
+**/.cache/**
+**/test-results/**
+/backup/deployment/test/results/**
+

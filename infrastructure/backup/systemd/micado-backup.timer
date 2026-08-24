@@ -1,0 +1,13 @@
+[Unit]
+Description=Run the MICADO cold backup every night
+
+[Timer]
+OnCalendar=*-*-* 02:00:00 Europe/Rome
+Persistent=true
+RandomizedDelaySec=5m
+AccuracySec=1m
+Unit=micado-backup.service
+
+[Install]
+WantedBy=timers.target
+

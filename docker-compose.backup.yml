@@ -1,0 +1,48 @@
+services:
+  backup:
+    image: restic/restic:0.19.1
+    profiles: ["backup"]
+    hostname: ${RESTIC_HOSTNAME:-micado-production}
+    environment:
+      TZ: ${TZ:-Europe/Rome}
+      RESTIC_REPOSITORY: ${RESTIC_REPOSITORY:?RESTIC_REPOSITORY is required}
+      RESTIC_PASSWORD_FILE: /run/secrets/restic_password
+      RESTIC_CACHE_DIR: /var/cache/restic
+    volumes:
+      # Authoritative Docker state. The orchestration script stops every
+      # production service before Restic reads these mounts.
+      - db_data:/backup/volumes/postgresql:ro
+      - gitea_data:/backup/volumes/gitea:ro
+      - weblate_data:/backup/volumes/weblate:ro
+      - bootstrap_data:/backup/volumes/bootstrap:ro
+      - piper_audio:/backup/volumes/piper-audio:ro
+      - keycloak_data:/backup/volumes/keycloak:ro
+      - traefik_acme:/backup/volumes/traefik-acme:ro
+
+      # Deployment configuration and bind-mounted assets required to rebuild
+      # the stack. Build products and caches are excluded below.
+      - ./:/backup/deployment:ro
+      - ./infrastructure/backup/restic-excludes.txt:/etc/restic/excludes:ro
+
+      # Restic writes only to its cache, temporary directory and remote repo.
+      - restic_cache:/var/cache/restic
+      - ${MICADO_BACKUP_PASSWORD_FILE:-/etc/micado-backup/restic-password}:/run/secrets/restic_password:ro
+      - ${MICADO_BACKUP_SSH_DIR:-/etc/micado-backup/ssh}:/root/.ssh:ro
+    tmpfs:
+      - /tmp
+    read_only: true
+    labels:
+      - traefik.enable=false
+    command:
+      - backup
+      - /backup
+      - --host
+      - ${RESTIC_HOSTNAME:-micado-production}
+      - --tag
+      - micado-cold-backup
+      - --exclude-file
+      - /etc/restic/excludes
+
+volumes:
+  restic_cache:
+
